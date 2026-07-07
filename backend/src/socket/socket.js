@@ -1,0 +1,236 @@
+import jwt from "jsonwebtoken";
+import { Server } from "socket.io";
+import Message from "../models/Message.js";
+import Conversation from "../models/Conversation.js";
+import User from "../models/User.js";
+
+let io;
+const onlineUsers = new Map();
+
+const getAccessSecret = () =>
+  process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET;
+
+// Minimal cookie-header parser — avoids pulling in an undeclared transitive
+// dependency just to read one cookie off the raw handshake headers.
+const readCookie = (cookieHeader, name) => {
+  if (!cookieHeader) return "";
+
+  const match = cookieHeader
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`));
+
+  if (!match) return "";
+
+  try {
+    return decodeURIComponent(match.slice(name.length + 1));
+  } catch {
+    return "";
+  }
+};
+
+// Every socket connection used to be fully anonymous — any client could
+// `emit("user_online", <anyone's id>)` and start receiving that person's
+// notifications, or `emit("join_chat", <any conversationId>)` and listen in
+// on a conversation it was never part of. This middleware authenticates the
+// handshake the same way the REST `protect` middleware does (same cookie,
+// same JWT), and every handler below now trusts `socket.data.userId` —
+// derived from the verified token — instead of whatever the client claims.
+const authenticateSocket = async (socket, next) => {
+  try {
+    const cookieHeader = socket.handshake.headers?.cookie || "";
+    const token =
+      socket.handshake.auth?.token || readCookie(cookieHeader, "accessToken");
+
+    if (!token) {
+      return next(new Error("Authentication required"));
+    }
+
+    const secret = getAccessSecret();
+    if (!secret) {
+      return next(new Error("Server misconfigured"));
+    }
+
+    const decoded = jwt.verify(token, secret);
+    const user = await User.findById(decoded.id).select(
+      "_id isDeleted isBlocked blockedUsers"
+    );
+
+    if (!user || user.isDeleted || user.isBlocked) {
+      return next(new Error("Account not available"));
+    }
+
+    socket.data.userId = user._id.toString();
+    // Cached at connect time so the per-socket online-list filter below
+    // doesn't need a DB round trip on every presence change. This can go
+    // stale if the user blocks someone mid-session (reconnect picks up the
+    // latest list) — an acceptable tradeoff for a low-severity field.
+    socket.data.blockedUsers = (user.blockedUsers || []).map((id) => id.toString());
+    return next();
+  } catch (error) {
+    return next(new Error("Invalid or expired session"));
+  }
+};
+
+// Broadcasting the full online-user-id list to literally everyone (the old
+// `io.emit("online_users", [...])`) meant a user could see whether someone
+// they'd blocked was online — a presence-privacy leak for exactly the
+// relationship the block feature is supposed to sever. This sends each
+// connected socket its own filtered view instead: the global online list
+// minus anyone that socket's user has blocked. (Hiding a user's presence
+// from people who blocked *them* would need a live reverse-block index and
+// is left as a follow-up — this covers the more common "I don't want to see
+// people I've blocked" direction.)
+const broadcastOnlineUsers = () => {
+  if (!io) return;
+  const allOnline = Array.from(onlineUsers.keys());
+
+  for (const socket of io.sockets.sockets.values()) {
+    const blocked = socket.data?.blockedUsers;
+    const visible =
+      blocked && blocked.length
+        ? allOnline.filter((id) => !blocked.includes(id))
+        : allOnline;
+
+    socket.emit("online_users", visible);
+  }
+};
+
+export const initSocket = (server) => {
+  io = new Server(server, {
+    cors: {
+      origin: process.env.CLIENT_URL || "http://localhost:5173",
+      credentials: true,
+    },
+  });
+
+  io.use(authenticateSocket);
+
+  io.on("connection", (socket) => {
+    const userId = socket.data.userId;
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log("Socket connected:", socket.id, "user:", userId);
+    }
+
+    // Always the authenticated user's own room — never trust a
+    // client-supplied id here.
+    onlineUsers.set(userId, socket.id);
+    socket.join(userId);
+    broadcastOnlineUsers();
+
+    socket.on("user_online", () => {
+      // Kept as a no-op event for backward compatibility with the existing
+      // frontend, which still emits this on connect — the actual room join
+      // already happened above using the verified identity.
+    });
+
+    socket.on("join_chat", async (conversationId) => {
+      if (!conversationId) return;
+
+      try {
+        const conversation = await Conversation.findById(conversationId).select("participants");
+
+        const isParticipant = conversation?.participants?.some(
+          (participantId) => participantId.toString() === userId
+        );
+
+        if (!isParticipant) return;
+
+        socket.join(conversationId.toString());
+      } catch {
+        // Invalid id or lookup failure — just don't join the room.
+      }
+    });
+
+    socket.on("leave_chat", (conversationId) => {
+      if (!conversationId) return;
+      socket.leave(conversationId.toString());
+    });
+
+    socket.on("message_delivered", async ({ messageId, conversationId }) => {
+      try {
+        if (!messageId || !conversationId) return;
+
+        const message = await Message.findByIdAndUpdate(
+          messageId,
+          {
+            $addToSet: {
+              deliveredTo: {
+                user: userId,
+                deliveredAt: new Date(),
+              },
+            },
+          },
+          { new: true }
+        ).populate("sender", "fullName username avatar");
+
+        if (!message) return;
+
+        io.to(conversationId.toString()).emit("message_delivered_update", {
+          messageId: message._id,
+          conversationId,
+          userId,
+          deliveredTo: message.deliveredTo,
+        });
+      } catch (error) {
+        console.error("message_delivered error:", error.message);
+      }
+    });
+
+    socket.on("typing", ({ conversationId, sender }) => {
+      if (!conversationId) return;
+      socket.to(conversationId.toString()).emit("user_typing", sender);
+    });
+
+    socket.on("stop_typing", (conversationId) => {
+      if (!conversationId) return;
+      socket.to(conversationId.toString()).emit("user_stop_typing");
+    });
+
+    socket.on("disconnect", () => {
+      if (onlineUsers.get(userId) === socket.id) {
+        onlineUsers.delete(userId);
+      }
+
+      broadcastOnlineUsers();
+      if (process.env.NODE_ENV !== "production") {
+        console.log("Socket disconnected:", socket.id);
+      }
+    });
+  });
+
+  return io;
+};
+
+export const getIO = () => {
+  if (!io) {
+    throw new Error("Socket.io not initialized");
+  }
+
+  return io;
+};
+
+export const isUserOnline = (userId) => {
+  if (!userId) return false;
+  return onlineUsers.has(userId.toString());
+};
+
+export const emitNotification = (recipientId, notification) => {
+  if (!io || !recipientId) return;
+  io.to(recipientId.toString()).emit("new_notification", notification);
+};
+
+export const emitMessage = (conversationId, message) => {
+  if (!io || !conversationId) return;
+  io.to(conversationId.toString()).emit("receive_message", message);
+};
+
+export const emitMessageSeen = (conversationId, userId) => {
+  if (!io || !conversationId || !userId) return;
+
+  io.to(conversationId.toString()).emit("message_seen_update", {
+    conversationId: conversationId.toString(),
+    userId: userId.toString(),
+  });
+};

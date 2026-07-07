@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  IMCircle sitemap — STATIC routes only.
+
+  This SPA has no server-side route enumeration, so dynamic, per-record
+  pages (https://imcircle.com/profile/:username, /journey/:journeyId,
+  /learning/:id, and any future /post/:id, /opportunity/:id) are NOT listed
+  here — there is no safe way to generate them from a static file. Those
+  need a backend-generated sitemap (e.g. GET /sitemap-users.xml,
+  /sitemap-journeys.xml streamed from MongoDB) or a sitemap index that
+  points at paginated, dynamically generated child sitemaps. Tracked in
+  launch/docs/launch-checklist.md.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://imcircle.com/</loc>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://imcircle.com/about</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://imcircle.com/discover</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://imcircle.com/privacy-policy</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://imcircle.com/terms</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://imcircle.com/community-guidelines</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://imcircle.com/help</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
+  <url>
+    <loc>https://imcircle.com/login</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://imcircle.com/signup</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.6</priority>
+  </url>
+</urlset>

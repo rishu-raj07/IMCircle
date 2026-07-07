@@ -1,0 +1,257 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700;800;900&display=swap");
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------- */
+/* IMCircle brand system                                                  */
+/* Ink (near-black), Paper (warm off-white), Marigold (accent CTA),       */
+/* Indigo (secondary accent) — a palette rooted in Indian textile & spice */
+/* colour, built to travel: confident, warm, unmistakably not Silicon     */
+/* Valley purple-SaaS.                                                    */
+/*                                                                         */
+/* BRAND HIERARCHY — every colour has exactly one job. Do not introduce   */
+/* a new hex value for a role already covered below; reuse the token.     */
+/*                                                                         */
+/*   1. PRIMARY   — ink. All text, primary buttons, dark surfaces         */
+/*                  (streak card, journey card). This is the voice of     */
+/*                  the app; it should dominate every screen.             */
+/*   2. SECONDARY — paper / white. Backgrounds and cards. Neutral,        */
+/*                  never competes with primary or accent.                */
+/*   3. SIGNATURE ACCENTS — marigold + indigo, used together only in a    */
+/*                  small, deliberate set of "signature moments": the     */
+/*                  learning-circle ring (.imc-ring), the streak/journey  */
+/*                  card gradients, the create-button icon. Elsewhere,    */
+/*                  marigold appears ALONE for CTAs/tags/highlights and   */
+/*                  indigo appears ALONE for links/secondary actions —    */
+/*                  never as generic decoration, never both together      */
+/*                  outside the signature moments above.                  */
+/*   4. FUNCTIONAL — success/danger. Reserved strictly for state          */
+/*                  (online dot, follow confirmation, error banner).      */
+/*                  Never reused as a design accent even when the hue     */
+/*                  happens to look nice somewhere.                       */
+/*   5. THIRD-PARTY — brand icon colours (Google/LinkedIn/Instagram/      */
+/*                  Facebook) are exempt from this system entirely; they  */
+/*                  represent someone else's brand, not ours.             */
+/* ---------------------------------------------------------------------- */
+
+:root {
+  --imc-ink: #12141c;
+  --imc-ink-soft: #2b2e38;
+  --imc-paper: #f5f6f2;
+  --imc-marigold: #ec9a1e;
+  --imc-marigold-dark: #8a5a12;
+  --imc-marigold-tint: #fdf3e3;
+  --imc-indigo: #4338ca;
+  --imc-indigo-dark: #2e2a8f;
+  --imc-indigo-tint: #ecebf9;
+  --imc-muted: #6b7280;
+  --imc-muted-light: #9aa1ae;
+  --imc-line: rgba(18, 20, 28, 0.08);
+  --imc-success: #059669;
+  --imc-danger: #d92d20;
+
+  /* ---------------------------------------------------------------------- */
+  /* MODE TOKENS — the only colours that should ever flip between light and */
+  /* dark. Everything above this line (ink/paper/marigold/indigo) is a      */
+  /* fixed brand hue and does NOT change with theme. Components that need   */
+  /* to look correct in both modes should read from these instead of the    */
+  /* raw brand tokens for backgrounds/text/borders.                        */
+  /* ---------------------------------------------------------------------- */
+  --imc-bg: #ffffff;
+  --imc-surface: #ffffff;
+  --imc-surface-2: #ffffff;
+  --imc-surface-strong: #12141c;
+  --imc-surface-strong-border: transparent;
+  --imc-on-surface-strong: #ffffff;
+  --imc-text: #12141c;
+  --imc-text-muted: #6b7280;
+  --imc-text-faint: #9aa1ae;
+  --imc-border: rgba(18, 20, 28, 0.08);
+  --imc-indigo-text: #4338ca;
+}
+
+[data-theme="dark"] {
+  --imc-bg: #101114;
+  --imc-surface: #18191e;
+  --imc-surface-2: #202127;
+  --imc-surface-strong: #262830;
+  --imc-surface-strong-border: rgba(255, 255, 255, 0.12);
+  --imc-on-surface-strong: #f5f4ef;
+  --imc-text: #f2f1ec;
+  --imc-text-muted: #a7acb4;
+  --imc-text-faint: #868b93;
+  --imc-border: rgba(255, 255, 255, 0.12);
+  --imc-indigo-text: #9b90ee;
+}
+
+@theme {
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-serif: "Fraunces", "Georgia", serif;
+
+  --color-ink: #12141c;
+  --color-ink-soft: #2b2e38;
+  --color-paper: #f5f6f2;
+  --color-marigold: #ec9a1e;
+  --color-marigold-dark: #8a5a12;
+  --color-marigold-tint: #fdf3e3;
+  --color-indigo: #4338ca;
+  --color-indigo-dark: #2e2a8f;
+  --color-indigo-tint: #ecebf9;
+  --color-muted: #6b7280;
+  --color-muted-light: #9aa1ae;
+  --color-line: rgba(18, 20, 28, 0.08);
+  --color-success: #059669;
+  --color-danger: #d92d20;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-sans);
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--imc-bg);
+  color: var(--imc-text);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+/* Google Places Autocomplete dropdown is appended to <body>, outside our
+   component tree, so it needs global theme-aware overrides here. */
+.pac-container {
+  margin-top: 6px;
+  padding: 6px;
+  border: 1px solid var(--imc-border);
+  border-radius: 20px;
+  background-color: var(--imc-surface);
+  box-shadow: 0 10px 30px rgba(18, 20, 28, 0.12);
+  font-family: var(--font-sans);
+}
+.pac-item {
+  border: none;
+  border-radius: 14px;
+  padding: 10px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--imc-text);
+  cursor: pointer;
+}
+.pac-item:hover,
+.pac-item-selected {
+  background-color: var(--imc-surface-2);
+}
+.pac-item-query {
+  color: var(--imc-text);
+  font-weight: 800;
+}
+.pac-matched {
+  color: var(--imc-indigo-text);
+}
+.pac-icon {
+  display: none;
+}
+
+/* Micro-interactions: every button gets a smooth spring back instead of a
+   hard snap on tap, and a fast, subtle transition on hover for anyone on a
+   trackpad/mouse. Kept deliberately small — motion should feel responsive,
+   not decorative. */
+button {
+  transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease;
+}
+button:active {
+  transform: scale(0.97);
+}
+@media (hover: hover) {
+  a:hover,
+  button:hover {
+    opacity: 0.92;
+  }
+}
+
+/* Feed-item entrance — a quiet fade + rise so new content doesn't just pop
+   in. Runs once on mount, not on every re-render. */
+@keyframes imc-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    /* Must be the literal `none` keyword, not `translateY(0)` — a
+       non-"none" transform value (even an identity one) makes this
+       element a containing block for `position: fixed` descendants once
+       `animation-fill-mode: both` holds it after the animation ends. That
+       silently broke every fixed-position bottom sheet (comments, repost,
+       impressions) nested inside a card with this class, making them
+       render inline in the page instead of as a full-screen overlay. */
+    opacity: 1;
+    transform: none;
+  }
+}
+.imc-enter {
+  animation: imc-fade-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .imc-enter {
+    animation: none;
+  }
+  button {
+    transition: none;
+  }
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Shared conic "learning ring" accent used across story-style avatars.
+   Kept intentionally as one of the app's few colourful signature moments —
+   everywhere else leans monochrome, so this stays legible as *the* place
+   marigold + indigo show up together. */
+.imc-ring {
+  background: conic-gradient(
+    from 210deg,
+    var(--imc-marigold),
+    var(--imc-indigo) 55%,
+    var(--imc-marigold) 100%
+  );
+}
+
+/* Signature dot-lattice texture — the one recurring decorative motif in the
+   app (hero surfaces, empty states). Not used as a background filler
+   everywhere; it's a brand mark, so it should stay rare. */
+.imc-lattice {
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    rgba(236, 154, 30, 0.35) 1.4px,
+    transparent 1.4px
+  );
+  background-size: 14px 14px;
+}
+@keyframes imc-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imc-image-loader *,
+  [class*="imc-shimmer"] {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

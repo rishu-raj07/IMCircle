@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+
+    <!-- Icons / PWA -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- vite-plugin-pwa injects <link rel="manifest" href="/manifest.webmanifest">
+         and the service-worker registration script automatically at build time. -->
+
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#6D28D9" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="IMCircle" />
+    <meta name="application-name" content="IMCircle" />
+    <meta name="format-detection" content="telephone=no" />
+
+    <!-- Performance: warm up connections to the API and media CDN before the
+         first request actually fires, so the TLS/DNS handshake cost is
+         already paid by the time axios/Cloudinary URLs are requested. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://res.cloudinary.com" />
+    <link rel="dns-prefetch" href="https://res.cloudinary.com" />
+
+    <!-- Primary SEO -->
+    <title>IMCircle — The Social Network for People Who Grow</title>
+    <meta
+      name="description"
+      content="IMCircle is the growth-focused social network for students, creators, founders, professionals and freelancers. Share your journey, learn in public, find opportunities, and grow with the right circle."
+    />
+    <meta
+      name="keywords"
+      content="IMCircle, social network for students, social network for founders, social network for creators, builder community, startup community India, entrepreneur network India, learning journey platform, career growth network, opportunity network, professional social network India, find your circle, grow together, Bharat builders community, student founder network, creator founder community, networking app India"
+    />
+    <meta name="author" content="Rishu Raj" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://imcircle.com/" />
+    <link rel="alternate" hreflang="en-in" href="https://imcircle.com/" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="IMCircle" />
+    <meta property="og:title" content="IMCircle — The Social Network for People Who Grow" />
+    <meta
+      property="og:description"
+      content="Build, learn, share your journey, find opportunities, and grow with the right circle. IMCircle is the growth-focused social network for students, creators, founders, professionals and freelancers — founded by Rishu Raj."
+    />
+    <meta property="og:url" content="https://imcircle.com/" />
+    <meta property="og:image" content="https://imcircle.com/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="IMCircle — the social network for people who grow" />
+    <meta property="og:locale" content="en_IN" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="IMCircle — The Social Network for People Who Grow" />
+    <meta
+      name="twitter:description"
+      content="Build, learn, share your journey, find opportunities, and grow with the right circle."
+    />
+    <meta name="twitter:image" content="https://imcircle.com/og-image.png" />
+    <meta name="twitter:image:alt" content="IMCircle — the social network for people who grow" />
+
+    <!-- JSON-LD structured data -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://imcircle.com/#organization",
+            "name": "IMCircle",
+            "url": "https://imcircle.com/",
+            "logo": "https://imcircle.com/icons/icon-512.png",
+            "foundingDate": "2026",
+            "founder": {
+              "@type": "Person",
+              "name": "Rishu Raj",
+              "description": "Founder of IMCircle. Came from a small-town/village background, moved to Delhi with big dreams, and built IMCircle so ambitious people from small towns, colleges, and working backgrounds can find the right circle, share their growth journey, learn publicly, discover opportunities, and build their future."
+            },
+            "description": "IMCircle is a growth-focused social network for students, creators, founders, professionals, freelancers, and ambitious people who want to build, learn, share journeys, find opportunities, and grow with the right circle.",
+            "sameAs": []
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://imcircle.com/#website",
+            "url": "https://imcircle.com/",
+            "name": "IMCircle",
+            "description": "The social network for people who grow.",
+            "publisher": { "@id": "https://imcircle.com/#organization" },
+            "inLanguage": "en-IN",
+            "potentialAction": {
+              "@type": "SearchAction",
+              "target": "https://imcircle.com/search?q={search_term_string}",
+              "query-input": "required name=search_term_string"
+            }
+          },
+          {
+            "@type": "MobileApplication",
+            "name": "IMCircle",
+            "operatingSystem": "Android, iOS",
+            "applicationCategory": "SocialNetworkingApplication",
+            "author": { "@id": "https://imcircle.com/#organization" },
+            "description": "The social network for people who grow — build, learn, share your journey, find opportunities, and grow with the right circle."
+          }
+        ]
+      }
+    </script>
+
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem("imc_theme");
+          document.documentElement.setAttribute(
+            "data-theme",
+            theme === "dark" ? "dark" : "light"
+          );
+        } catch (e) {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

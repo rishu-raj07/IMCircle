@@ -1,0 +1,29 @@
+# Dependencies
+**/node_modules
+
+# Environment / secrets — exactly two env files per side (frontend and
+# backend): .env (dev) and .env.production (prod). Only the .example
+# templates for those two are ever committed.
+.env
+.env.*
+!.env.example
+!.env.production.example
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.production.example
+
+# Build output
+**/dist
+**/dist-ssr
+
+# Logs
+**/logs
+**/*.log
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.swp

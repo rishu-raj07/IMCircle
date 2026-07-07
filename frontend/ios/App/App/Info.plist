@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CAPACITOR_DEBUG</key>
+	<string>$(CAPACITOR_DEBUG)</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+        <string>IMCircle</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>armv7</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<true/>
+
+	<!-- Custom URL scheme deep links: imcircle://user/:username,
+	     imcircle://post/:id, imcircle://journey/:id, imcircle://learning/:id,
+	     imcircle://opportunity/:id. Handled via @capacitor/app's appUrlOpen
+	     listener — see frontend/src/utils/deepLinks.js. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.imcircle.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>imcircle</string>
+			</array>
+		</dict>
+	</array>
+
+	<!-- Required because the web app's photo/video upload inputs (posts,
+	     avatar, journey cover, learning media) let a user pick "Take Photo"
+	     or "Photo Library" from WKWebView's native file-input sheet. Without
+	     these strings, tapping those options silently fails (or crashes on
+	     older iOS) instead of prompting for permission. Wording matches
+	     Apple's requirement to explain *why* access is needed. -->
+	<key>NSCameraUsageDescription</key>
+	<string>IMCircle needs camera access so you can take a photo or video to add to a post, your profile, or a journey update.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>IMCircle needs access to your photo library so you can choose photos or videos to share in posts, your profile, or a journey update.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>IMCircle needs permission to save images (like a shareable progress card) to your photo library.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>IMCircle needs microphone access if your video includes audio when recording a video for a post or journey update.</string>
+</dict>
+</plist>

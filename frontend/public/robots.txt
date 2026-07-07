@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /verify
+Disallow: /chat
+Disallow: /messages
+Disallow: /settings
+Disallow: /notifications
+Disallow: /account
+
+Sitemap: https://imcircle.com/sitemap.xml

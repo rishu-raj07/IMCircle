@@ -1,0 +1,617 @@
+import crypto from "crypto";
+import jwt from "jsonwebtoken";
+
+import User from "../models/User.js";
+import Session from "../models/Session.js";
+
+import { sendOtpSms, verifyOtpSms } from "../services/msg91.service.js";
+import { verifyGoogleCredential } from "../services/google.service.js";
+import { ensureUserIndexes } from "../services/userIndex.service.js";
+
+const REFRESH_DAYS = 60;
+const REFRESH_MS = REFRESH_DAYS * 24 * 60 * 60 * 1000;
+const ACCESS_MS = 15 * 60 * 1000;
+
+const getAccessSecret = () =>
+  process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET;
+
+const getRefreshSecret = () =>
+  process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET;
+
+const cookieOptions = (maxAge) => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax",
+  maxAge,
+  path: "/",
+});
+
+const createOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
+
+const hashOtp = (otp) =>
+  crypto.createHash("sha256").update(otp).digest("hex");
+
+const getSafeUser = (user) => {
+  const obj = user.toObject();
+
+  delete obj.password;
+  delete obj.refreshToken;
+  delete obj.otp;
+  delete obj.loginAttempts;
+  delete obj.lockUntil;
+
+  return obj;
+};
+
+const createAccessToken = (userId) => {
+  return jwt.sign({ id: userId }, getAccessSecret(), {
+    expiresIn: process.env.JWT_ACCESS_EXPIRE || "15m",
+  });
+};
+
+const createRefreshToken = (userId, sessionId) => {
+  return jwt.sign(
+    {
+      id: userId,
+      sessionId,
+      tokenVersion: crypto.randomBytes(8).toString("hex"),
+    },
+    getRefreshSecret(),
+    {
+      expiresIn: process.env.JWT_REFRESH_EXPIRE || "60d",
+    }
+  );
+};
+
+const getDeviceInfo = (req) => ({
+  deviceId:
+    req.headers["x-device-id"] ||
+    crypto
+      .createHash("sha256")
+      .update(`${req.ip}-${req.headers["user-agent"] || ""}`)
+      .digest("hex"),
+
+  deviceName: req.headers["x-device-name"] || "Unknown Device",
+  ipAddress: req.ip || "",
+  userAgent: req.headers["user-agent"] || "",
+});
+
+const sendSecureAuthResponse = async (req, res, user, statusCode, message) => {
+  const device = getDeviceInfo(req);
+
+  const session = await Session.create({
+    user: user._id,
+    refreshTokenHash: "pending",
+    deviceId: device.deviceId,
+    deviceName: device.deviceName,
+    ipAddress: device.ipAddress,
+    userAgent: device.userAgent,
+    expiresAt: new Date(Date.now() + REFRESH_MS),
+  });
+
+  const accessToken = createAccessToken(user._id);
+  const refreshToken = createRefreshToken(user._id, session._id);
+
+  session.refreshTokenHash = Session.hashToken(refreshToken);
+  await session.save({ validateBeforeSave: false });
+
+  res.cookie("accessToken", accessToken, cookieOptions(ACCESS_MS));
+  res.cookie("refreshToken", refreshToken, cookieOptions(REFRESH_MS));
+
+  return res.status(statusCode).json({
+    success: true,
+    message,
+    accessToken,
+    user: getSafeUser(user),
+  });
+};
+
+export const sendMobileOtp = async (req, res) => {
+  try {
+    const { mobile } = req.body;
+
+    if (!mobile || !/^[6-9]\d{9}$/.test(mobile)) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid 10 digit Indian mobile number is required",
+      });
+    }
+
+    let user = await User.findOne({ mobile });
+
+    if (!user) {
+      try {
+        user = await User.create({
+          fullName: "BN User",
+          mobile,
+          verification: { mobile: false },
+        });
+      } catch (error) {
+        if (error?.code !== 11000 || error?.keyPattern?.email !== 1) {
+          throw error;
+        }
+
+        await ensureUserIndexes();
+
+        user = await User.create({
+          fullName: "BN User",
+          mobile,
+          verification: { mobile: false },
+        });
+      }
+    }
+
+    if (user.isDeleted) {
+      return res.status(401).json({
+        success: false,
+        message: "Account not available",
+      });
+    }
+
+    if (user.isBlocked) {
+      return res.status(403).json({
+        success: false,
+        message: "Your account is blocked",
+      });
+    }
+
+    const msg91Response = await sendOtpSms(mobile);
+
+    // MSG91's raw response is logged server-side only (useful while
+    // debugging a real integration issue) and never returned to the
+    // client, even in development — its `type`/`message` fields are
+    // MSG91-internal wording, not something we want to commit to as a
+    // stable API contract or leak to whoever's calling this endpoint.
+    if (process.env.NODE_ENV === "development") {
+      console.log("[dev] MSG91 send-otp response:", msg91Response);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "OTP sent successfully",
+    });
+  } catch (error) {
+    console.error("SEND MOBILE OTP ERROR:", error.response?.data || error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to send OTP",
+    });
+  }
+};
+
+export const verifyMobileOtp = async (req, res) => {
+  try {
+    const { mobile, otp } = req.body;
+
+    if (!mobile || !/^[6-9]\d{9}$/.test(mobile)) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid 10 digit Indian mobile number is required",
+      });
+    }
+
+    if (!otp || !/^\d{6}$/.test(otp)) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid 6 digit OTP is required",
+      });
+    }
+
+    const msg91Response = await verifyOtpSms(mobile, otp);
+    const msgType = String(msg91Response?.type || "").toLowerCase();
+
+    if (msgType && msgType !== "success") {
+      // Log MSG91's raw response server-side for debugging, but never pass
+      // its internal message text straight through to the client — it's
+      // provider-specific wording we don't control and shouldn't leak.
+      console.warn("MSG91 OTP verify rejected:", msg91Response);
+
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired OTP",
+      });
+    }
+
+    const user = await User.findOne({ mobile });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (user.isDeleted) {
+      return res.status(401).json({
+        success: false,
+        message: "Account not available",
+      });
+    }
+
+    if (user.isBlocked) {
+      return res.status(403).json({
+        success: false,
+        message: "Your account is blocked",
+      });
+    }
+
+    user.verification.mobile = true;
+    user.lastActiveAt = Date.now();
+
+    await user.save({ validateBeforeSave: false });
+
+    return sendSecureAuthResponse(req, res, user, 200, "Mobile verified successfully");
+  } catch (error) {
+    console.error("VERIFY MOBILE OTP ERROR:", error.response?.data || error.message);
+
+    return res.status(400).json({
+      success: false,
+      message: "OTP verification failed",
+    });
+  }
+};
+
+export const googleLogin = async (req, res) => {
+  try {
+    const { credential } = req.body;
+
+    const payload = await verifyGoogleCredential(credential);
+
+    const googleId = payload.sub;
+    const email = payload.email?.toLowerCase();
+    const fullName = payload.name || "BN User";
+    const avatar = payload.picture || "";
+
+    if (!email || !googleId) {
+      return res.status(400).json({
+        success: false,
+        message: "Google account email is required",
+      });
+    }
+
+    let user = await User.findOne({
+      $or: [{ googleId }, { email }],
+    });
+
+    if (!user) {
+      user = await User.create({
+        fullName,
+        email,
+        googleId,
+        avatar,
+        verification: {
+          email: true,
+          mobile: false,
+        },
+      });
+    } else {
+      if (user.isDeleted) {
+        return res.status(401).json({
+          success: false,
+          message: "Account not available",
+        });
+      }
+
+      if (user.isBlocked) {
+        return res.status(403).json({
+          success: false,
+          message: "Your account is blocked",
+        });
+      }
+
+      user.googleId = user.googleId || googleId;
+      user.email = user.email || email;
+      user.fullName = user.fullName === "BN User" ? fullName : user.fullName;
+      user.avatar = user.avatar || avatar;
+      user.verification.email = true;
+      user.lastActiveAt = Date.now();
+
+      await user.save({ validateBeforeSave: false });
+    }
+
+    return sendSecureAuthResponse(req, res, user, 200, "Google login successful");
+  } catch (error) {
+    console.error("GOOGLE LOGIN ERROR:", error.message);
+
+    return res.status(401).json({
+      success: false,
+      message: "Google login failed",
+    });
+  }
+};
+
+export const refreshToken = async (req, res) => {
+  try {
+    const oldRefreshToken = req.cookies?.refreshToken;
+
+    if (!oldRefreshToken) {
+      return res.status(401).json({
+        success: false,
+        message: "Refresh token missing",
+      });
+    }
+
+    const decoded = jwt.verify(oldRefreshToken, getRefreshSecret());
+
+    const session = await Session.findById(decoded.sessionId);
+
+    if (!session || session.isRevoked || session.expiresAt < new Date()) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid session",
+      });
+    }
+
+    const oldHash = Session.hashToken(oldRefreshToken);
+
+    if (oldHash !== session.refreshTokenHash) {
+      session.isRevoked = true;
+      session.revokedAt = Date.now();
+      await session.save({ validateBeforeSave: false });
+
+      res.clearCookie("accessToken", cookieOptions(0));
+      res.clearCookie("refreshToken", cookieOptions(0));
+
+      return res.status(401).json({
+        success: false,
+        message: "Refresh token reuse detected. Session revoked.",
+      });
+    }
+
+    const user = await User.findById(decoded.id);
+
+    if (!user || user.isDeleted || user.isBlocked) {
+      return res.status(401).json({
+        success: false,
+        message: "User not available",
+      });
+    }
+
+    const accessToken = createAccessToken(user._id);
+    const newRefreshToken = createRefreshToken(user._id, session._id);
+
+    session.refreshTokenHash = Session.hashToken(newRefreshToken);
+    session.lastUsedAt = Date.now();
+    session.expiresAt = new Date(Date.now() + REFRESH_MS);
+
+    await session.save({ validateBeforeSave: false });
+
+    res.cookie("accessToken", accessToken, cookieOptions(ACCESS_MS));
+    res.cookie("refreshToken", newRefreshToken, cookieOptions(REFRESH_MS));
+
+    return res.status(200).json({
+      success: true,
+      accessToken,
+      user: getSafeUser(user),
+    });
+  } catch (error) {
+    console.error("REFRESH TOKEN ERROR:", error.message);
+
+    res.clearCookie("accessToken", cookieOptions(0));
+    res.clearCookie("refreshToken", cookieOptions(0));
+
+    return res.status(401).json({
+      success: false,
+      message: "Invalid or expired refresh token",
+    });
+  }
+};
+
+export const register = async (req, res) => {
+  const { fullName, email, password } = req.body;
+
+  const existingUser = await User.findOne({ email });
+
+  if (existingUser) {
+    return res.status(409).json({
+      success: false,
+      message: "User already exists with this email",
+    });
+  }
+
+  const otp = createOtp();
+
+  const user = await User.create({
+    fullName,
+    email,
+    password,
+    otp: {
+      code: hashOtp(otp),
+      expiresAt: Date.now() + 10 * 60 * 1000,
+    },
+  });
+
+  return res.status(201).json({
+    success: true,
+    message: "Account created. Please verify OTP.",
+    devOtp: process.env.NODE_ENV === "development" ? otp : undefined,
+    user: getSafeUser(user),
+  });
+};
+
+export const verifyOtp = async (req, res) => {
+  const { email, otp } = req.body;
+
+  const user = await User.findOne({ email }).select("+otp.code +otp.expiresAt");
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: "User not found",
+    });
+  }
+
+  if (user.verification.email) {
+    return res.status(400).json({
+      success: false,
+      message: "Email already verified",
+    });
+  }
+
+  if (!user.otp?.code || !user.otp?.expiresAt) {
+    return res.status(400).json({
+      success: false,
+      message: "OTP not found. Please request a new OTP.",
+    });
+  }
+
+  if (user.otp.expiresAt < Date.now()) {
+    return res.status(400).json({
+      success: false,
+      message: "OTP expired. Please request a new OTP.",
+    });
+  }
+
+  if (hashOtp(otp) !== user.otp.code) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid OTP",
+    });
+  }
+
+  user.verification.email = true;
+  user.otp = undefined;
+
+  await user.save({ validateBeforeSave: false });
+
+  return sendSecureAuthResponse(req, res, user, 200, "Email verified successfully");
+};
+
+export const login = async (req, res) => {
+  const { email, password } = req.body;
+
+  const user = await User.findOne({ email }).select(
+    "+password +loginAttempts +lockUntil"
+  );
+
+  if (!user || user.isDeleted) {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid email or password",
+    });
+  }
+
+  if (user.isBlocked) {
+    return res.status(403).json({
+      success: false,
+      message: "Your account is blocked",
+    });
+  }
+
+  if (user.isAccountLocked()) {
+    return res.status(423).json({
+      success: false,
+      message: "Account locked. Please try again later.",
+    });
+  }
+
+  const isMatch = await user.comparePassword(password);
+
+  if (!isMatch) {
+    user.loginAttempts += 1;
+
+    if (user.loginAttempts >= 5) {
+      user.lockUntil = Date.now() + 15 * 60 * 1000;
+    }
+
+    await user.save({ validateBeforeSave: false });
+
+    return res.status(401).json({
+      success: false,
+      message: "Invalid email or password",
+    });
+  }
+
+  user.loginAttempts = 0;
+  user.lockUntil = undefined;
+  user.lastActiveAt = Date.now();
+
+  await user.save({ validateBeforeSave: false });
+
+  return sendSecureAuthResponse(req, res, user, 200, "Login successful");
+};
+
+export const logout = async (req, res) => {
+  const refreshTokenValue = req.cookies?.refreshToken;
+
+  if (refreshTokenValue) {
+    const refreshTokenHash = Session.hashToken(refreshTokenValue);
+
+    await Session.findOneAndUpdate(
+      { refreshTokenHash },
+      {
+        isRevoked: true,
+        revokedAt: Date.now(),
+      }
+    );
+  }
+
+  res.clearCookie("accessToken", cookieOptions(0));
+  res.clearCookie("refreshToken", cookieOptions(0));
+
+  return res.status(200).json({
+    success: true,
+    message: "Logout successful",
+  });
+};
+
+export const logoutAll = async (req, res) => {
+  await Session.updateMany(
+    { user: req.user._id },
+    {
+      isRevoked: true,
+      revokedAt: Date.now(),
+    }
+  );
+
+  res.clearCookie("accessToken", cookieOptions(0));
+  res.clearCookie("refreshToken", cookieOptions(0));
+
+  return res.status(200).json({
+    success: true,
+    message: "Logged out from all devices",
+  });
+};
+
+export const getMe = async (req, res) => {
+  return res.status(200).json({
+    success: true,
+    user: req.user,
+  });
+};
+
+export const resendOtp = async (req, res) => {
+  const { email } = req.body;
+
+  const user = await User.findOne({ email }).select("+otp.code +otp.expiresAt");
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: "User not found",
+    });
+  }
+
+  if (user.verification.email) {
+    return res.status(400).json({
+      success: false,
+      message: "Email already verified",
+    });
+  }
+
+  const otp = createOtp();
+
+  user.otp = {
+    code: hashOtp(otp),
+    expiresAt: Date.now() + 10 * 60 * 1000,
+  };
+
+  await user.save({ validateBeforeSave: false });
+
+  return res.status(200).json({
+    success: true,
+    message: "OTP sent successfully",
+    devOtp: process.env.NODE_ENV === "development" ? otp : undefined,
+  });
+};

@@ -1,0 +1,1053 @@
+import User from "../models/User.js";
+import Notification from "../models/Notification.js";
+import { emitNotification } from "../socket/socket.js";
+import { getSignupRankBadge } from "../utils/badges.js";
+import { sendOtpSms, verifyOtpSms } from "../services/msg91.service.js";
+
+const publicUserFields =
+  "fullName username avatar coverImage headline bio field role skills location preferences stats followers following circle createdAt primaryInterest experience education";
+
+const isSameId = (a, b) => String(a) === String(b);
+
+const hasId = (arr = [], id) => {
+  return arr.some((item) => String(item) === String(id));
+};
+
+const compactPublicUser = (user, currentUserId = null) => {
+  const value = typeof user?.toObject === "function" ? user.toObject() : user;
+  if (!value) return value;
+
+  const hasFollowers = Object.prototype.hasOwnProperty.call(value, "followers");
+  const hasFollowing = Object.prototype.hasOwnProperty.call(value, "following");
+  const followers = Array.isArray(value.followers) ? value.followers : [];
+  const following = Array.isArray(value.following) ? value.following : [];
+  const followerCount = hasFollowers
+    ? followers.length
+    : value.followersCount ?? value.stats?.followersCount ?? 0;
+  const followingCount = hasFollowing
+    ? following.length
+    : value.followingCount ?? value.stats?.followingCount ?? 0;
+  const isFollowing = currentUserId ? hasId(followers, currentUserId) : false;
+
+  // `circle` is bidirectional (added to both users on request-accept), so
+  // whether the viewer is in the profile owner's circle list is the same
+  // as whether the profile owner is in the viewer's — safe to read off
+  // either side. Only expose the boolean, never the raw list, so viewing
+  // someone's profile doesn't leak their full connections.
+  const circleList = Array.isArray(value.circle) ? value.circle : [];
+  const isInCircle = currentUserId ? hasId(circleList, currentUserId) : false;
+
+  return {
+    ...value,
+    followersCount: followerCount,
+    followingCount,
+    stats: {
+      ...(value.stats || {}),
+      followersCount: followerCount,
+      followingCount,
+    },
+    isFollowing,
+    followedByMe: isFollowing,
+    isInCircle,
+    followers: undefined,
+    following: undefined,
+    circle: undefined,
+    mobile: undefined,
+    blockedUsers: undefined,
+  };
+};
+
+const normalizeContactMobile = (value) => {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return "";
+  const withoutCountry = digits.startsWith("91") && digits.length === 12 ? digits.slice(2) : digits;
+  return /^[6-9]\d{9}$/.test(withoutCountry) ? withoutCountry : "";
+};
+
+const normalizeIncomingContacts = (contacts = []) => {
+  const byMobile = new Map();
+
+  for (const contact of Array.isArray(contacts) ? contacts : []) {
+    const name = String(contact?.name || contact?.displayName || "").trim().slice(0, 80);
+    const phones = Array.isArray(contact?.phones)
+      ? contact.phones
+      : Array.isArray(contact?.tel)
+      ? contact.tel
+      : [contact?.phone, contact?.mobile, contact?.tel].filter(Boolean);
+
+    for (const phone of phones) {
+      const mobile = normalizeContactMobile(phone);
+      if (!mobile || byMobile.has(mobile)) continue;
+      byMobile.set(mobile, { mobile, contactName: name });
+    }
+  }
+
+  return [...byMobile.values()].slice(0, 500);
+};
+
+export const getUserByUsername = async (req, res) => {
+  try {
+    const { username } = req.params;
+
+    const user = await User.findOne({
+      username: username.toLowerCase(),
+      isDeleted: false,
+      isBlocked: false,
+    }).select(publicUserFields);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const { signupRank, rankBadge } = await getSignupRankBadge(user.createdAt);
+
+    res.status(200).json({
+      success: true,
+      user: compactPublicUser(user, req.user?._id),
+      signupRank,
+      rankBadge,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+export const searchUsers = async (req, res) => {
+  try {
+    const { q } = req.query;
+
+    if (!q || q.trim().length < 2) {
+      return res.status(400).json({
+        success: false,
+        message: "Search query must be at least 2 characters",
+      });
+    }
+
+    const keyword = q.trim();
+
+    const users = await User.find({
+      isDeleted: false,
+      isBlocked: false,
+      $or: [
+        { fullName: { $regex: keyword, $options: "i" } },
+        { username: { $regex: keyword, $options: "i" } },
+        { email: { $regex: keyword, $options: "i" } },
+        { headline: { $regex: keyword, $options: "i" } },
+        { field: { $regex: keyword, $options: "i" } },
+        { role: { $regex: keyword, $options: "i" } },
+        { "skills.name": { $regex: keyword, $options: "i" } },
+      ],
+    })
+      .select(publicUserFields)
+      .limit(20);
+
+    res.status(200).json({
+      success: true,
+      count: users.length,
+      users: users.map((user) => compactPublicUser(user, req.user?._id)),
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+export const matchContacts = async (req, res) => {
+  try {
+    const normalizedContacts = normalizeIncomingContacts(req.body.contacts);
+
+    if (!normalizedContacts.length) {
+      return res.status(200).json({
+        success: true,
+        count: 0,
+        matches: [],
+      });
+    }
+
+    const contactByMobile = new Map(
+      normalizedContacts.map((item) => [item.mobile, item.contactName])
+    );
+
+    const users = await User.find({
+      mobile: { $in: normalizedContacts.map((item) => item.mobile) },
+      _id: { $ne: req.user._id },
+      isDeleted: false,
+      isBlocked: false,
+    })
+      .select(`${publicUserFields} mobile`)
+      .limit(100);
+
+    const matches = users.map((user) => {
+      const safeUser = compactPublicUser(user, req.user?._id);
+      const mobile = normalizeContactMobile(user.mobile);
+
+      return {
+        contactName: contactByMobile.get(mobile) || safeUser.fullName || safeUser.username || "Contact",
+        user: safeUser,
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      count: matches.length,
+      matches,
+    });
+  } catch (error) {
+    console.error("MATCH CONTACTS ERROR:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Could not match contacts. Please try again.",
+    });
+  }
+};
+
+export const getSuggestions = async (req, res) => {
+  try {
+    const currentUser = await User.findById(req.user._id).select(
+      "circle field role location"
+    );
+
+    if (!currentUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const excludedIds = [
+      currentUser._id,
+      ...(currentUser.circle || []),
+    ].map((id) => String(id));
+
+    const users = await User.find({
+      _id: { $nin: excludedIds },
+      isDeleted: false,
+      isBlocked: false,
+    })
+      .select(publicUserFields)
+      .sort({ "stats.followersCount": -1, createdAt: -1 })
+      .limit(60);
+
+    const scoredUsers = users
+      .map((user) => {
+        const value = compactPublicUser(user, req.user?._id);
+        const score =
+          (value.field && value.field === currentUser.field ? 3 : 0) +
+          (value.role && value.role === currentUser.role ? 2 : 0) +
+          (value.location?.city &&
+          value.location.city === currentUser.location?.city
+            ? 2
+            : 0);
+
+        return { ...value, suggestionScore: score };
+      })
+      .sort((a, b) => b.suggestionScore - a.suggestionScore)
+      .slice(0, 20);
+
+    res.status(200).json({
+      success: true,
+      count: scoredUsers.length,
+      users: scoredUsers,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+// Followers/following are stored as raw ObjectId refs, and some can go
+// dangling (the referenced account was deleted). Populate silently drops
+// those to null, which previously rendered as blank "User" rows with a
+// broken link. This resolves the ref list against real, current users,
+// prunes any dangling ids from the owner's stored array so it self-heals
+// going forward, and returns only the users that actually still exist.
+const resolvePeopleList = async (ownerId, field, viewerId = ownerId) => {
+  const rawOwner = await User.findById(ownerId).select(field).lean();
+  const rawIds = rawOwner?.[field] || [];
+
+  const validUsers = rawIds.length
+    ? await User.find({ _id: { $in: rawIds }, isDeleted: { $ne: true } }).select(
+        publicUserFields
+      )
+    : [];
+
+  const validById = new Map(validUsers.map((doc) => [String(doc._id), doc]));
+  const danglingIds = rawIds.filter((id) => !validById.has(String(id)));
+
+  if (danglingIds.length > 0) {
+    await User.updateOne(
+      { _id: ownerId },
+      { $pull: { [field]: { $in: danglingIds } } }
+    );
+  }
+
+  return rawIds
+    .map((id) => validById.get(String(id)))
+    .filter(Boolean)
+    .map((user) => compactPublicUser(user, viewerId));
+};
+
+export const getFollowers = async (req, res) => {
+  try {
+    const followers = await resolvePeopleList(req.user._id, "followers", req.user._id);
+
+    res.status(200).json({
+      success: true,
+      count: followers.length,
+      followers,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+export const getFollowing = async (req, res) => {
+  try {
+    const following = await resolvePeopleList(req.user._id, "following", req.user._id);
+
+    res.status(200).json({
+      success: true,
+      count: following.length,
+      following,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+export const getFollowersById = async (req, res) => {
+  try {
+    const owner = await User.findById(req.params.userId).select(
+      "isDeleted isBlocked"
+    );
+
+    if (!owner || owner.isDeleted || owner.isBlocked) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const followers = await resolvePeopleList(
+      req.params.userId,
+      "followers",
+      req.user._id
+    );
+
+    res.status(200).json({
+      success: true,
+      count: followers.length,
+      followers,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+export const getFollowingById = async (req, res) => {
+  try {
+    const owner = await User.findById(req.params.userId).select(
+      "isDeleted isBlocked"
+    );
+
+    if (!owner || owner.isDeleted || owner.isBlocked) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const following = await resolvePeopleList(
+      req.params.userId,
+      "following",
+      req.user._id
+    );
+
+    res.status(200).json({
+      success: true,
+      count: following.length,
+      following,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+// Circle is the one relationship that isn't public by default — unlike
+// followers/following, viewing someone's Circle list requires already being
+// in it (or being the owner). This mirrors how the "+ Circle" gate works
+// everywhere else in the app: you have to be connected to see connections.
+export const getCircleById = async (req, res) => {
+  try {
+    const targetUserId = req.params.userId;
+    const currentUserId = req.user._id;
+
+    const owner = await User.findById(targetUserId).select(
+      "isDeleted isBlocked circle"
+    );
+
+    if (!owner || owner.isDeleted || owner.isBlocked) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const isSelf = String(targetUserId) === String(currentUserId);
+    const viewerInCircle = (owner.circle || []).some(
+      (id) => String(id) === String(currentUserId)
+    );
+
+    if (!isSelf && !viewerInCircle) {
+      return res.status(403).json({
+        success: false,
+        requiresCircle: true,
+        message: "Join this user's Circle to view their connections",
+      });
+    }
+
+    const circle = await resolvePeopleList(targetUserId, "circle", currentUserId);
+
+    res.status(200).json({
+      success: true,
+      count: circle.length,
+      circle,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+export const followUser = async (req, res) => {
+  try {
+    const targetUserId = req.params.userId;
+    const currentUserId = req.user._id;
+
+    if (String(targetUserId) === String(currentUserId)) {
+      return res.status(400).json({
+        success: false,
+        message: "You cannot follow yourself",
+      });
+    }
+
+    const targetUser = await User.findOne({
+      _id: targetUserId,
+      isDeleted: false,
+      isBlocked: false,
+    });
+
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const currentUser = await User.findById(currentUserId).select(
+      "fullName following blockedUsers"
+    );
+
+    if (
+      hasId(currentUser.blockedUsers || [], targetUserId) ||
+      hasId(targetUser.blockedUsers || [], currentUserId)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You can't follow this user",
+      });
+    }
+
+    const alreadyFollowing = currentUser.following.some(
+      (id) => String(id) === String(targetUserId)
+    );
+
+    if (alreadyFollowing) {
+      return res.status(200).json({
+        success: true,
+        message: "Already following this user",
+        following: true,
+      });
+    }
+
+    await User.updateOne(
+      { _id: currentUserId },
+      {
+        $addToSet: { following: targetUserId },
+        $inc: { "stats.followingCount": 1 },
+      }
+    );
+
+    await User.updateOne(
+      { _id: targetUserId },
+      {
+        $addToSet: { followers: currentUserId },
+        $inc: { "stats.followersCount": 1 },
+      }
+    );
+
+    try {
+      const notification = await Notification.create({
+        recipient: targetUserId,
+        sender: currentUserId,
+        type: "follow",
+        title: "New follower",
+        message: `${currentUser.fullName} started following you`,
+      });
+
+      emitNotification(targetUserId, notification);
+    } catch (err) {
+      console.error("Follow notification skipped:", err.message);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "User followed successfully",
+      following: true,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+export const unfollowUser = async (req, res) => {
+  try {
+    const targetUserId = req.params.userId;
+    const currentUserId = req.user._id;
+
+    if (String(targetUserId) === String(currentUserId)) {
+      return res.status(400).json({
+        success: false,
+        message: "You cannot unfollow yourself",
+      });
+    }
+
+    // Only decrement the counters when there's actually something to pull —
+    // a duplicate/double-tap unfollow call used to decrement the count every
+    // time regardless, which is how followers/following drifted negative.
+    const currentUser = await User.findById(currentUserId).select("following");
+    const isFollowing = currentUser?.following?.some(
+      (id) => String(id) === String(targetUserId)
+    );
+
+    if (!isFollowing) {
+      return res.status(200).json({
+        success: true,
+        message: "You are not following this user",
+        following: false,
+      });
+    }
+
+    await User.updateOne(
+      { _id: currentUserId },
+      {
+        $pull: { following: targetUserId },
+        $inc: { "stats.followingCount": -1 },
+      }
+    );
+
+    await User.updateOne(
+      { _id: targetUserId },
+      {
+        $pull: { followers: currentUserId },
+        $inc: { "stats.followersCount": -1 },
+      }
+    );
+
+    // Safety net in case older bad data already drifted negative.
+    await User.updateOne(
+      { _id: currentUserId },
+      { $max: { "stats.followingCount": 0 } }
+    );
+    await User.updateOne(
+      { _id: targetUserId },
+      { $max: { "stats.followersCount": 0 } }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "User unfollowed successfully",
+      following: false,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+export const getUserById = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId).select(
+      `${publicUserFields} blockedUsers`
+    );
+
+    if (!user || user.isDeleted || user.isBlocked) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (req.user?._id) {
+      const theyBlockedViewer = hasId(user.blockedUsers || [], req.user._id);
+
+      if (theyBlockedViewer) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      const viewer = await User.findById(req.user._id).select("blockedUsers");
+      if (viewer && hasId(viewer.blockedUsers || [], req.params.userId)) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+    }
+
+    const safeUser = compactPublicUser(user, req.user?._id);
+
+    const { signupRank, rankBadge } = await getSignupRankBadge(user.createdAt);
+
+    res.status(200).json({
+      success: true,
+      user: safeUser,
+      signupRank,
+      rankBadge,
+    });
+  } catch (error) {
+    console.error("getUserById error:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+export const removeFollower = async (req, res) => {
+  try {
+    const targetUserId = req.params.userId;
+    const currentUserId = req.user._id;
+
+    const currentUser = await User.findById(currentUserId).select("followers");
+    const isFollower = currentUser?.followers?.some(
+      (id) => String(id) === String(targetUserId)
+    );
+
+    if (!isFollower) {
+      return res.status(200).json({
+        success: true,
+        message: "That user isn't following you",
+      });
+    }
+
+    await User.updateOne(
+      { _id: currentUserId },
+      {
+        $pull: { followers: targetUserId },
+        $inc: { "stats.followersCount": -1 },
+      }
+    );
+
+    await User.updateOne(
+      { _id: targetUserId },
+      {
+        $pull: { following: currentUserId },
+        $inc: { "stats.followingCount": -1 },
+      }
+    );
+
+    // Safety net in case older bad data already drifted negative.
+    await User.updateOne(
+      { _id: currentUserId },
+      { $max: { "stats.followersCount": 0 } }
+    );
+    await User.updateOne(
+      { _id: targetUserId },
+      { $max: { "stats.followingCount": 0 } }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Follower removed successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+export const addToCircle = async (req, res) => {
+  try {
+    const targetUserId = req.params.userId;
+    const currentUserId = req.user._id;
+
+    if (String(targetUserId) === String(currentUserId)) {
+      return res.status(400).json({
+        success: false,
+        message: "You cannot add yourself to circle",
+      });
+    }
+
+    const targetUser = await User.findOne({
+      _id: targetUserId,
+      isDeleted: false,
+      isBlocked: false,
+    });
+
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    await User.updateOne(
+      { _id: currentUserId },
+      {
+        $addToSet: { circle: targetUserId },
+      }
+    );
+
+    const freshUser = await User.findById(currentUserId).select("circle stats");
+
+    await User.findByIdAndUpdate(currentUserId, {
+      "stats.circleCount": freshUser.circle.length,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "User added to circle",
+      circle: true,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+export const removeFromCircle = async (req, res) => {
+  try {
+    const targetUserId = req.params.userId;
+    const currentUserId = req.user._id;
+
+    await User.updateOne(
+      { _id: currentUserId },
+      {
+        $pull: { circle: targetUserId },
+      }
+    );
+
+    const freshUser = await User.findById(currentUserId).select("circle stats");
+
+    await User.findByIdAndUpdate(currentUserId, {
+      "stats.circleCount": freshUser.circle.length,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "User removed from circle",
+      circle: false,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+// Add/verify a mobile number on the CURRENT LOGGED-IN user's own account
+// (settings page), as opposed to sendMobileOtp/verifyMobileOtp in
+// auth.controller.js which are for the login/signup flow and will create a
+// brand-new account for an unrecognized number. Here we never create a
+// user — we only ever attach a verified number to req.user.
+export const sendProfileMobileOtp = async (req, res) => {
+  try {
+    const mobile = String(req.body.mobile || "").trim();
+
+    if (!/^[6-9]\d{9}$/.test(mobile)) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid 10 digit Indian mobile number is required",
+      });
+    }
+
+    const existing = await User.findOne({
+      mobile,
+      _id: { $ne: req.user._id },
+    });
+
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        message: "This mobile number is already linked to another account.",
+      });
+    }
+
+    await sendOtpSms(mobile);
+
+    return res.status(200).json({
+      success: true,
+      message: "OTP sent successfully",
+    });
+  } catch (error) {
+    console.error("SEND PROFILE MOBILE OTP ERROR:", error.response?.data || error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to send OTP",
+    });
+  }
+};
+
+export const verifyProfileMobileOtp = async (req, res) => {
+  try {
+    const mobile = String(req.body.mobile || "").trim();
+    const otp = String(req.body.otp || "").trim();
+
+    if (!/^[6-9]\d{9}$/.test(mobile)) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid 10 digit Indian mobile number is required",
+      });
+    }
+
+    if (!/^\d{4,8}$/.test(otp)) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid OTP is required",
+      });
+    }
+
+    const existing = await User.findOne({
+      mobile,
+      _id: { $ne: req.user._id },
+    });
+
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        message: "This mobile number is already linked to another account.",
+      });
+    }
+
+    const msg91Response = await verifyOtpSms(mobile, otp);
+    const msgType = String(msg91Response?.type || "").toLowerCase();
+
+    if (msgType && msgType !== "success") {
+      return res.status(400).json({
+        success: false,
+        message: msg91Response?.message || "Invalid OTP.",
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    user.mobile = mobile;
+    user.verification = user.verification || {};
+    user.verification.mobile = true;
+    await user.save({ validateBeforeSave: false });
+
+    return res.status(200).json({
+      success: true,
+      message: "Mobile number verified",
+      mobile,
+      verified: true,
+    });
+  } catch (error) {
+    console.error("VERIFY PROFILE MOBILE OTP ERROR:", error.response?.data || error.message);
+    if (error?.code === 11000 && error?.keyPattern?.mobile) {
+      return res.status(409).json({
+        success: false,
+        message: "This mobile number is already linked to another account.",
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to verify OTP",
+    });
+  }
+};
+
+// Blocking a user hides them from your own feed/search/suggestions, and
+// mutually prevents new follows, circle requests, and messages between the
+// two accounts (enforced at each of those call sites via blockedUsers).
+// Existing follow relationships are intentionally left untouched here —
+// unfollow is a separate, explicit action.
+export const blockUser = async (req, res) => {
+  try {
+    const targetUserId = req.params.userId;
+    const currentUserId = req.user._id;
+
+    if (String(targetUserId) === String(currentUserId)) {
+      return res.status(400).json({
+        success: false,
+        message: "You cannot block yourself",
+      });
+    }
+
+    const targetUser = await User.findOne({
+      _id: targetUserId,
+      isDeleted: false,
+    }).select("_id");
+
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    await User.updateOne(
+      { _id: currentUserId },
+      { $addToSet: { blockedUsers: targetUserId } }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "User blocked",
+      blocked: true,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+export const unblockUser = async (req, res) => {
+  try {
+    const targetUserId = req.params.userId;
+    const currentUserId = req.user._id;
+
+    await User.updateOne(
+      { _id: currentUserId },
+      { $pull: { blockedUsers: targetUserId } }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "User unblocked",
+      blocked: false,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+export const getBlockedUsers = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id)
+      .select("blockedUsers")
+      .populate("blockedUsers", "fullName name username avatar headline");
+
+    return res.status(200).json({
+      success: true,
+      blockedUsers: user?.blockedUsers || [],
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+export const reportUser = async (req, res) => {
+  try {
+    const targetUserId = req.params.userId;
+    const currentUserId = req.user._id;
+    const { reason = "Inappropriate behavior" } = req.body;
+
+    if (String(targetUserId) === String(currentUserId)) {
+      return res.status(400).json({
+        success: false,
+        message: "You cannot report yourself",
+      });
+    }
+
+    const targetUser = await User.findOne({
+      _id: targetUserId,
+      isDeleted: false,
+    });
+
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const alreadyReported = (targetUser.reports || []).some(
+      (report) => String(report.user) === String(currentUserId)
+    );
+
+    if (alreadyReported) {
+      return res.status(400).json({
+        success: false,
+        message: "You already reported this user",
+      });
+    }
+
+    targetUser.reports.push({
+      user: currentUserId,
+      reason: typeof reason === "string" ? reason.slice(0, 500) : "Inappropriate behavior",
+    });
+
+    await targetUser.save({ validateBeforeSave: false });
+
+    return res.status(200).json({
+      success: true,
+      message: "User reported successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
