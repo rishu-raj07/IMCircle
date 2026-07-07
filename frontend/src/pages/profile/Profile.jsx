@@ -29,6 +29,7 @@ import StreakMilestoneCard from "../../components/badges/StreakMilestoneCard";
 import { getStreakBadgeTier } from "../../utils/badges";
 
 import { getMyProfile, updateProfile } from "../../api/profileApi";
+import { setUser as setStoredUser } from "../../utils/storage";
 import { getFeed } from "../../api/feedApi";
 import { getMyAnalyticsDashboard } from "../../api/analyticsApi";
 import { getMyJourneys } from "../../api/journeyApi";
@@ -294,6 +295,10 @@ function Profile() {
         profileData?.user || profileData?.data?.user || profileData?.data;
 
       setUser(profileUser);
+      // Refresh the cached global user too, so other screens reading it
+      // (TopHeader, SideDrawer) never trail behind what this page just
+      // fetched straight from the API.
+      if (profileUser) setStoredUser(profileUser);
       setRankBadge(profileData?.rankBadge || null);
       setSignupRank(profileData?.signupRank || null);
 
@@ -389,8 +394,14 @@ function Profile() {
     setAvatarFailed(false);
   }, [user?.avatar, user?.profileImage, user?.profilePicture]);
 
+  // "BN User" is the backend's placeholder default for accounts that
+  // haven't set a real name yet — treat it as empty so it doesn't leak
+  // through as if it were the person's actual saved name.
   const fullName =
-    user?.fullName || user?.name || user?.username || "IMCircle Builder";
+    (user?.fullName && user.fullName !== "BN User" ? user.fullName : "") ||
+    user?.name ||
+    user?.username ||
+    "IMCircle Builder";
 
   const tagline =
     user?.headline || user?.tagline || "Building something new on IMCircle";
@@ -434,6 +445,9 @@ function Profile() {
     const res = await updateProfile(patch);
     const updatedUser = res?.user || res?.data?.user || res?.data || fallbackUser;
     setUser(updatedUser);
+    // Keep the cached global user (read by TopHeader/SideDrawer elsewhere
+    // in the app) in sync with what the server just persisted.
+    setStoredUser(updatedUser);
   };
 
   const deleteExperience = async (event, index) => {
@@ -1006,7 +1020,10 @@ function Profile() {
           <SkillModal
             user={user}
             onClose={() => setShowSkillModal(false)}
-            onSaved={(updatedUser) => setUser(updatedUser)}
+            onSaved={(updatedUser) => {
+              setUser(updatedUser);
+              setStoredUser(updatedUser);
+            }}
           />
         )}
 

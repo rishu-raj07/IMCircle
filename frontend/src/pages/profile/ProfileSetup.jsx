@@ -4,7 +4,6 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { getMyProfile, updateProfile } from "../../api/profileApi";
 import { setUser } from "../../utils/storage";
-import { isOnboardingComplete } from "../../utils/sessionUser";
 
 import ProgressHeader from "./ProgressHeader";
 import ImageUploader from "./ImageUploader";
@@ -124,12 +123,6 @@ function ProfileSetup() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Whether this person had already finished the mandatory first-login
-  // setup before opening this page. Editors coming back to tweak their
-  // profile land back on /profile after saving; first-time users land on
-  // /home so they can start actually using the app.
-  const [wasOnboarded, setWasOnboarded] = useState(true);
-
   useEffect(() => {
     const loadProfileForEdit = async () => {
       try {
@@ -156,7 +149,6 @@ function ProfileSetup() {
         setExperience(normalizeArray(user?.experience));
         setEducation(normalizeArray(user?.education));
         setSkills(normalizeSkills(user?.skills));
-        setWasOnboarded(isOnboardingComplete(user));
       } catch (err) {
         // best-effort — non-critical
       } finally {
@@ -287,12 +279,16 @@ function ProfileSetup() {
       const data = await updateProfile(payload);
 
       if (data?.user) {
+        // Keep the global/local-storage auth user in sync with what the
+        // server just persisted, so any other screen reading the cached
+        // user (e.g. ProtectedRoute's onboarding check) sees fresh data
+        // immediately instead of the stale pre-setup snapshot.
         setUser(data.user);
       }
 
-      // First-time users land on Home ready to use the app; people editing
-      // an already-complete profile go back to where they came from.
-      navigate(wasOnboarded ? "/profile" : "/home", { replace: true });
+      // Always land back on /profile after saving so the person sees their
+      // just-saved data right away — for both first-time setup and edits.
+      navigate("/profile", { replace: true });
     } catch (err) {
       setError(err.response?.data?.message || "Profile setup failed");
     } finally {
