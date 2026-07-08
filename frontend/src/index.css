@@ -67,6 +67,13 @@
   --imc-text-faint: #9aa1ae;
   --imc-border: rgba(18, 20, 28, 0.08);
   --imc-indigo-text: #4338ca;
+
+  /* Scoped to the Learning reader only (Learning View redesign) — a warm
+     cream surface distinct from the neutral --imc-bg used app-wide.
+     Deliberately NOT redefining --imc-bg itself so every other screen is
+     unaffected. Falls back to --imc-bg automatically in dark mode since
+     this token is intentionally left undefined under [data-theme="dark"]. */
+  --imc-learning-bg: #fffcf7;
 }
 
 [data-theme="dark"] {
@@ -253,5 +260,17 @@ button:active {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Read More / Collapse expansion (Learning reader card). Animates the
+   clamped-text wrapper's max-height only — cheap to animate (no layout
+   thrash on siblings) and respects reduced-motion below. */
+.imc-expand {
+  transition: max-height 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .imc-expand {
+    transition-duration: 0.01ms;
   }
 }

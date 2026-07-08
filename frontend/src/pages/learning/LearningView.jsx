@@ -26,6 +26,8 @@ import {
 } from "../../api/learningApi";
 import { getSessionUser } from "../../utils/sessionUser";
 import ImageLoader from "../../components/common/ImageLoader";
+import LearningReaderCard from "../../components/learning/LearningReaderCard";
+import LearningActionBar from "../../components/learning/LearningActionBar";
 import { getOptimizedImageUrl } from "../../utils/mediaOptimization";
 import { trackEvent } from "../../utils/analyticsTracker";
 import { useSEO } from "../../hooks/useSEO";
@@ -186,22 +188,6 @@ function getTimeAgoLabel(value) {
 
   const day = Math.floor(hr / 24);
   return `${day}${day === 1 ? " day" : " days"}`;
-}
-
-function getUploadedTimeLabel(value) {
-  if (!value) return "Upload time unavailable";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Upload time unavailable";
-
-  return `Uploaded ${date.toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  })} at ${date.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  })}`;
 }
 
 function getPersonAvatar(person) {
@@ -526,6 +512,7 @@ export default function LearningView() {
     frameId = requestAnimationFrame(tick);
 
     return () => cancelAnimationFrame(frameId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, activeType, learning?._id, paused]);
 
   const handleVideoTime = () => {
@@ -794,43 +781,28 @@ export default function LearningView() {
           eager
           width={900}
           wrapperClassName="h-full w-full"
-          className="h-full w-full object-contain"
+          className="h-full w-full object-cover"
           referrerPolicy="no-referrer"
         />
       );
     }
 
     return (
-      <div className="flex h-full w-full flex-col bg-gradient-to-br from-[var(--imc-surface)] via-[var(--imc-surface)] to-[var(--imc-surface-2)] px-7 py-7">
-        <div className="flex items-center justify-between">
-          <span className="rounded-full bg-[var(--imc-surface-2)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.8px] text-[var(--imc-indigo-text)]">
-            {getLearningTopic(learning)}
-          </span>
-          <span className="text-[10px] font-black uppercase tracking-[1px] text-[var(--imc-text-muted)]">
-            Today
-          </span>
-        </div>
+      <div className="flex h-full w-full flex-col justify-center bg-gradient-to-br from-[var(--imc-surface)] via-[var(--imc-surface)] to-[var(--imc-surface-2)] px-6 py-6">
+        <span className="w-fit rounded-full bg-[var(--imc-surface-2)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.8px] text-[var(--imc-indigo-text)]">
+          {getLearningTopic(learning)}
+        </span>
 
-        <div className="flex flex-1 items-center justify-center">
-          <div className="text-center">
-            {learning?.title ? (
-              <p className="mb-4 text-[13px] font-black uppercase tracking-[1.2px] text-[var(--imc-text-muted)]">
-                {learning.title}
-              </p>
-            ) : null}
-
-            <p className="text-[32px] font-black leading-[1.08] text-[var(--imc-text)]">
-              {learning?.content || getLearningText(learning)}
-            </p>
-          </div>
-        </div>
+        <p className="mt-3 line-clamp-4 text-[19px] font-black leading-[1.2] text-[var(--imc-text)]">
+          {learning?.content || getLearningText(learning)}
+        </p>
       </div>
     );
   };
 
   if (loading) {
     return (
-      <div className="flex min-h-screen justify-center bg-[var(--imc-bg)]">
+      <div className="flex min-h-screen justify-center bg-[var(--imc-learning-bg)]">
         <div className="grid min-h-screen w-full max-w-[430px] place-items-center text-[var(--imc-text)]">
           <p className="text-[14px] font-black">Loading learning...</p>
         </div>
@@ -840,7 +812,7 @@ export default function LearningView() {
 
   if (!learning) {
     return (
-      <div className="flex min-h-screen justify-center bg-[var(--imc-bg)]">
+      <div className="flex min-h-screen justify-center bg-[var(--imc-learning-bg)]">
         <div className="flex min-h-screen w-full max-w-[430px] flex-col items-center justify-center px-6 text-center text-[var(--imc-text)]">
           <p className="text-[18px] font-black">No learning found</p>
 
@@ -867,66 +839,89 @@ export default function LearningView() {
   const authorAvatar = getAuthorAvatar(learning);
   const authorName = getAuthorName(learning);
 
+  const actionBarItems = isOwner
+    ? [
+        {
+          key: "views",
+          icon: Eye,
+          count: activityViewers.length || undefined,
+          label: "Views",
+          onClick: () => openActivitySheet("likes"),
+          ariaLabel: "View activity",
+        },
+        {
+          key: "share",
+          icon: Share2,
+          label: "Share",
+          onClick: handleShare,
+          ariaLabel: "Share learning",
+        },
+      ]
+    : [
+        {
+          key: "like",
+          icon: Heart,
+          count: likesCount,
+          active: liked,
+          filled: liked,
+          activeClass: "bg-red-50 text-red-600",
+          iconClassName: liked ? "text-red-600" : "",
+          onClick: handleLike,
+          disabled: liking,
+          ariaLabel: liked ? "Unlike learning" : "Like learning",
+        },
+        {
+          key: "share",
+          icon: Share2,
+          label: "Share",
+          onClick: handleShare,
+          ariaLabel: "Share learning",
+        },
+      ];
+
   return (
-    <div className="flex min-h-screen justify-center bg-[#08090C]">
-      <div className="relative min-h-screen w-full max-w-[430px] overflow-hidden bg-[var(--imc-bg)] text-[var(--imc-text)]">
+    <div className="min-h-screen bg-[var(--imc-learning-bg)]">
+      <div className="relative mx-auto min-h-screen w-full max-w-[430px] bg-[var(--imc-learning-bg)] pb-10">
+        {/* Sticky progress + header — normal document flow, never overlaps
+            the hero image or the title beneath it. */}
         <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(180deg, color-mix(in srgb, var(--imc-marigold) 42%, var(--imc-surface)) 0%, color-mix(in srgb, var(--imc-marigold) 28%, var(--imc-bg)) 48%, var(--imc-bg) 100%)",
-          }}
-        />
-        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/55 to-transparent" />
-
-        {/*
-          `100vh` on mobile browsers is the *layout* viewport, not the
-          visible one — it ignores the address bar / gesture-nav chrome
-          showing or hiding as you scroll, so a fixed h-screen box here
-          used to render taller than what's actually visible, making the
-          whole story page seem to "slide"/drag as the browser chrome
-          animated. `100dvh` tracks the real visible viewport; h-screen
-          stays as a fallback height for browsers that don't support dvh
-          (the invalid dvh value is simply ignored on those, leaving the
-          Tailwind h-screen rule in effect).
-        */}
-        <div
-          className="relative z-10 h-screen overflow-hidden"
-          style={{ height: "100dvh" }}
+          className="sticky top-0 z-30 px-4 pb-3 pt-3 backdrop-blur-xl"
+          style={{ background: "color-mix(in srgb, var(--imc-learning-bg) 90%, transparent)" }}
         >
-          <div className="absolute left-0 right-0 top-0 z-30 px-4 pt-4 text-white">
-            <div className="flex gap-1.5">
-              {learningList.map((item, index) => (
-                <div
-                  key={item?._id || index}
-                  className="h-1 flex-1 overflow-hidden rounded-full bg-white/35"
-                >
-                  <div
-                    className="h-full rounded-full bg-white"
-                    style={{
-                      width:
-                        index < currentIndex
-                          ? "100%"
-                          : index === currentIndex
-                          ? `${progress}%`
-                          : "0%",
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-4 flex items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={() => navigate("/home")}
-                className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-black/28 text-white shadow-sm backdrop-blur active:scale-95"
+          <div className="flex gap-1.5">
+            {learningList.map((item, index) => (
+              <div
+                key={item?._id || index}
+                className="h-1 flex-1 overflow-hidden rounded-full bg-[var(--imc-border)]"
               >
-                <ArrowLeft size={22} />
-              </button>
+                <div
+                  className="h-full rounded-full bg-[var(--imc-marigold)]"
+                  style={{
+                    width:
+                      index < currentIndex
+                        ? "100%"
+                        : index === currentIndex
+                        ? `${progress}%`
+                        : "0%",
+                  }}
+                />
+              </div>
+            ))}
+          </div>
 
-              <div className="flex min-w-0 flex-1 items-center gap-2">
-                <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full bg-black/25 ring-2 ring-white/70">
+          <div className="mt-3 flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => navigate("/home")}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--imc-surface-2)] text-[var(--imc-text)] active:scale-95"
+              aria-label="Back to home"
+            >
+              <ArrowLeft size={20} />
+            </button>
+
+            <div className="flex min-w-0 flex-1 items-center gap-2.5">
+              <div className="imc-ring grid h-[42px] w-[42px] shrink-0 place-items-center rounded-full p-[2px]">
+                <div className="grid h-full w-full place-items-center overflow-hidden rounded-full bg-[var(--imc-surface)]">
                   {authorAvatar ? (
                     <img
                       src={authorAvatar}
@@ -935,242 +930,154 @@ export default function LearningView() {
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <span className="text-[13px] font-black text-[#EC9A1E]">
+                    <span className="text-[13px] font-black text-[var(--imc-marigold-dark)]">
                       {authorName.charAt(0).toUpperCase()}
                     </span>
                   )}
                 </div>
-
-                <div className="min-w-0">
-                  <p className="truncate text-[14px] font-black text-white">
-                    {authorName}
-                  </p>
-                  <p className="truncate text-[11px] font-black text-white/80">
-                    {getUploadedTimeLabel(learning?.createdAt).replace(
-                      "Uploaded ",
-                      ""
-                    )}
-                  </p>
-                </div>
               </div>
 
-              {isOwner ? (
-                <button
-                  type="button"
-                  onClick={() => openActivitySheet("likes")}
-                  className="flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-black/28 px-3 text-[11px] font-black text-white backdrop-blur active:scale-95"
-                >
-                  <Eye size={15} />
-                  Activity
-                </button>
-              ) : null}
-
-              <div className="relative shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setActionMenuOpen((value) => !value)}
-                  className="grid h-10 w-10 place-items-center rounded-full bg-black/28 text-white shadow-sm backdrop-blur active:scale-95"
-                  aria-label="Learning actions"
-                >
-                  <MoreVertical size={21} />
-                </button>
-
-                {actionMenuOpen ? (
-                  <div className="absolute right-0 top-12 w-44 overflow-hidden rounded-2xl border border-[var(--imc-border)] bg-[var(--imc-surface)] text-[var(--imc-text)] shadow-xl">
-                    <button
-                      type="button"
-                      onClick={handleShare}
-                      className="flex h-12 w-full items-center gap-3 px-4 text-left text-[13px] font-black"
-                    >
-                      <Share2 size={16} />
-                      Share
-                    </button>
-
-                    {isOwner ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActionMenuOpen(false);
-                          setConfirmDelete(true);
-                        }}
-                        className="flex h-12 w-full items-center gap-3 border-t border-[var(--imc-border)] px-4 text-left text-[13px] font-black text-red-600"
-                      >
-                        <Trash2 size={16} />
-                        Delete
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => navigate("/home")}
-                        className="flex h-12 w-full items-center gap-3 border-t border-[var(--imc-border)] px-4 text-left text-[13px] font-black"
-                      >
-                        <X size={16} />
-                        Close
-                      </button>
-                    )}
-                  </div>
-                ) : null}
+              <div className="min-w-0">
+                <p className="truncate text-[13.5px] font-black text-[var(--imc-text)]">
+                  {authorName}
+                </p>
+                <p className="truncate text-[11px] font-bold text-[var(--imc-text-muted)]">
+                  {getPersonHeadline(author)} · {getTimeAgoLabel(learning?.createdAt) || "now"}
+                </p>
               </div>
             </div>
+
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setActionMenuOpen((value) => !value)}
+                className="grid h-10 w-10 place-items-center rounded-full bg-[var(--imc-surface-2)] text-[var(--imc-text)] active:scale-95"
+                aria-label="Learning actions"
+              >
+                <MoreVertical size={19} />
+              </button>
+
+              {actionMenuOpen ? (
+                <div className="absolute right-0 top-12 w-44 overflow-hidden rounded-2xl border border-[var(--imc-border)] bg-[var(--imc-surface)] text-[var(--imc-text)] shadow-xl">
+                  <button
+                    type="button"
+                    onClick={handleShare}
+                    className="flex h-12 w-full items-center gap-3 px-4 text-left text-[13px] font-black"
+                  >
+                    <Share2 size={16} />
+                    Share
+                  </button>
+
+                  {isOwner ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActionMenuOpen(false);
+                        setConfirmDelete(true);
+                      }}
+                      className="flex h-12 w-full items-center gap-3 border-t border-[var(--imc-border)] px-4 text-left text-[13px] font-black text-red-600"
+                    >
+                      <Trash2 size={16} />
+                      Delete
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => navigate("/home")}
+                      className="flex h-12 w-full items-center gap-3 border-t border-[var(--imc-border)] px-4 text-left text-[13px] font-black"
+                    >
+                      <X size={16} />
+                      Close
+                    </button>
+                  )}
+                </div>
+              ) : null}
+            </div>
           </div>
+        </div>
 
-          <button
-            type="button"
-            onClick={handlePrevious}
-            className="absolute left-0 top-24 z-20 h-[60vh] w-[24%]"
-            aria-label="Previous learning"
-          />
-
-          <button
-            type="button"
-            onClick={handleNext}
-            className="absolute right-0 top-24 z-20 h-[60vh] w-[24%]"
-            aria-label="Next learning"
-          />
-
+        {/* Hero — tall 4:5 frame (roomier than a strict 16:9 so the card
+            doesn't feel cramped), always fully visible (object-cover never
+            crops to blank), rounded, gradient only at the very bottom edge
+            so a topic chip stays legible without ever sitting on bright
+            image content directly. */}
+        <div className="px-4 pt-1">
           <div
             onMouseDown={() => setPaused(true)}
             onMouseUp={() => setPaused(false)}
             onMouseLeave={() => setPaused(false)}
             onTouchStart={() => setPaused(true)}
             onTouchEnd={() => setPaused(false)}
-            // Media (image/video) always exactly fills this box via
-            // object-cover/object-contain, so overflow never triggers for
-            // those. Long text-only learnings can exceed this box though —
-            // overflow-y-auto lets that content scroll internally instead
-            // of being clipped or collapsing into/behind the surrounding
-            // UI, while overflow-x stays hidden to keep the rounded card
-            // edges clean.
-            className="absolute left-7 right-7 top-[118px] bottom-[170px] overflow-y-auto overflow-x-hidden overscroll-contain rounded-[22px] bg-white/18 shadow-[0_18px_52px_rgba(0,0,0,0.20)] backdrop-blur-sm"
+            className="relative aspect-[4/5] w-full overflow-hidden rounded-[20px] bg-[var(--imc-surface-2)] shadow-[0_10px_30px_rgba(18,20,28,0.10)]"
           >
             {renderMainContent()}
-          </div>
 
-          <div className="absolute bottom-0 left-0 right-0 z-40 px-4 pb-5 text-white">
-            <div className="mb-4">
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-black/28 px-3 py-1 text-[10px] font-black uppercase tracking-[0.8px] text-white backdrop-blur">
-                  {getLearningTopic(learning)}
-                </span>
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/60 to-transparent" />
 
-                {learning?.tags?.slice(0, 2).map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-full bg-black/20 px-3 py-1 text-[10px] font-black text-white/90 backdrop-blur"
-                  >
-                    #{tag}
-                  </span>
-                ))}
-              </div>
+            <span className="absolute bottom-3 left-3 rounded-full bg-black/35 px-3 py-1 text-[10px] font-black uppercase tracking-[0.8px] text-white backdrop-blur">
+              {getLearningTopic(learning)}
+            </span>
 
-              <p className="text-[22px] font-black leading-[1.12] text-white drop-shadow">
-                {getLearningText(learning)}
-              </p>
-            </div>
-
-            {isOwner ? (
-              <div className="grid grid-cols-5 gap-3">
-                <button
-                  type="button"
-                  onClick={() => openActivitySheet("likes")}
-                  className="col-span-2 flex h-14 items-center justify-center gap-2 rounded-2xl bg-white text-[13px] font-black text-[#12141C] active:scale-[0.99]"
-                >
-                  <Eye size={17} />
-                  Activity
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleShare}
-                  className="flex h-14 flex-col items-center justify-center gap-1 rounded-2xl bg-black/30 text-[10px] font-black text-white backdrop-blur"
-                >
-                  <Share2 size={18} />
-                  Send
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(true)}
-                  className="flex h-14 flex-col items-center justify-center gap-1 rounded-2xl bg-black/30 text-[10px] font-black text-white backdrop-blur"
-                >
-                  <Trash2 size={18} />
-                  Delete
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleNext}
-                  className="flex h-14 flex-col items-center justify-center gap-1 rounded-2xl bg-black/30 text-[10px] font-black text-white backdrop-blur"
-                >
-                  <Send size={18} />
-                  Next
-                </button>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 min-w-0 flex-1 items-center gap-2 rounded-full border border-white/20 bg-black/28 px-4 backdrop-blur">
-                    <input
-                      value={thoughtText}
-                      onChange={(e) =>
-                        setThoughtText(
-                          e.target.value.slice(0, MAX_THOUGHT_LENGTH)
-                        )
-                      }
-                      maxLength={MAX_THOUGHT_LENGTH}
-                      placeholder="Share your thought..."
-                      className="h-full min-w-0 flex-1 bg-transparent text-[14px] font-bold text-white outline-none placeholder:text-white/70"
-                      onFocus={() => setPaused(true)}
-                      onBlur={() => setPaused(false)}
-                      onClick={() => setPaused(true)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleSendThought();
-                      }}
-                    />
-                    <button
-                      type="button"
-                      disabled={!thoughtText.trim() || sendingThought}
-                      onClick={handleSendThought}
-                      className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#4338CA] text-white disabled:opacity-50"
-                    >
-                      <Send size={16} />
-                    </button>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleLike}
-                    disabled={liking}
-                    className={`grid h-12 w-12 place-items-center rounded-full border backdrop-blur disabled:opacity-60 ${
-                      liked
-                        ? "border-[rgba(155,144,238,0.76)] bg-[rgba(67,56,202,0.58)] text-white"
-                        : "border-white/15 bg-black/28 text-white"
-                    }`}
-                    aria-label="Like learning"
-                  >
-                    <Heart
-                      size={25}
-                      className={liked ? "fill-red-500 text-red-500" : ""}
-                    />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleShare}
-                    className="grid h-12 w-12 place-items-center rounded-full border border-white/15 bg-black/28 text-white backdrop-blur"
-                    aria-label="Share learning"
-                  >
-                    <Share2 size={24} />
-                  </button>
-                </div>
-
-                <p className="mt-2 text-right text-[10px] font-black text-white/70">
-                  {thoughtText.length}/{MAX_THOUGHT_LENGTH}
-                </p>
-              </>
-            )}
+            <button
+              type="button"
+              onClick={handlePrevious}
+              className="absolute left-0 top-0 h-full w-[22%]"
+              aria-label="Previous learning"
+            />
+            <button
+              type="button"
+              onClick={handleNext}
+              className="absolute right-0 top-0 h-full w-[22%]"
+              aria-label="Next learning"
+            />
           </div>
         </div>
+
+        {/* Floating glass reading card */}
+        <div className="px-4">
+          <LearningReaderCard
+            title={learning?.title && learning?.content ? learning.title : ""}
+            text={getLearningText(learning)}
+            tags={learning?.tags}
+          />
+        </div>
+
+        {/* Compact premium action row */}
+        <div className="mt-4 px-4">
+          <LearningActionBar items={actionBarItems} />
+        </div>
+
+        {/* Quick "thought" reply — preserves the existing repost-with-caption
+            feature for viewers, just no longer stamped over the photo. */}
+        {!isOwner ? (
+          <div className="mt-3 px-4">
+            <div className="flex items-center gap-2 rounded-full border border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 py-1 shadow-sm">
+              <input
+                value={thoughtText}
+                onChange={(e) =>
+                  setThoughtText(e.target.value.slice(0, MAX_THOUGHT_LENGTH))
+                }
+                maxLength={MAX_THOUGHT_LENGTH}
+                placeholder="Share your thought..."
+                className="h-11 min-w-0 flex-1 bg-transparent text-[13.5px] font-semibold text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)]"
+                onFocus={() => setPaused(true)}
+                onBlur={() => setPaused(false)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSendThought();
+                }}
+              />
+              <button
+                type="button"
+                disabled={!thoughtText.trim() || sendingThought}
+                onClick={handleSendThought}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#4338CA] text-white disabled:opacity-50"
+                aria-label="Send thought"
+              >
+                <Send size={15} />
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {activityOpen ? (
@@ -1275,7 +1182,7 @@ export default function LearningView() {
                       return (
                         <div
                           key={person?._id || person?.id || index}
-                          className="rounded-3xl border border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 py-3 shadow-sm"
+                          className="rounded-[22px] border border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 py-3.5 shadow-sm"
                         >
                           <button
                             type="button"
@@ -1284,17 +1191,17 @@ export default function LearningView() {
                             }
                             className="flex w-full items-center gap-3 text-left active:scale-[0.99]"
                           >
-                            <div className="relative h-11 w-11 shrink-0 rounded-2xl bg-[var(--imc-surface-2)]">
+                            <div className="relative h-11 w-11 shrink-0 rounded-full ring-2 ring-[var(--imc-surface)]">
                               {avatar ? (
                                 <img
                                   src={avatar}
                                   alt={getPersonName(person)}
                                   referrerPolicy="no-referrer"
-                                  className="h-full w-full rounded-2xl object-cover"
+                                  className="h-full w-full rounded-full object-cover"
                                 />
                               ) : (
                                 <div
-                                  className="grid h-full w-full place-items-center rounded-2xl text-[14px] font-black"
+                                  className="grid h-full w-full place-items-center rounded-full text-[14px] font-black"
                                   style={{ background: "#12141C", color: "#EC9A1E" }}
                                 >
                                   {getPersonName(person).charAt(0).toUpperCase()}

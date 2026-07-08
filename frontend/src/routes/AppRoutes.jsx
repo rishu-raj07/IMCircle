@@ -56,6 +56,7 @@ const Terms = lazy(() => import("../pages/settings/Terms"));
 const About = lazy(() => import("../pages/settings/About"));
 const AccountDetails = lazy(() => import("../pages/settings/AccountDetails"));
 const CommunityGuidelines = lazy(() => import("../pages/settings/CommunityGuidelines"));
+const AccountDeletion = lazy(() => import("../pages/settings/AccountDeletion"));
 
 function Private({ children }) {
   return <ProtectedRoute>{children}</ProtectedRoute>;
@@ -394,6 +395,10 @@ export default function AppRoutes() {
       />
 
       <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+
+      {/* Google Play requires a public account-deletion page reachable
+          without login — keep this route unauthenticated. */}
+      <Route path="/delete-account" element={<AccountDeletion />} />
 
       <Route
         path="/blocked-accounts"
