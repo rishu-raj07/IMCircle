@@ -328,57 +328,58 @@ function Profile() {
         }
       }
 
-      try {
-        const analyticsData = await getMyAnalyticsDashboard();
+      // These five calls are all independent of each other — running them
+      // sequentially (the previous behavior) meant the page waited on the
+      // sum of every round trip instead of just the slowest one, which was
+      // a real chunk of "why does Profile take so long" on a real network.
+      const [analyticsRes, journeyRes, circleRes, scoreRes, feedRes] =
+        await Promise.allSettled([
+          getMyAnalyticsDashboard(),
+          getMyJourneys(),
+          getMyCircles(),
+          getMyBuilderScore(),
+          getFeed({ tab: "for-you", limit: 100, page: 1 }),
+        ]);
+
+      if (analyticsRes.status === "fulfilled") {
+        const analyticsData = analyticsRes.value;
         setAnalyticsDashboard(
           analyticsData?.dashboard ||
             analyticsData?.data?.dashboard ||
             analyticsData?.data ||
             null
         );
-      } catch (error) {
-        // best-effort — non-critical
       }
 
-      try {
-        const journeyData = await getMyJourneys();
-        setJourneys(normalizeJourneys(journeyData));
-      } catch (error) {
+      if (journeyRes.status === "fulfilled") {
+        setJourneys(normalizeJourneys(journeyRes.value));
+      } else {
         setJourneys([]);
       }
 
-      try {
-        const circleData = await getMyCircles();
+      if (circleRes.status === "fulfilled") {
         const memberships =
-          circleData?.circles || circleData?.data?.circles || [];
+          circleRes.value?.circles || circleRes.value?.data?.circles || [];
 
         const owned = memberships
           .filter((item) => item?.role === "owner" && item?.circle)
           .map((item) => item.circle);
 
         setMyCommunities(owned);
-      } catch (error) {
+      } else {
         setMyCommunities([]);
       }
 
-      try {
-        const scoreData = await getMyBuilderScore();
+      if (scoreRes.status === "fulfilled") {
         setBuilderScore(
-          scoreData?.builderScore || scoreData?.data?.builderScore || null
+          scoreRes.value?.builderScore || scoreRes.value?.data?.builderScore || null
         );
-      } catch (error) {
+      } else {
         setBuilderScore(null);
       }
 
       const myUserId = getId(profileUser) || getId(user);
-
-      const feedData = await getFeed({
-        tab: "for-you",
-        limit: 100,
-        page: 1,
-      });
-
-      const feed = normalizeFeed(feedData);
+      const feed = feedRes.status === "fulfilled" ? normalizeFeed(feedRes.value) : [];
 
       const mine = feed
         .map((item) => {

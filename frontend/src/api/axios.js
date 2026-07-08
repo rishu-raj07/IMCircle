@@ -113,10 +113,19 @@ api.interceptors.response.use(
     const method = (response.config?.method || "get").toLowerCase();
     const cacheKey = response.config?.metadata?.cacheKey;
 
+    // A successful mutation invalidates cached GET responses (so the next
+    // read for that data hits the network instead of serving something
+    // stale) — but it must NOT abort other GETs that happen to still be
+    // in flight. This used to call `.abort()` on every pending GET
+    // controller here, which meant an unrelated background POST (most
+    // commonly AnalyticsTracker's screen_view/time_on_screen beacons,
+    // which fire on every route change) could silently kill a page's own
+    // just-started data-loading requests a few dozen ms after mount —
+    // exactly the "page loads empty until I hit Refresh" bug seen in
+    // production on the Network and Profile pages. Refresh "fixed" it only
+    // because by then the analytics beacons had already resolved.
     if (method !== "get") {
       getCache.clear();
-      pendingGetControllers.forEach((controller) => controller?.abort?.());
-      pendingGetControllers.clear();
     }
 
     if (method === "get" && cacheKey) {
