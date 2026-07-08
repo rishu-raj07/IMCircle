@@ -39,7 +39,6 @@ import { trackProfileView } from "../../api/analyticsApi";
 import PostCard from "../../components/post/PostCard";
 import JourneyCard from "../../components/post/JourneyCard";
 import RepostCard from "../../components/post/RepostCard";
-import BottomNav from "../../components/navigation/BottomNav";
 
 import ExperienceCard from "./ExperienceCard";
 import EducationCard from "./EducationCard";
@@ -727,7 +726,7 @@ function UserProfile() {
 
   return (
     <div className="flex min-h-screen justify-center bg-[var(--imc-bg)]">
-      <div className="relative min-h-screen w-full max-w-[430px] bg-[var(--imc-bg)] pb-28">
+      <div className="relative min-h-screen w-full max-w-[430px] bg-[var(--imc-bg)] pb-8">
         <div className="sticky top-0 z-20 flex items-center justify-between border-b border-[var(--imc-border)] bg-[var(--imc-bg)]/95 px-4 py-4 backdrop-blur">
           <button
             onClick={() => navigate(-1)}
@@ -1115,8 +1114,6 @@ function UserProfile() {
             </>
           )}
         </main>
-
-        <BottomNav />
 
         {showAvatarPreview && avatar && (
           <div

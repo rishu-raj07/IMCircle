@@ -19,6 +19,7 @@ import StreakCard from "../../components/streak/StreakCard";
 import ShareCardModal from "../../components/streak/ShareCardModal";
 import ImageLoader from "../../components/common/ImageLoader";
 import { FeedSkeleton, HomePageSkeleton } from "../../components/common/Skeletons";
+import InstallPromptCard from "../../components/common/InstallPromptCard";
 
 import { getFeed, trackFeedImpressions } from "../../api/feedApi";
 import { getMyProfile } from "../../api/profileApi";
@@ -938,6 +939,8 @@ function Home() {
                 <SlidersHorizontal size={18} style={{ color: "var(--imc-text)" }} strokeWidth={2.25} />
               </button>
             </div>
+
+            <InstallPromptCard />
 
             {builderScore && !streakPromptDoneToday && (
               <div className="mt-3">

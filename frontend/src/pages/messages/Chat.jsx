@@ -27,6 +27,10 @@ import api from "../../api/axios";
 import { socket } from "../../socket/socket";
 import { getSessionUser } from "../../utils/sessionUser";
 import { trackEvent } from "../../utils/analyticsTracker";
+import {
+  setStoredPermissionState,
+  shouldAttemptPermission,
+} from "../../utils/permissions";
 import ImageLoader from "../../components/common/ImageLoader";
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
@@ -628,8 +632,21 @@ function Chat() {
       return;
     }
 
+    // Respect an already-known denial instead of calling getUserMedia again
+    // on every tap of the mic button — repeatedly calling it after a real
+    // denial is what used to surface a fresh permission prompt each time.
+    const canAttempt = await shouldAttemptPermission("microphone");
+
+    if (!canAttempt) {
+      alert(
+        "Microphone access is turned off for IMCircle. Enable it in your device settings to record voice notes."
+      );
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setStoredPermissionState("microphone", "granted");
       audioChunksRef.current = [];
       const recorder = new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
@@ -656,7 +673,8 @@ function Chat() {
       recorder.start();
       setRecording(true);
     } catch (error) {
-      // best-effort — non-critical
+      setStoredPermissionState("microphone", "denied");
+      alert("Microphone permission is needed to record voice notes.");
     }
   };
     return (

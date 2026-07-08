@@ -126,7 +126,18 @@ function CreateLearning() {
             />
           </section>
 
-          <section className="mt-5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] bg-white/18 shadow-[0_18px_52px_rgba(0,0,0,0.18)] backdrop-blur-sm">
+          {/*
+            The image block and textarea below each carry their own
+            min-height floor (250px / 150px). On short viewports — most
+            commonly once the on-screen keyboard opens — the space actually
+            available here can drop below that combined floor. With
+            overflow-hidden that used to clip the bottom of whatever the
+            person was typing, effectively hiding it behind the image.
+            overflow-y-auto lets this card scroll internally instead, so
+            the image stays visible and long text just scrolls into view
+            rather than collapsing/overlapping.
+          */}
+          <section className="mt-5 flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain rounded-[28px] bg-white/18 shadow-[0_18px_52px_rgba(0,0,0,0.18)] backdrop-blur-sm">
             {imagePreview ? (
               <div className="relative h-[54%] min-h-[250px] overflow-hidden">
                 <img

@@ -8,6 +8,17 @@ import { sendOtpSms, verifyOtpSms } from "../services/msg91.service.js";
 import { verifyGoogleCredential } from "../services/google.service.js";
 import { ensureUserIndexes } from "../services/userIndex.service.js";
 
+// --- Google Play review OTP bypass -----------------------------------
+// The Play Store review team's automated/manual test devices can't
+// receive a real SMS, so we reserve one fixed phone number + OTP pair
+// that skips MSG91 entirely on both send and verify. This is backend-only:
+// the frontend calls the exact same /mobile/send-otp and
+// /mobile/verify-otp endpoints with no special-casing and never renders
+// this number or OTP anywhere. Do not remove without confirming Play
+// Console review notes no longer reference this login.
+const PLAY_REVIEW_MOBILE = "9999988888";
+const PLAY_REVIEW_OTP = "888888";
+
 const REFRESH_DAYS = 60;
 const REFRESH_MS = REFRESH_DAYS * 24 * 60 * 60 * 1000;
 const ACCESS_MS = 15 * 60 * 1000;
@@ -155,6 +166,16 @@ export const sendMobileOtp = async (req, res) => {
       });
     }
 
+    // Play Store review bypass: this reserved number never goes to MSG91
+    // (no real SMS, no MSG91 credit spent) — verifyMobileOtp below accepts
+    // only the fixed PLAY_REVIEW_OTP for it.
+    if (mobile === PLAY_REVIEW_MOBILE) {
+      return res.status(200).json({
+        success: true,
+        message: "OTP sent successfully",
+      });
+    }
+
     const msg91Response = await sendOtpSms(mobile);
 
     // MSG91's raw response is logged server-side only (useful while
@@ -198,19 +219,27 @@ export const verifyMobileOtp = async (req, res) => {
       });
     }
 
-    const msg91Response = await verifyOtpSms(mobile, otp);
-    const msgType = String(msg91Response?.type || "").toLowerCase();
+    const isPlayReviewLogin =
+      mobile === PLAY_REVIEW_MOBILE && otp === PLAY_REVIEW_OTP;
 
-    if (msgType && msgType !== "success") {
-      // Log MSG91's raw response server-side for debugging, but never pass
-      // its internal message text straight through to the client — it's
-      // provider-specific wording we don't control and shouldn't leak.
-      console.warn("MSG91 OTP verify rejected:", msg91Response);
+    if (isPlayReviewLogin) {
+      // Skip MSG91 entirely for the reserved Play Store review login —
+      // there's no real OTP to check against their SMS provider.
+    } else {
+      const msg91Response = await verifyOtpSms(mobile, otp);
+      const msgType = String(msg91Response?.type || "").toLowerCase();
 
-      return res.status(400).json({
-        success: false,
-        message: "Invalid or expired OTP",
-      });
+      if (msgType && msgType !== "success") {
+        // Log MSG91's raw response server-side for debugging, but never pass
+        // its internal message text straight through to the client — it's
+        // provider-specific wording we don't control and shouldn't leak.
+        console.warn("MSG91 OTP verify rejected:", msg91Response);
+
+        return res.status(400).json({
+          success: false,
+          message: "Invalid or expired OTP",
+        });
+      }
     }
 
     const user = await User.findOne({ mobile });
@@ -238,6 +267,10 @@ export const verifyMobileOtp = async (req, res) => {
 
     user.verification.mobile = true;
     user.lastActiveAt = Date.now();
+
+    if (isPlayReviewLogin) {
+      user.isReviewAccount = true;
+    }
 
     await user.save({ validateBeforeSave: false });
 

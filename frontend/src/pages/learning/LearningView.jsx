@@ -879,7 +879,21 @@ export default function LearningView() {
         />
         <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/55 to-transparent" />
 
-        <div className="relative z-10 h-screen">
+        {/*
+          `100vh` on mobile browsers is the *layout* viewport, not the
+          visible one — it ignores the address bar / gesture-nav chrome
+          showing or hiding as you scroll, so a fixed h-screen box here
+          used to render taller than what's actually visible, making the
+          whole story page seem to "slide"/drag as the browser chrome
+          animated. `100dvh` tracks the real visible viewport; h-screen
+          stays as a fallback height for browsers that don't support dvh
+          (the invalid dvh value is simply ignored on those, leaving the
+          Tailwind h-screen rule in effect).
+        */}
+        <div
+          className="relative z-10 h-screen overflow-hidden"
+          style={{ height: "100dvh" }}
+        >
           <div className="absolute left-0 right-0 top-0 z-30 px-4 pt-4 text-white">
             <div className="flex gap-1.5">
               {learningList.map((item, index) => (
@@ -1020,7 +1034,14 @@ export default function LearningView() {
             onMouseLeave={() => setPaused(false)}
             onTouchStart={() => setPaused(true)}
             onTouchEnd={() => setPaused(false)}
-            className="absolute left-7 right-7 top-[118px] bottom-[170px] overflow-hidden rounded-[22px] bg-white/18 shadow-[0_18px_52px_rgba(0,0,0,0.20)] backdrop-blur-sm"
+            // Media (image/video) always exactly fills this box via
+            // object-cover/object-contain, so overflow never triggers for
+            // those. Long text-only learnings can exceed this box though —
+            // overflow-y-auto lets that content scroll internally instead
+            // of being clipped or collapsing into/behind the surrounding
+            // UI, while overflow-x stays hidden to keep the rounded card
+            // edges clean.
+            className="absolute left-7 right-7 top-[118px] bottom-[170px] overflow-y-auto overflow-x-hidden overscroll-contain rounded-[22px] bg-white/18 shadow-[0_18px_52px_rgba(0,0,0,0.20)] backdrop-blur-sm"
           >
             {renderMainContent()}
           </div>

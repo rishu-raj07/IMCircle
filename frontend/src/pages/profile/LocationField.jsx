@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Compass, Loader2, MapPin } from "lucide-react";
+import {
+  setStoredPermissionState,
+  shouldAttemptPermission,
+} from "../../utils/permissions";
 
 const GMAPS_KEY = import.meta.env.VITE_GMAPS_BROWSER_KEY;
 
@@ -110,9 +114,24 @@ function LocationField({ value, onChange }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const useMyLocation = () => {
+  const useMyLocation = async () => {
     if (!navigator.geolocation) {
       setError("Location isn't supported on this device");
+      return;
+    }
+
+    // Respect an already-known denial instead of firing getCurrentPosition
+    // again on every tap — that's what used to make the permission popup
+    // (or, on Android, a fresh native prompt) show up every time this
+    // button was pressed. If the user has since re-enabled it in system
+    // settings, the live permissions query below picks that up and we ask
+    // normally again.
+    const canAttempt = await shouldAttemptPermission("geolocation");
+
+    if (!canAttempt) {
+      setError(
+        "Location access is turned off for IMCircle. Enable it in your device settings to use this."
+      );
       return;
     }
 
@@ -121,6 +140,7 @@ function LocationField({ value, onChange }) {
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
+        setStoredPermissionState("geolocation", "granted");
         const { latitude, longitude } = position.coords;
 
         try {
@@ -149,9 +169,22 @@ function LocationField({ value, onChange }) {
           setError("Couldn't detect your location");
         }
       },
-      () => {
+      (geoError) => {
         setLocating(false);
-        setError("Location access denied. Enable it and try again.");
+
+        // PERMISSION_DENIED (1): remember it so we stop re-prompting.
+        // POSITION_UNAVAILABLE (2): permission is fine, device GPS/location
+        // services are off — a different message, since re-asking for
+        // permission wouldn't fix it.
+        // TIMEOUT (3): transient, safe to let the user just try again.
+        if (geoError.code === 1) {
+          setStoredPermissionState("geolocation", "denied");
+          setError("Location access denied. Enable it in your device settings and try again.");
+        } else if (geoError.code === 2) {
+          setError("Turn on your device's location (GPS) to use this, then try again.");
+        } else {
+          setError("Couldn't detect your location. Try again.");
+        }
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );

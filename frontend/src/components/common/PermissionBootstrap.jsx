@@ -3,6 +3,7 @@ import { Camera, Contact, Loader2, Mic, X } from "lucide-react";
 import { useLocation } from "react-router-dom";
 
 import { matchContacts } from "../../api/userApi";
+import { setStoredPermissionState } from "../../utils/permissions";
 
 const PROMPT_KEY = "imcircle_permission_prompt_done";
 const STATUS_KEY = "imcircle_permission_status";
@@ -64,8 +65,14 @@ export default function PermissionBootstrap() {
             video: true,
           });
           stream.getTracks().forEach((track) => track.stop());
+          setStoredPermissionState("microphone", "granted");
+          setStoredPermissionState("camera", "granted");
         } catch {
           // Contact sync can still continue if media permission is denied.
+          // Record the denial so Chat/CreatePost's voice recorder doesn't
+          // immediately re-prompt the moment the user taps record.
+          setStoredPermissionState("microphone", "denied");
+          setStoredPermissionState("camera", "denied");
         }
       }
 

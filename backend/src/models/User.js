@@ -718,6 +718,15 @@ const userSchema = new mongoose.Schema(
       default: false,
     },
 
+    // Set on the single reserved account created via the Google Play
+    // review OTP bypass (see auth.controller.js). Purely informational —
+    // does not change permissions or app behavior — kept so this account
+    // is easy to identify/filter out of analytics and admin user lists.
+    isReviewAccount: {
+      type: Boolean,
+      default: false,
+    },
+
     // Users this account has blocked. Enforced both ways in follow/circle
     // requests, messaging, and feed reads — see userController's blockUser.
     blockedUsers: [

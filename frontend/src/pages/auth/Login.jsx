@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Phone } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { GoogleLogin } from "@react-oauth/google";
 import heroImg from "../../assets/images/login-hero.png";
+import GoogleAuthButton from "../../components/auth/GoogleAuthButton";
 import { googleLogin, sendMobileOtp } from "../../api/authApi";
 import { saveLoginData } from "../../store/authStore";
 import { setPendingRegister } from "../../utils/storage";
@@ -44,23 +44,34 @@ function Login() {
     }
   };
 
-  const handleGoogleSuccess = async (credentialResponse) => {
-    setError("");
+  // Stable identities via useCallback so GoogleAuthButton (memoized) never
+  // re-renders — and never re-invokes Google's renderButton — just because
+  // this page re-rendered from typing in the mobile field or a loading
+  // state change.
+  const handleGoogleSuccess = useCallback(
+    async (credentialResponse) => {
+      setError("");
 
-    try {
-      const data = await googleLogin({
-        credential: credentialResponse.credential,
-      });
+      try {
+        const data = await googleLogin({
+          credential: credentialResponse.credential,
+        });
 
-      saveLoginData(data);
+        saveLoginData(data);
 
-      // ProtectedRoute checks onboarding status on every private route, so
-      // it will bounce first-time users into /profile-setup automatically.
-      navigate("/home", { replace: true });
-    } catch (err) {
-      setError(err.response?.data?.message || "Google login failed");
-    }
-  };
+        // ProtectedRoute checks onboarding status on every private route, so
+        // it will bounce first-time users into /profile-setup automatically.
+        navigate("/home", { replace: true });
+      } catch (err) {
+        setError(err.response?.data?.message || "Google login failed");
+      }
+    },
+    [navigate]
+  );
+
+  const handleGoogleError = useCallback(() => {
+    setError("Google login failed");
+  }, []);
 
   return (
     <div className="h-screen overflow-hidden bg-[var(--imc-surface-2)] flex justify-center">
@@ -141,15 +152,11 @@ function Login() {
             <div className="h-px flex-1 bg-[rgba(18,20,28,0.08)]" />
           </div>
 
-          <div className="overflow-hidden rounded-2xl">
-            <GoogleLogin
-              onSuccess={handleGoogleSuccess}
-              onError={() => setError("Google login failed")}
-              text="continue_with"
-              shape="pill"
-              width="100%"
-            />
-          </div>
+          <GoogleAuthButton
+            onSuccess={handleGoogleSuccess}
+            onError={handleGoogleError}
+            text="continue_with"
+          />
 
           <p className="mt-3 text-center text-[10.8px] leading-4 text-[var(--imc-text-muted)]">
             By signing in, you agree to our{" "}

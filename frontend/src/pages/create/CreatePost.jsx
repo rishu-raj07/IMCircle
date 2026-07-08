@@ -19,6 +19,10 @@ import BottomNav from "../../components/navigation/BottomNav";
 import { createPost } from "../../api/postApi";
 import { currentUser } from "../../store/authStore";
 import { trackEvent } from "../../utils/analyticsTracker";
+import {
+  setStoredPermissionState,
+  shouldAttemptPermission,
+} from "../../utils/permissions";
 
 const MAX_TEXT = 1500;
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
@@ -180,8 +184,21 @@ function CreatePost() {
       return;
     }
 
+    // Respect an already-known denial instead of calling getUserMedia again
+    // on every tap — repeatedly calling it after a real denial is what used
+    // to surface a fresh permission prompt every time.
+    const canAttempt = await shouldAttemptPermission("microphone");
+
+    if (!canAttempt) {
+      alert(
+        "Microphone access is turned off for IMCircle. Enable it in your device settings to record voice."
+      );
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setStoredPermissionState("microphone", "granted");
       const recorder = new MediaRecorder(stream);
 
       audioChunksRef.current = [];
@@ -228,6 +245,7 @@ function CreatePost() {
 
       recorder.timerId = timer;
     } catch (error) {
+      setStoredPermissionState("microphone", "denied");
       alert("Microphone permission is needed to record voice.");
     }
   };
