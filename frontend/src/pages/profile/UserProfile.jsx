@@ -297,6 +297,8 @@ function UserProfile() {
   const [journeys, setJourneys] = useState([]);
   const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [retryToken, setRetryToken] = useState(0);
   const [followLoading, setFollowLoading] = useState(false);
   const [messageLoading, setMessageLoading] = useState(false);
   const [showAvatarPreview, setShowAvatarPreview] = useState(false);
@@ -405,6 +407,7 @@ function UserProfile() {
     const loadProfile = async () => {
       try {
         setLoading(true);
+        setLoadError(false);
 
         const meRes = await api.get("/auth/me");
         if (cancelled) return;
@@ -498,7 +501,15 @@ function UserProfile() {
         if (error?.code === "ERR_CANCELED") return;
         if (cancelled) return;
 
-        setProfileUser(null);
+        // Distinguish "this user genuinely doesn't exist" (404) from a
+        // transient failure (network hiccup, timeout, 5xx) — the latter
+        // should offer a retry instead of a permanent "User not found".
+        if (error?.response?.status === 404) {
+          setProfileUser(null);
+          setLoadError(false);
+        } else {
+          setLoadError(true);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -509,7 +520,7 @@ function UserProfile() {
     return () => {
       cancelled = true;
     };
-  }, [username, userId]);
+  }, [username, userId, retryToken]);
 
   useEffect(() => {
     if (isOwnProfile) {
@@ -677,10 +688,26 @@ function UserProfile() {
   }, [journeys]);
 
   if (loading || isOwnProfile) {
+    return <UserProfileSkeleton />;
+  }
+
+  if (loadError) {
     return (
       <div className="flex min-h-screen justify-center bg-[var(--imc-bg)]">
-        <div className="w-full max-w-[430px] bg-[var(--imc-bg)] px-4 py-10 text-center text-[13px] font-bold text-[var(--imc-text-muted)]">
-          Loading profile...
+        <div className="w-full max-w-[430px] bg-[var(--imc-bg)] px-4 py-10 text-center">
+          <h2 className="text-[16px] font-black text-[var(--imc-text)]">
+            Couldn't load this profile
+          </h2>
+          <p className="mt-1.5 text-[12px] font-semibold text-[var(--imc-text-muted)]">
+            Check your connection and try again.
+          </p>
+
+          <button
+            onClick={() => setRetryToken((t) => t + 1)}
+            className="mt-4 rounded-full bg-[var(--imc-indigo)] px-5 py-2 text-[12px] font-black text-white active:scale-95"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
@@ -1374,6 +1401,39 @@ function UserProfile() {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function UserProfileSkeleton() {
+  return (
+    <div className="flex min-h-screen justify-center bg-[var(--imc-bg)]">
+      <div className="min-h-screen w-full max-w-[430px] bg-[var(--imc-bg)] px-4 pb-24 pt-8">
+        <div className="flex animate-pulse items-start gap-4">
+          <div className="h-[86px] w-[86px] shrink-0 rounded-full bg-[var(--imc-surface-2)]" />
+          <div className="min-w-0 flex-1 space-y-2.5 pt-2">
+            <div className="h-4 w-2/3 rounded-full bg-[var(--imc-surface-2)]" />
+            <div className="h-3 w-1/3 rounded-full bg-[var(--imc-surface-2)]" />
+            <div className="h-3 w-3/4 rounded-full bg-[var(--imc-surface-2)]" />
+          </div>
+        </div>
+
+        <div className="mt-5 grid animate-pulse grid-cols-3 gap-3 border-y border-[var(--imc-border)] py-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-10 rounded-[10px] bg-[var(--imc-surface-2)]" />
+          ))}
+        </div>
+
+        <div className="mt-4 flex animate-pulse gap-2">
+          <div className="h-10 flex-1 rounded-[14px] bg-[var(--imc-surface-2)]" />
+          <div className="h-10 flex-1 rounded-[14px] bg-[var(--imc-surface-2)]" />
+        </div>
+
+        <div className="mt-6 animate-pulse space-y-3">
+          <div className="h-24 rounded-[20px] bg-[var(--imc-surface-2)]" />
+          <div className="h-24 rounded-[20px] bg-[var(--imc-surface-2)]" />
+        </div>
       </div>
     </div>
   );

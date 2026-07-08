@@ -42,6 +42,21 @@ const notificationSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    // Normalized target info so the frontend can navigate straight to the
+    // right detail screen without guessing from `type`. Values used across
+    // the app: "post", "journey", "journey_milestone", "learning", "circle",
+    // "user". Populated at creation time where possible, and always
+    // re-derived defensively in getNotifications() for older documents that
+    // predate these fields (schema is `strict:false`, so nothing here is a
+    // breaking change to existing ad hoc fields like `post`/`connection`).
+    targetType: {
+      type: String,
+      default: "",
+    },
+    targetId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: undefined,
+    },
     read: {
       type: Boolean,
       default: false,

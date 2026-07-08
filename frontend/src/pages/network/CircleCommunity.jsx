@@ -190,10 +190,17 @@ function CircleCommunity() {
   const canManageMembers = myRole === "owner" || myRole === "admin";
   const iAmRestricted = myMembership?.status === "restricted";
 
-  const memberIds = useMemo(
-    () => new Set(members.map((member) => getId(member?.user))),
-    [members]
-  );
+  // Defensively includes the creator even if a (legacy) circle's member
+  // list somehow doesn't carry an explicit owner CircleMember document —
+  // createCircle() always creates one today, but this guards the invite
+  // list against ever suggesting the circle's own owner/admin as someone
+  // to invite.
+  const memberIds = useMemo(() => {
+    const ids = new Set(members.map((member) => getId(member?.user)));
+    const creatorId = getId(creator);
+    if (creatorId) ids.add(creatorId);
+    return ids;
+  }, [members, creator]);
 
   const circleInterest = useMemo(() => detectCircleInterest(circle), [circle]);
 
@@ -213,19 +220,34 @@ function CircleCommunity() {
     return text.includes(q);
   };
 
-  // Existing personal connections first (people already in your circle),
-  // then everyone else ranked by whether their primaryInterest matches what
-  // this community is actually about — not just a flat suggestions dump.
-  const rankedPeople = useMemo(() => {
-    const connectionIds = new Set(myConnections.map((user) => String(getId(user))));
+  const connectionIds = useMemo(
+    () => new Set(myConnections.map((user) => String(getId(user)))),
+    [myConnections]
+  );
 
+  // Only genuinely eligible candidates ever reach the invite list: not
+  // yourself, not the circle's own creator/admins/members (memberIds
+  // already covers all of those), and not someone with a pending invite
+  // already out to them — showing a disabled "Invited" button for those
+  // instead of hiding them was the old behavior; the ask is to exclude them
+  // outright. Existing personal connections ("in my circle") are still
+  // shown, just ranked first and labeled, since they're real invite
+  // candidates for this circle even though they're already a 1:1 connection.
+  const rankedPeople = useMemo(() => {
     const merged = [...myConnections, ...people];
     const seen = new Set();
     const candidates = [];
 
     for (const person of merged) {
       const id = String(getId(person));
-      if (!id || id === viewerId || memberIds.has(id) || seen.has(id)) continue;
+      if (
+        !id ||
+        id === viewerId ||
+        memberIds.has(id) ||
+        invitedIds.includes(id) ||
+        seen.has(id)
+      )
+        continue;
       seen.add(id);
       candidates.push(person);
     }
@@ -239,7 +261,7 @@ function CircleCommunity() {
       const bMatch = circleInterest && b?.primaryInterest === circleInterest ? 1 : 0;
       return bMatch - aMatch;
     });
-  }, [myConnections, people, memberIds, viewerId, circleInterest]);
+  }, [myConnections, people, memberIds, invitedIds, viewerId, circleInterest, connectionIds]);
 
   const filteredPeople = useMemo(() => {
     const q = inviteQuery.trim().toLowerCase();
@@ -284,13 +306,20 @@ function CircleCommunity() {
 
     for (const person of merged) {
       const id = String(getId(person));
-      if (!id || id === viewerId || memberIds.has(id) || seen.has(id)) continue;
+      if (
+        !id ||
+        id === viewerId ||
+        memberIds.has(id) ||
+        invitedIds.includes(id) ||
+        seen.has(id)
+      )
+        continue;
       seen.add(id);
       result.push(person);
     }
 
     return result;
-  }, [inviteQuery, filteredPeople, searchResults, memberIds, viewerId, rankedPeople]);
+  }, [inviteQuery, filteredPeople, searchResults, memberIds, invitedIds, viewerId, rankedPeople]);
 
   const sortedPosts = useMemo(() => {
     return [...posts].sort((a, b) => {
@@ -298,8 +327,19 @@ function CircleCommunity() {
     });
   }, [posts]);
 
+  // Same StrictMode-double-invoke/abort-race guard used on the Network
+  // page: an aborted, superseded call must never apply its (empty/rejected)
+  // results, since that's exactly what could make an already-joined
+  // admin/member briefly (or, on a slow network, not-so-briefly) look like
+  // an eligible invite candidate — `memberIds` above is only as good as the
+  // last `members` state that actually landed.
+  const loadIdRef = useRef(0);
+
   const loadCircle = async () => {
     if (!circleId) return;
+
+    const requestId = ++loadIdRef.current;
+    const isCurrent = () => loadIdRef.current === requestId;
 
     try {
       setLoading(true);
@@ -315,6 +355,8 @@ function CircleCommunity() {
         getCircleJoinRequests(circleId),
         getMyCircleList(),
       ]);
+
+      if (!isCurrent()) return;
 
       if (circleRes.status === "fulfilled") {
         setCircle(
@@ -371,9 +413,10 @@ function CircleCommunity() {
         setJoinRequests([]);
       }
     } catch (loadError) {
+      if (!isCurrent()) return;
       setError(loadError?.response?.data?.message || "Circle could not be loaded.");
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   };
 
@@ -881,6 +924,7 @@ function CircleCommunity() {
           people={displayedPeople}
           query={inviteQuery}
           invitedIds={invitedIds}
+          connectionIds={connectionIds}
           searching={searching}
           onQuery={setInviteQuery}
           onClose={() => setShowInvite(false)}
@@ -1321,7 +1365,16 @@ function SheetAction({ icon, label, description, danger, onClick }) {
   );
 }
 
-function InviteSheet({ people, query, invitedIds, searching, onQuery, onClose, onInvite }) {
+function InviteSheet({
+  people,
+  query,
+  invitedIds,
+  connectionIds,
+  searching,
+  onQuery,
+  onClose,
+  onInvite,
+}) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45">
       <div className="max-h-[82vh] w-full max-w-[430px] overflow-hidden rounded-t-[30px] bg-[var(--imc-surface)] shadow-2xl">
@@ -1369,6 +1422,7 @@ function InviteSheet({ people, query, invitedIds, searching, onQuery, onClose, o
               {people.map((person) => {
                 const userId = String(getId(person));
                 const invited = invitedIds.includes(userId);
+                const inCircle = connectionIds?.has(userId);
 
                 return (
                   <div
@@ -1385,14 +1439,23 @@ function InviteSheet({ people, query, invitedIds, searching, onQuery, onClose, o
                         {getUserHeadline(person)}
                       </p>
                     </div>
-                    <button
-                      onClick={() => onInvite(person)}
-                      disabled={invited}
-                      className="h-9 rounded-[14px] px-3 text-[11px] font-black disabled:opacity-60"
-                      style={{ background: invited ? "#D1D5DB" : MARIGOLD, color: invited ? INK : "#ffffff" }}
-                    >
-                      {invited ? "Invited" : "Invite"}
-                    </button>
+                    {inCircle ? (
+                      <span
+                        className="shrink-0 rounded-full px-2.5 py-1.5 text-[10px] font-black"
+                        style={{ background: GOLD_TINT, color: "#8A5A12" }}
+                      >
+                        In your circle
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => onInvite(person)}
+                        disabled={invited}
+                        className="h-9 rounded-[14px] px-3 text-[11px] font-black disabled:opacity-60"
+                        style={{ background: invited ? "#D1D5DB" : MARIGOLD, color: invited ? INK : "#ffffff" }}
+                      >
+                        {invited ? "Invited" : "Invite"}
+                      </button>
+                    )}
                   </div>
                 );
               })}

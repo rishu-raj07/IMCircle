@@ -7,8 +7,44 @@ import LearningSave from "../models/LearningSave.js";
 import LearningRepost from "../models/LearningRepost.js";
 import cloudinary from "../config/cloudinary.js";
 import LearningView from "../models/LearningView.js";
+import Notification from "../models/Notification.js";
+import { emitNotification } from "../socket/socket.js";
 import { addBuilderScore } from "../services/builderScore.service.js";
 import { deleteExpiredLearnings } from "../services/learningExpiry.service.js";
+
+// Shared by repostLearning/shareLearning — lets the original learning's
+// owner know someone shared their learning, same best-effort/non-blocking
+// pattern used everywhere else in the app (a failure here never fails the
+// repost/share request itself).
+async function notifyLearningOwner({ learning, actor, repostId }) {
+  try {
+    const ownerId = learning?.creator;
+    if (!ownerId || String(ownerId) === String(actor._id)) return;
+
+    const actorName = actor.fullName || actor.name || actor.username || "Someone";
+
+    const notification = await Notification.create({
+      recipient: ownerId,
+      sender: actor._id,
+      actor: actor._id,
+      type: "learning_share",
+      targetType: "learning",
+      targetId: learning._id,
+      title: "Learning shared",
+      message: `${actorName} shared your learning`,
+      learning: learning._id,
+      link: `/learning-view/${learning._id}`,
+      data: {
+        learning: learning._id,
+        repost: repostId || undefined,
+      },
+    });
+
+    emitNotification(ownerId, notification);
+  } catch (notifyError) {
+    console.error("Learning share notification skipped:", notifyError.message);
+  }
+}
 
 const DAILY_LEARNING_LIMIT = 10;
 const LEARNING_VISIBLE_HOURS = 24;
@@ -925,6 +961,11 @@ export const repostLearning = async (req, res) => {
     learning.repostsCount = repostsCount;
     await learning.save();
 
+    // Only fires for a genuinely new repost (not the caption-edit branch
+    // above), so the owner gets exactly one notification per repost instead
+    // of one per edit.
+    await notifyLearningOwner({ learning, actor: req.user, repostId: repost._id });
+
     return res.status(200).json({
       success: true,
       message: "Learning reposted",
@@ -975,6 +1016,8 @@ export const shareLearning = async (req, res) => {
 
     learning.sharesCount = (learning.sharesCount || 0) + 1;
     await learning.save();
+
+    await notifyLearningOwner({ learning, actor: req.user });
 
     return res.status(200).json({
       success: true,

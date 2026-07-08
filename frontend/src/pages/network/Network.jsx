@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   Contact,
@@ -234,7 +234,21 @@ export default function Network() {
 
   const topRequests = useMemo(() => requests.slice(0, 3), [requests]);
 
+  // Guards against the classic dev-StrictMode double-invoke problem (and
+  // any overlapping manual Refresh click): axios's GET de-dupe logic in
+  // api/axios.js aborts an older in-flight request for the same URL the
+  // moment a newer identical one starts, which made the FIRST of the two
+  // mount-time calls resolve as all-rejected and — because the code used to
+  // unconditionally set setLoading(false) in `finally` — flip the page to
+  // "not loading, still empty" right before the second (real) call's data
+  // landed. Only the most recently started call is now allowed to touch
+  // state at all; every earlier, superseded call's results are dropped.
+  const loadIdRef = useRef(0);
+
   const loadNetwork = async () => {
+    const requestId = ++loadIdRef.current;
+    const isCurrent = () => loadIdRef.current === requestId;
+
     try {
       setLoading(true);
 
@@ -257,6 +271,11 @@ export default function Network() {
         getMyCircleInvites(),
         getMySentCircleJoinRequests(),
       ]);
+
+      // A newer loadNetwork() call has already started (or finished) since
+      // this one kicked off — its results are stale, so drop them entirely
+      // instead of letting them clobber whatever the latest call sets.
+      if (!isCurrent()) return;
 
       if (profileRes.status === "fulfilled") {
         const user =
@@ -370,7 +389,7 @@ export default function Network() {
     } catch (error) {
       // best-effort — non-critical
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   };
 
@@ -806,7 +825,7 @@ export default function Network() {
             />
 
             {loading ? (
-              <LoadingCard />
+              <RequestCardSkeleton />
             ) : topRequests.length > 0 ? (
               <section className="space-y-3">
                 {topRequests.map((request) => (
@@ -833,7 +852,7 @@ export default function Network() {
             />
 
             {loading ? (
-              <LoadingCard />
+              <CircleRowSkeleton />
             ) : myCircles.length > 0 ? (
               <>
                 <section className="no-scrollbar -mx-3 flex gap-3 overflow-x-auto px-3 pb-2">
@@ -873,7 +892,7 @@ export default function Network() {
             />
 
             {loading ? (
-              <LoadingCard />
+              <CircleRowSkeleton />
             ) : circles.length > 0 ? (
               <>
                 <section className="no-scrollbar -mx-3 flex gap-3 overflow-x-auto px-3 pb-2">
@@ -926,7 +945,7 @@ export default function Network() {
             />
 
             {loading ? (
-              <LoadingCard />
+              <PeopleCardSkeleton />
             ) : people.length > 0 ? (
               <>
                 <section className="space-y-3">
@@ -1532,6 +1551,80 @@ function LoadingCard() {
       style={{ border: `1px solid ${LINE}` }}
     >
       <Loader2 size={22} className="animate-spin" style={{ color: MARIGOLD }} />
+    </div>
+  );
+}
+
+// Shape-matched skeleton placeholders shown while the very first
+// loadNetwork() call is still in flight — replaces the old generic spinner
+// so each section keeps its real layout instead of collapsing to one blob.
+function RequestCardSkeleton() {
+  return (
+    <div className="space-y-3">
+      {[0, 1].map((i) => (
+        <div
+          key={i}
+          className="animate-pulse rounded-[22px] bg-[var(--imc-surface)] p-4 shadow-[0_10px_26px_rgba(18,20,28,0.035)]"
+          style={{ border: `1px solid ${LINE}` }}
+        >
+          <div className="flex gap-3">
+            <div className="h-14 w-14 shrink-0 rounded-full bg-[var(--imc-surface-2)]" />
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="h-3 w-1/2 rounded-full bg-[var(--imc-surface-2)]" />
+              <div className="h-2.5 w-1/3 rounded-full bg-[var(--imc-surface-2)]" />
+              <div className="mt-3 flex gap-2">
+                <div className="h-9 flex-1 rounded-[14px] bg-[var(--imc-surface-2)]" />
+                <div className="h-9 flex-1 rounded-[14px] bg-[var(--imc-surface-2)]" />
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CircleRowSkeleton() {
+  return (
+    <div className="no-scrollbar -mx-3 flex animate-pulse gap-3 overflow-x-auto px-3 pb-2">
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          className="min-w-[210px] overflow-hidden rounded-[22px] bg-[var(--imc-surface)] shadow-[0_10px_26px_rgba(18,20,28,0.035)]"
+          style={{ border: `1px solid ${LINE}` }}
+        >
+          <div className="h-[82px] w-full bg-[var(--imc-surface-2)]" />
+          <div className="space-y-2 p-4">
+            <div className="h-3 w-2/3 rounded-full bg-[var(--imc-surface-2)]" />
+            <div className="h-2.5 w-full rounded-full bg-[var(--imc-surface-2)]" />
+            <div className="mt-2 h-10 w-full rounded-[14px] bg-[var(--imc-surface-2)]" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PeopleCardSkeleton() {
+  return (
+    <div className="space-y-3">
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          className="animate-pulse rounded-[22px] bg-[var(--imc-surface)] p-4 shadow-[0_10px_26px_rgba(18,20,28,0.035)]"
+          style={{ border: `1px solid ${LINE}` }}
+        >
+          <div className="flex gap-3">
+            <div className="h-14 w-14 shrink-0 rounded-full bg-[var(--imc-surface-2)]" />
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="h-3 w-1/2 rounded-full bg-[var(--imc-surface-2)]" />
+              <div className="h-2.5 w-1/3 rounded-full bg-[var(--imc-surface-2)]" />
+              <div className="h-2.5 w-1/4 rounded-full bg-[var(--imc-surface-2)]" />
+              <div className="mt-3 h-9 w-24 rounded-full bg-[var(--imc-surface-2)]" />
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

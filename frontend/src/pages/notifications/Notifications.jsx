@@ -168,6 +168,54 @@ function getType(item) {
   return String(item?.type || item?.notificationType || "general").toLowerCase();
 }
 
+// Figures out where a notification card should navigate when tapped,
+// preferring a real backend-provided link (existing behavior), then falling
+// back to structured targetType/targetId data. Only ever returns routes that
+// already exist in AppRoutes.jsx — there is no dedicated single-post route
+// yet, so "post" notifications (always about the recipient's own post) open
+// the recipient's own profile instead of a route that doesn't exist.
+function resolveNotificationRoute(item) {
+  const explicitLink = item?.link || item?.url || item?.targetUrl || item?.meta?.url || item?.data?.url;
+  if (explicitLink) return explicitLink;
+
+  const targetType = String(item?.targetType || "").toLowerCase();
+  const targetId =
+    item?.targetId ||
+    item?.postId ||
+    item?.journeyId ||
+    item?.learningId ||
+    item?.data?.journey ||
+    item?.data?.learning ||
+    "";
+
+  const actor = getSender(item);
+  const actorId = getId(actor);
+  const actorProfileRoute = actor?.username
+    ? `/profile/${actor.username}`
+    : actorId
+    ? `/profile/user/${actorId}`
+    : "";
+
+  switch (targetType) {
+    case "learning":
+      return targetId ? `/learning-view/${targetId}` : actorProfileRoute;
+    case "journey":
+    case "journey_milestone":
+      return (item?.journeyId || targetId) ? `/journey/${item?.journeyId || targetId}` : actorProfileRoute;
+    case "circle":
+      return targetId ? `/circles/${targetId}` : "/network";
+    case "post":
+      // No dedicated post detail route exists — these are always "on your
+      // post", so the recipient's own profile is the closest real place to
+      // see it.
+      return "/profile";
+    case "user":
+      return actorProfileRoute;
+    default:
+      return actorProfileRoute;
+  }
+}
+
 function getIcon(type) {
   if (type.includes("circle") || type.includes("community")) return UsersRound;
   if (type.includes("request") || type.includes("follow") || type.includes("invite")) return UserPlus;
@@ -259,14 +307,19 @@ function Notifications() {
       }
     }
 
-    const target =
-      item?.link ||
-      item?.url ||
-      item?.targetUrl ||
-      item?.meta?.url ||
-      item?.data?.url;
+    const target = resolveNotificationRoute(item);
 
     if (target) navigate(target);
+  };
+
+  const openActorProfile = (event, item) => {
+    event.stopPropagation();
+
+    const actor = getSender(item);
+    const actorId = getId(actor);
+
+    if (actor?.username) navigate(`/profile/${actor.username}`);
+    else if (actorId) navigate(`/profile/user/${actorId}`);
   };
 
   const handleDelete = async (item) => {
@@ -360,6 +413,7 @@ function Notifications() {
                   item={item}
                   loading={actionId === getId(item)}
                   onClick={() => openNotification(item)}
+                  onOpenActor={(event) => openActorProfile(event, item)}
                   onDelete={() => handleDelete(item)}
                 />
               ))}
@@ -383,7 +437,7 @@ function Notifications() {
   );
 }
 
-function NotificationCard({ item, loading, onClick, onDelete }) {
+function NotificationCard({ item, loading, onClick, onOpenActor, onDelete }) {
   const type = getType(item);
   const Icon = getIcon(type);
   const unread = !item?.read && !item?.isRead;
@@ -422,15 +476,29 @@ function NotificationCard({ item, loading, onClick, onDelete }) {
         Delete
       </button>
 
-      <button
+      <div
         onClick={onClick}
-        className="relative flex w-full gap-3 rounded-[22px] bg-[var(--imc-surface)] p-4 text-left shadow-[0_10px_26px_rgba(18,20,28,0.035)] transition-transform"
+        role="button"
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onClick();
+          }
+        }}
+        className="relative flex w-full cursor-pointer gap-3 rounded-[22px] bg-[var(--imc-surface)] p-4 text-left shadow-[0_10px_26px_rgba(18,20,28,0.035)] transition-transform"
         style={{
           border: unread ? "1px solid rgba(236,154,30,0.22)" : `1px solid ${LINE}`,
           transform: swiped ? "translateX(-88px)" : "translateX(0)",
         }}
       >
-      <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full" style={{ background: unread ? INK : PAPER, color: unread ? MARIGOLD : MUTED }}>
+      <button
+        type="button"
+        onClick={(event) => onOpenActor(event)}
+        aria-label={senderName ? `Open ${senderName}'s profile` : "Open profile"}
+        className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full"
+        style={{ background: unread ? INK : PAPER, color: unread ? MARIGOLD : MUTED }}
+      >
         {loading ? (
           <Loader2 className="animate-spin" size={20} />
         ) : image ? (
@@ -440,13 +508,24 @@ function NotificationCard({ item, loading, onClick, onDelete }) {
         ) : (
           <Icon size={21} />
         )}
-      </div>
+      </button>
       <div className="min-w-0 flex-1">
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-black leading-5" style={{ color: INK }}>
-              {senderName || item?.title || type.replaceAll("_", " ")}
-            </p>
+            {senderName ? (
+              <button
+                type="button"
+                onClick={(event) => onOpenActor(event)}
+                className="truncate text-left text-[13px] font-black leading-5 active:opacity-70"
+                style={{ color: INK }}
+              >
+                {senderName}
+              </button>
+            ) : (
+              <p className="truncate text-[13px] font-black leading-5" style={{ color: INK }}>
+                {item?.title || type.replaceAll("_", " ")}
+              </p>
+            )}
             {senderTagline && (
               <p className="truncate text-[10.5px] font-semibold" style={{ color: MUTED }}>
                 {senderTagline}
@@ -462,7 +541,7 @@ function NotificationCard({ item, loading, onClick, onDelete }) {
           {formatRelativeTime(item?.createdAt || item?.updatedAt)}
         </p>
       </div>
-      </button>
+      </div>
     </div>
   );
 }

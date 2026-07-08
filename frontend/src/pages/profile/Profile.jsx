@@ -29,7 +29,7 @@ import StreakMilestoneCard from "../../components/badges/StreakMilestoneCard";
 import { getStreakBadgeTier } from "../../utils/badges";
 
 import { getMyProfile, updateProfile } from "../../api/profileApi";
-import { setUser as setStoredUser } from "../../utils/storage";
+import { getUser as getCachedUser, setUser as setStoredUser } from "../../utils/storage";
 import { getFeed } from "../../api/feedApi";
 import { getMyAnalyticsDashboard } from "../../api/analyticsApi";
 import { getMyJourneys } from "../../api/journeyApi";
@@ -263,7 +263,17 @@ function getJourneyStatus(journey = {}) {
 function Profile() {
   const navigate = useNavigate();
 
-  const [user, setUser] = useState(null);
+  // Seed from whatever was cached locally last time so the page never has
+  // to show a bare "Loading..." state on repeat visits — the real fetch
+  // below still runs and replaces this the moment it resolves.
+  const [user, setUser] = useState(() => {
+    try {
+      return getCachedUser() || null;
+    } catch {
+      return null;
+    }
+  });
+  const [profileError, setProfileError] = useState(false);
   const [rankBadge, setRankBadge] = useState(null);
   const [signupRank, setSignupRank] = useState(null);
   const [analyticsDashboard, setAnalyticsDashboard] = useState(null);
@@ -290,17 +300,33 @@ function Profile() {
     try {
       setLoading(true);
 
-      const profileData = await getMyProfile();
-      const profileUser =
-        profileData?.user || profileData?.data?.user || profileData?.data;
+      let profileUser = null;
 
-      setUser(profileUser);
-      // Refresh the cached global user too, so other screens reading it
-      // (TopHeader, SideDrawer) never trail behind what this page just
-      // fetched straight from the API.
-      if (profileUser) setStoredUser(profileUser);
-      setRankBadge(profileData?.rankBadge || null);
-      setSignupRank(profileData?.signupRank || null);
+      try {
+        const profileData = await getMyProfile();
+        profileUser =
+          profileData?.user || profileData?.data?.user || profileData?.data;
+
+        setUser(profileUser);
+        // Refresh the cached global user too, so other screens reading it
+        // (TopHeader, SideDrawer) never trail behind what this page just
+        // fetched straight from the API.
+        if (profileUser) setStoredUser(profileUser);
+        setRankBadge(profileData?.rankBadge || null);
+        setSignupRank(profileData?.signupRank || null);
+        setProfileError(false);
+      } catch {
+        setProfileError(true);
+
+        // Nothing cached to show and the fetch failed — nothing else on
+        // this page can render meaningfully, so stop here and let the
+        // retry state take over instead of quietly loading everything
+        // else against a blank profile.
+        if (!getId(profileUser) && !getId(user)) {
+          setLoading(false);
+          return;
+        }
+      }
 
       try {
         const analyticsData = await getMyAnalyticsDashboard();
@@ -344,7 +370,7 @@ function Profile() {
         setBuilderScore(null);
       }
 
-      const myUserId = getId(profileUser);
+      const myUserId = getId(profileUser) || getId(user);
 
       const feedData = await getFeed({
         tab: "for-you",
@@ -492,16 +518,17 @@ function Profile() {
     await persistProfilePatch({ skills: nextSkills }, { ...user, skills: nextSkills });
   };
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen justify-center bg-[var(--imc-bg)]">
-        <div className="flex min-h-screen w-full max-w-[430px] items-center justify-center bg-[var(--imc-bg)]">
-          <p className="text-[13px] font-black text-[var(--imc-text)]">
-            Loading profile...
-          </p>
-        </div>
-      </div>
-    );
+  // Only show a dedicated full-screen state when there is truly nothing to
+  // render yet — a skeleton while the first-ever fetch is in flight, or a
+  // clean retry state if that fetch failed. Once we have any user data
+  // (fresh or cached from a previous visit), the real layout renders
+  // immediately and simply keeps showing that data underneath.
+  if (loading && !user) {
+    return <ProfileHeaderSkeleton />;
+  }
+
+  if (profileError && !user) {
+    return <ProfileRetryState onRetry={loadProfile} />;
   }
 
   return (
@@ -1577,6 +1604,59 @@ function EmptyActivity({ activeTab }) {
       <p className="mt-1 text-[11px] font-semibold text-[var(--imc-text-muted)]">
         Your recent activity will appear here.
       </p>
+    </div>
+  );
+}
+
+function ProfileHeaderSkeleton() {
+  return (
+    <div className="flex min-h-screen justify-center bg-[var(--imc-bg)]">
+      <div className="min-h-screen w-full max-w-[430px] bg-[var(--imc-bg)] px-5 pt-8 pb-28">
+        <div className="flex animate-pulse items-start gap-4">
+          <div className="h-[92px] w-[92px] shrink-0 rounded-full bg-[var(--imc-surface-2)]" />
+          <div className="min-w-0 flex-1 space-y-2.5 pt-2">
+            <div className="h-4 w-2/3 rounded-full bg-[var(--imc-surface-2)]" />
+            <div className="h-3 w-1/3 rounded-full bg-[var(--imc-surface-2)]" />
+            <div className="h-3 w-3/4 rounded-full bg-[var(--imc-surface-2)]" />
+            <div className="h-3 w-1/2 rounded-full bg-[var(--imc-surface-2)]" />
+          </div>
+        </div>
+
+        <div className="mt-5 grid animate-pulse grid-cols-3 gap-3 border-y border-[var(--imc-border)] py-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-10 rounded-[10px] bg-[var(--imc-surface-2)]" />
+          ))}
+        </div>
+
+        <div className="mt-6 animate-pulse space-y-3">
+          <div className="h-24 rounded-[20px] bg-[var(--imc-surface-2)]" />
+          <div className="h-24 rounded-[20px] bg-[var(--imc-surface-2)]" />
+          <div className="h-24 rounded-[20px] bg-[var(--imc-surface-2)]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProfileRetryState({ onRetry }) {
+  return (
+    <div className="flex min-h-screen justify-center bg-[var(--imc-bg)]">
+      <div className="flex min-h-screen w-full max-w-[430px] flex-col items-center justify-center gap-2 bg-[var(--imc-bg)] px-8 text-center">
+        <p className="text-[14px] font-black text-[var(--imc-text)]">
+          Couldn't load your profile
+        </p>
+        <p className="text-[12px] font-semibold text-[var(--imc-text-muted)]">
+          Check your connection and try again.
+        </p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-3 h-11 rounded-[14px] px-6 text-[13px] font-black text-[#12141C] active:scale-[0.97]"
+          style={{ background: "#EC9A1E" }}
+        >
+          Retry
+        </button>
+      </div>
     </div>
   );
 }
