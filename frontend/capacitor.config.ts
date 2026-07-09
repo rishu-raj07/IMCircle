@@ -48,6 +48,19 @@ const config: CapacitorConfig = {
       style: 'DEFAULT',
       resizeOnFullScreen: true,
     },
+    // Native Google Sign-In (see src/components/auth/GoogleAuthButton.jsx).
+    // Only the `google` provider is bundled — the plugin also ships
+    // Facebook/Apple/Twitter providers we don't use, and the Facebook SDK in
+    // particular pulls in an AD_ID permission that Play Console rejects for
+    // apps that declare no ads/analytics use of it.
+    SocialLogin: {
+      providers: {
+        google: true,
+        facebook: false,
+        apple: false,
+        twitter: false,
+      },
+    },
   },
 
   android: {

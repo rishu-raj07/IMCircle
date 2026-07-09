@@ -40,6 +40,14 @@ const GOOGLE_CLIENT_IDS = {
 
 export const GOOGLE_CLIENT_ID = GOOGLE_CLIENT_IDS[APP_PLATFORM] || "";
 
+// The native Google Sign-In plugin (@capgo/capacitor-social-login) always
+// needs the WEB client ID specifically, on every platform — that's the
+// `aud` the backend actually validates ID tokens against (see
+// backend/src/config/googleClients.js), regardless of which platform the
+// app is running on. Do not swap this for GOOGLE_CLIENT_ID above; that one
+// is platform-specific and is only correct for the web <GoogleLogin> widget.
+export const GOOGLE_WEB_CLIENT_ID = GOOGLE_CLIENT_IDS.web;
+
 // Dev-only visibility into misconfiguration — never throws, never shown to
 // the user. A missing client ID in production should fail visibly on the
 // Google button itself (it simply won't work), not crash the whole app.
@@ -67,4 +75,5 @@ export default {
   API_URL,
   SOCKET_URL,
   GOOGLE_CLIENT_ID,
+  GOOGLE_WEB_CLIENT_ID,
 };
