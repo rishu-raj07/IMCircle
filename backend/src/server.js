@@ -6,6 +6,7 @@ import connectDB from "./config/db.js";
 import { initSocket } from "./socket/socket.js";
 import { startJourneyReminderJobs } from "./services/journeyReminder.service.js";
 import { startLearningExpiryJob } from "./services/learningExpiry.service.js";
+import { warmGoogleCertCache } from "./services/google.service.js";
 
 // Fail fast on missing critical secrets instead of booting into a half-broken
 // state where auth/session/upload routes 500 unpredictably on first real
@@ -85,6 +86,15 @@ initSocket(server);
 
 startJourneyReminderJobs();
 startLearningExpiryJob();
+
+// Fire-and-forget: pre-warms Google's public cert cache so the first real
+// Google login doesn't pay for it (see warmGoogleCertCache's own comment).
+// Never blocks server startup and never crashes it if Google is briefly
+// unreachable — verifyGoogleCredential() will just fetch+cache it lazily on
+// the next login attempt instead, same as before this existed.
+warmGoogleCertCache().catch((err) => {
+  console.warn("[startup] Google cert cache warm-up failed (non-fatal):", err.message);
+});
 
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

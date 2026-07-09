@@ -1,11 +1,12 @@
 import { useCallback, useState } from "react";
 import { Phone } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import heroImg from "../../assets/images/login-hero.png";
+import heroImg from "../../assets/images/login-hero.webp";
 import GoogleAuthButton from "../../components/auth/GoogleAuthButton";
 import { googleLogin, sendMobileOtp } from "../../api/authApi";
 import { saveLoginData } from "../../store/authStore";
 import { setPendingRegister } from "../../utils/storage";
+import { perfMark } from "../../utils/perfLog.js";
 
 function Login() {
   const [mobile, setMobile] = useState("");
@@ -53,16 +54,24 @@ function Login() {
       setError("");
 
       try {
+        perfMark("backend_auth_google_request_start");
         const data = await googleLogin({
           credential: credentialResponse.credential,
         });
+        perfMark("backend_auth_google_response_received");
 
+        // saveLoginData's own analytics call is already fire-and-forget
+        // (see authStore.js's trackEvent(...).catch(() => {})) — nothing
+        // here should block navigation waiting on unrelated async work.
         saveLoginData(data);
+        perfMark("auth_context_updated");
 
         // ProtectedRoute checks onboarding status on every private route, so
         // it will bounce first-time users into /profile-setup automatically.
         navigate("/home", { replace: true });
+        perfMark("navigate_to_home_called");
       } catch (err) {
+        perfMark("backend_auth_google_failed", { message: err?.message });
         setError(err.response?.data?.message || "Google login failed");
       }
     },

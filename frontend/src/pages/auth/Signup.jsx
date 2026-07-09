@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { Phone } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import heroImg from "../../assets/images/login-hero.png";
+import heroImg from "../../assets/images/login-hero.webp";
 import GoogleAuthButton from "../../components/auth/GoogleAuthButton";
 import { googleLogin, sendMobileOtp } from "../../api/authApi";
 import { saveLoginData } from "../../store/authStore";

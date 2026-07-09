@@ -3,6 +3,7 @@ import { TriangleAlert } from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
 import { GoogleLogin } from "@react-oauth/google";
 import { SocialLogin } from "@capgo/capacitor-social-login";
+import { perfMark } from "../../utils/perfLog.js";
 
 import {
   APP_PLATFORM,
@@ -46,9 +47,11 @@ function NativeGoogleButton({ onSuccess, onError, text }) {
   const handlePress = async () => {
     if (loading) return;
     setLoading(true);
+    perfMark("google_signin_start");
 
     try {
       await ensureNativeInitialized();
+      perfMark("google_native_plugin_initialized");
 
       // No custom `scopes` here on purpose: the native plugin already
       // requests the default email/profile/openid scopes needed for the ID
@@ -70,6 +73,8 @@ function NativeGoogleButton({ onSuccess, onError, text }) {
       if (!idToken) {
         throw new Error("No ID token returned from Google Sign-In");
       }
+
+      perfMark("google_id_token_received");
 
       // Match the same shape the web GoogleLogin's onSuccess passes so
       // Login.jsx/Signup.jsx don't need to know which flow ran.

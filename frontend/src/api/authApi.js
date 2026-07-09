@@ -1,5 +1,10 @@
 import api from "./axios";
 
+// Auth calls fire at app startup / login time, when a hung request is most
+// visible (stuck spinner, no feedback) — cap them instead of letting axios's
+// default "no timeout" leave the UI waiting forever on a stalled network.
+const AUTH_TIMEOUT_MS = 5000;
+
 /*
 |--------------------------------------------------------------------------
 | Email Authentication
@@ -33,12 +38,12 @@ export const resendOtp = async (data) => {
 */
 
 export const sendMobileOtp = async (data) => {
-  const res = await api.post("/auth/mobile/send-otp", data);
+  const res = await api.post("/auth/mobile/send-otp", data, { timeout: AUTH_TIMEOUT_MS });
   return res.data;
 };
 
 export const verifyMobileOtp = async (data) => {
-  const res = await api.post("/auth/mobile/verify-otp", data);
+  const res = await api.post("/auth/mobile/verify-otp", data, { timeout: AUTH_TIMEOUT_MS });
   return res.data;
 };
 
@@ -49,7 +54,7 @@ export const verifyMobileOtp = async (data) => {
 */
 
 export const googleLogin = async (data) => {
-  const res = await api.post("/auth/google", data);
+  const res = await api.post("/auth/google", data, { timeout: AUTH_TIMEOUT_MS });
   return res.data;
 };
 

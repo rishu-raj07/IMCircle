@@ -32,3 +32,13 @@ export const verifyGoogleCredential = async (credential) => {
 
   return ticket.getPayload();
 };
+
+// google-auth-library fetches + caches Google's public signing certs on
+// whichever request first calls verifyIdToken() above — normally that's the
+// very first real user login after a server (re)start, which eats an extra
+// network round trip to Google exactly when a real person is waiting on it.
+// Calling the same internal fetch at server boot (see server.js) means that
+// cost is paid once during startup instead of on someone's login.
+export const warmGoogleCertCache = async () => {
+  await client.getFederatedSignonCertsAsync();
+};

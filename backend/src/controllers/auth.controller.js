@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 
 import User from "../models/User.js";
 import Session from "../models/Session.js";
@@ -7,6 +8,7 @@ import Session from "../models/Session.js";
 import { sendOtpSms, verifyOtpSms } from "../services/msg91.service.js";
 import { verifyGoogleCredential } from "../services/google.service.js";
 import { ensureUserIndexes } from "../services/userIndex.service.js";
+import { startTimer } from "../utils/perfTimer.js";
 
 // --- Google Play review OTP bypass -----------------------------------
 // The Play Store review team's automated/manual test devices can't
@@ -87,24 +89,33 @@ const getDeviceInfo = (req) => ({
   userAgent: req.headers["user-agent"] || "",
 });
 
-const sendSecureAuthResponse = async (req, res, user, statusCode, message) => {
+// `timer` is optional — passed by callers (e.g. googleLogin) that want this
+// step folded into their own request-level perf breakdown instead of a
+// standalone one.
+const sendSecureAuthResponse = async (req, res, user, statusCode, message, timer = null) => {
   const device = getDeviceInfo(req);
 
-  const session = await Session.create({
+  // Previously: Session.create() with a "pending" placeholder hash, then a
+  // second Session.save() once the refresh token (which needs the session's
+  // _id) could be computed — two round trips to Mongo for one login. The
+  // session _id can be generated up front instead, so the refresh token
+  // (and its hash) are already known before the single insert happens.
+  const sessionId = new mongoose.Types.ObjectId();
+  const accessToken = createAccessToken(user._id);
+  const refreshToken = createRefreshToken(user._id, sessionId);
+  timer?.step("token_generation");
+
+  await Session.create({
+    _id: sessionId,
     user: user._id,
-    refreshTokenHash: "pending",
+    refreshTokenHash: Session.hashToken(refreshToken),
     deviceId: device.deviceId,
     deviceName: device.deviceName,
     ipAddress: device.ipAddress,
     userAgent: device.userAgent,
     expiresAt: new Date(Date.now() + REFRESH_MS),
   });
-
-  const accessToken = createAccessToken(user._id);
-  const refreshToken = createRefreshToken(user._id, session._id);
-
-  session.refreshTokenHash = Session.hashToken(refreshToken);
-  await session.save({ validateBeforeSave: false });
+  timer?.step("session_create");
 
   res.cookie("accessToken", accessToken, cookieOptions(ACCESS_MS));
   res.cookie("refreshToken", refreshToken, cookieOptions(REFRESH_MS));
@@ -286,10 +297,13 @@ export const verifyMobileOtp = async (req, res) => {
 };
 
 export const googleLogin = async (req, res) => {
+  const timer = startTimer("auth.googleLogin");
+
   try {
     const { credential } = req.body;
 
     const payload = await verifyGoogleCredential(credential);
+    timer.step("verify_google_token");
 
     const googleId = payload.sub;
     const email = payload.email?.toLowerCase();
@@ -297,15 +311,22 @@ export const googleLogin = async (req, res) => {
     const avatar = payload.picture || "";
 
     if (!email || !googleId) {
+      timer.done({ result: "missing_email" });
       return res.status(400).json({
         success: false,
         message: "Google account email is required",
       });
     }
 
+    // Single lookup covers both "already signed up with this Google
+    // account" (googleId match) and "already has an account under this
+    // email via mobile/password, now linking Google" (email match) — no
+    // second query needed to distinguish the two, the branch below handles
+    // both from this one result.
     let user = await User.findOne({
       $or: [{ googleId }, { email }],
     });
+    timer.step("user_lookup");
 
     if (!user) {
       user = await User.create({
@@ -318,8 +339,10 @@ export const googleLogin = async (req, res) => {
           mobile: false,
         },
       });
+      timer.step("user_create");
     } else {
       if (user.isDeleted) {
+        timer.done({ result: "account_deleted" });
         return res.status(401).json({
           success: false,
           message: "Account not available",
@@ -327,6 +350,7 @@ export const googleLogin = async (req, res) => {
       }
 
       if (user.isBlocked) {
+        timer.done({ result: "account_blocked" });
         return res.status(403).json({
           success: false,
           message: "Your account is blocked",
@@ -341,11 +365,22 @@ export const googleLogin = async (req, res) => {
       user.lastActiveAt = Date.now();
 
       await user.save({ validateBeforeSave: false });
+      timer.step("user_update");
     }
 
-    return sendSecureAuthResponse(req, res, user, 200, "Google login successful");
+    const result = await sendSecureAuthResponse(
+      req,
+      res,
+      user,
+      200,
+      "Google login successful",
+      timer
+    );
+    timer.done({ result: "success" });
+    return result;
   } catch (error) {
     console.error("GOOGLE LOGIN ERROR:", error.message);
+    timer.done({ result: "error", message: error.message });
 
     return res.status(401).json({
       success: false,
