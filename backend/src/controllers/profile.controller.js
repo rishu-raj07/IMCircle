@@ -81,16 +81,21 @@ const hasArrayData = (value) => {
   return Array.isArray(value) && value.length > 0;
 };
 
-// Profile photo and tagline are optional (see ProfileSetup.jsx) — they are
-// never required to reach 100%, so the required-onboarding-fields group
-// (name, username, DOB, gender, location, category) is what earns the base
-// 40%. Education/Experience-or-Student/Skills each add another 20%. A
-// "Student" category exempts Experience from the checklist entirely (it
-// stays optional/addable from the profile page, per product spec).
+// Profile photo and tagline are optional to SUBMIT profile setup (see
+// ProfileSetup.jsx — you can save without them), but they DO count toward
+// reaching 100%. Weighting (confirmed with product):
+//   Required onboarding fields (name/username/DOB/gender/city/category): 50%
+//   Profile photo: 10%    Tagline: 10%    Skills: 10%
+//   Student category:      Education 20%, no Experience item at all
+//   Everyone else:          Education 10%, Experience 10%
+// "Student" is decided ONLY by the primaryInterest category chip the person
+// picked on "What are you here to explore?" — NOT the `role` field. `role`
+// defaults to "Student" on every brand-new account (see User.js schema
+// default) and is unrelated to this onboarding category, so checking it
+// here was wrongly exempting every user from Experience regardless of what
+// they actually picked.
 const isStudentUser = (user) => {
-  const interest = String(user.primaryInterest || "").trim().toLowerCase();
-  const role = String(user.role || "").trim().toLowerCase();
-  return interest === "student" || role === "student";
+  return String(user.primaryInterest || "").trim().toLowerCase() === "student";
 };
 
 const hasRequiredBasics = (user) => {
@@ -118,21 +123,25 @@ const getProfileCompletion = (user) => {
 
 const getProfileCompletionPercent = (user) => {
   let percent = 0;
+  const student = isStudentUser(user);
 
   if (hasRequiredBasics(user)) {
-    percent += 40;
+    percent += 50;
   }
+
+  if (user.avatar) percent += 10;
+  if (user.headline) percent += 10;
 
   if (hasArrayData(user.education)) {
-    percent += 20;
+    percent += student ? 20 : 10;
   }
 
-  if (isStudentUser(user) || hasArrayData(user.experience)) {
-    percent += 20;
+  if (!student && hasArrayData(user.experience)) {
+    percent += 10;
   }
 
   if (hasArrayData(user.skills)) {
-    percent += 20;
+    percent += 10;
   }
 
   return Math.min(percent, 100);
@@ -140,8 +149,7 @@ const getProfileCompletionPercent = (user) => {
 
 // Mirrors the percent math above as a named checklist so the frontend can
 // show exactly what's left ("Profile photo", "Tagline", "Education", ...)
-// instead of a bare number. Photo/tagline are always-optional nudges (they
-// don't block 100%), the rest are weighted completion items.
+// instead of a bare number.
 const getMissingProfileItems = (user) => {
   const missing = [];
 

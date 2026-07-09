@@ -253,20 +253,24 @@ function hasEducation(value) {
   return Boolean(item?.degree || item?.college || item?.collegeName);
 }
 
+// "Student" is decided ONLY by the primaryInterest category — NOT `role`,
+// which defaults to "Student" on every new account and would wrongly exempt
+// everyone from Experience if checked here.
 function isStudentUser(user) {
-  const interest = String(user?.primaryInterest || "").trim().toLowerCase();
-  const role = String(user?.role || "").trim().toLowerCase();
-  return interest === "student" || role === "student";
+  return String(user?.primaryInterest || "").trim().toLowerCase() === "student";
 }
 
-// Profile photo and tagline are optional (see ProfileSetup.jsx) — they never
-// block reaching 100%. Mirrors Profile.jsx / backend profile.controller.js.
+// Profile photo/tagline are optional to submit setup, but DO count toward
+// 100%: required fields 50%, photo 10%, tagline 10%, skills 10%; Student
+// gets Education 20% (no Experience item); everyone else gets Education 10%
+// + Experience 10%. Mirrors Profile.jsx / backend profile.controller.js.
 function getCompletionPercent(user) {
   if (typeof user?.profileCompletionPercent === "number") {
     return Math.min(Math.max(user.profileCompletionPercent, 0), 100);
   }
 
   let score = 0;
+  const student = isStudentUser(user);
 
   if (
     user?.fullName &&
@@ -276,19 +280,22 @@ function getCompletionPercent(user) {
     user?.location?.city &&
     user?.primaryInterest
   ) {
-    score += 40;
+    score += 50;
   }
+
+  if (user?.avatar) score += 10;
+  if (user?.headline || user?.tagline) score += 10;
 
   if (Array.isArray(user?.education) && user.education.length > 0) {
-    score += 20;
+    score += student ? 20 : 10;
   }
 
-  if (isStudentUser(user) || (Array.isArray(user?.experience) && user.experience.length > 0)) {
-    score += 20;
+  if (!student && Array.isArray(user?.experience) && user.experience.length > 0) {
+    score += 10;
   }
 
   if (Array.isArray(user?.skills) && user.skills.length > 0) {
-    score += 20;
+    score += 10;
   }
 
   return Math.min(score, 100);
@@ -903,11 +910,7 @@ function UserProfile() {
               />
             </div>
 
-            <div
-              className={`mt-4 grid gap-3 ${
-                circleStatus === "in_circle" ? "grid-cols-2" : "grid-cols-3"
-              }`}
-            >
+            <div className="mt-4 grid grid-cols-2 gap-3">
               <button
                 onClick={handleFollow}
                 disabled={followLoading}
@@ -917,18 +920,22 @@ function UserProfile() {
                 {followLoading ? "..." : isFollowing ? "Following" : "Follow"}
               </button>
 
-              <button
-                onClick={handleMessage}
-                disabled={messageLoading}
-                className="flex h-11 items-center justify-center gap-1.5 rounded-2xl border border-[var(--imc-border)] bg-[var(--imc-surface)] text-[13px] font-black text-[var(--imc-indigo-text)] active:scale-[0.98]"
-              >
-                <MessageCircle size={15} />
-                {messageLoading ? "Opening..." : "Message"}
-              </button>
-
-              {/* Only shown when the profile owner isn't already in the
-                  viewer's circle — once connected, Message covers contact. */}
-              {circleStatus !== "in_circle" && (
+              {/* Message only appears once the circle request is accepted
+                  (circleStatus === "in_circle") — before that, this slot is
+                  the +Circle/Requested button instead. Messaging is
+                  restricted to accepted circle connections on the backend
+                  (see message.controller.js's areCircleConnected check), so
+                  showing it earlier would just lead to a 403 on send. */}
+              {circleStatus === "in_circle" ? (
+                <button
+                  onClick={handleMessage}
+                  disabled={messageLoading}
+                  className="flex h-11 items-center justify-center gap-1.5 rounded-2xl border border-[var(--imc-border)] bg-[var(--imc-surface)] text-[13px] font-black text-[var(--imc-indigo-text)] active:scale-[0.98]"
+                >
+                  <MessageCircle size={15} />
+                  {messageLoading ? "Opening..." : "Message"}
+                </button>
+              ) : (
                 <button
                   onClick={handleAddToCircle}
                   disabled={circleActionLoading || circleStatus === "pending"}

@@ -225,10 +225,12 @@ function buildRepostCardPost(item) {
   };
 }
 
+// "Student" is decided ONLY by the primaryInterest category chip picked on
+// "What are you here to explore?" — NOT the `role` field, which defaults to
+// "Student" on every brand-new account regardless of category and would
+// wrongly exempt everyone from Experience if checked here.
 function isStudentUser(user) {
-  const interest = String(user?.primaryInterest || "").trim().toLowerCase();
-  const role = String(user?.role || "").trim().toLowerCase();
-  return interest === "student" || role === "student";
+  return String(user?.primaryInterest || "").trim().toLowerCase() === "student";
 }
 
 function hasRequiredBasics(user) {
@@ -242,9 +244,10 @@ function hasRequiredBasics(user) {
   );
 }
 
-// Profile photo and tagline are optional (see ProfileSetup.jsx) — they never
-// block reaching 100%. The required-onboarding-fields group earns the base
-// 40%, then Education/Experience-or-Student/Skills each add 20%. Mirrors
+// Profile photo/tagline are optional to submit setup, but DO count toward
+// 100%. Weighting: required onboarding fields 50%, photo 10%, tagline 10%,
+// skills 10%; Student category gets Education 20% (no Experience item);
+// everyone else gets Education 10% + Experience 10%. Mirrors
 // getProfileCompletionPercent in backend/src/controllers/profile.controller.js.
 function getCompletionPercent(user) {
   if (typeof user?.profileCompletionPercent === "number") {
@@ -252,21 +255,22 @@ function getCompletionPercent(user) {
   }
 
   let score = 0;
+  const student = isStudentUser(user);
 
-  if (hasRequiredBasics(user)) {
-    score += 40;
-  }
+  if (hasRequiredBasics(user)) score += 50;
+  if (user?.avatar || user?.profileImage) score += 10;
+  if (user?.headline || user?.tagline) score += 10;
 
   if (Array.isArray(user?.education) && user.education.length > 0) {
-    score += 20;
+    score += student ? 20 : 10;
   }
 
-  if (isStudentUser(user) || (Array.isArray(user?.experience) && user.experience.length > 0)) {
-    score += 20;
+  if (!student && Array.isArray(user?.experience) && user.experience.length > 0) {
+    score += 10;
   }
 
   if (Array.isArray(user?.skills) && user.skills.length > 0) {
-    score += 20;
+    score += 10;
   }
 
   return Math.min(score, 100);

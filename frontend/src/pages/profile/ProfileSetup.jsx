@@ -190,6 +190,9 @@ function ProfileSetup() {
 
   const isStudentCategory = primaryInterest.trim().toLowerCase() === "student";
 
+  // Required onboarding fields = 50%, photo/tagline/skills = 10% each.
+  // Student category: Education is 20% and there's no Experience item at
+  // all. Everyone else: Education 10% + Experience 10%.
   const progress = useMemo(() => {
     let score = 0;
 
@@ -201,12 +204,14 @@ function ProfileSetup() {
       gender.trim() &&
       primaryInterest.trim()
     ) {
-      score += 40;
+      score += 50;
     }
 
-    if (education.length > 0) score += 20;
-    if (isStudentCategory || experience.length > 0) score += 20;
-    if (skills.length > 0) score += 20;
+    if (profileImage.trim()) score += 10;
+    if (tagline.trim()) score += 10;
+    if (education.length > 0) score += isStudentCategory ? 20 : 10;
+    if (!isStudentCategory && experience.length > 0) score += 10;
+    if (skills.length > 0) score += 10;
 
     return Math.min(score, 100);
   }, [
@@ -217,6 +222,8 @@ function ProfileSetup() {
     gender,
     primaryInterest,
     isStudentCategory,
+    profileImage,
+    tagline,
     education.length,
     experience.length,
     skills.length,
