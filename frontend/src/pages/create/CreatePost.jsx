@@ -263,18 +263,16 @@ function CreatePost() {
   const handleSubmit = async () => {
     const cleanPost = post.trim();
 
+    // Text is optional — an image-only or voice-only post is allowed. The
+    // only real requirement is having SOMETHING (text or media), plus the
+    // max-length cap if text was written.
     if (!cleanPost && mediaFiles.length === 0) {
-      alert("Write something or add media.");
+      alert("Write something or add a photo/voice note.");
       return;
     }
 
     if (cleanPost.length > MAX_TEXT) {
       alert("Post cannot be more than 1500 characters.");
-      return;
-    }
-
-    if (cleanPost && cleanPost.length < 10) {
-      alert("Post must be at least 10 characters.");
       return;
     }
 

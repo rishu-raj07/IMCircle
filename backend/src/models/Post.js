@@ -8,9 +8,13 @@ const postSchema = new mongoose.Schema(
       required: true,
     },
 
+    // Optional — a post can be just an image or just a voice note. The
+    // validator (post.validator.js) enforces that at least one of
+    // content/media exists at request time; this schema no longer requires
+    // content on its own.
     content: {
       type: String,
-      required: true,
+      default: "",
       trim: true,
       maxlength: 2000,
     },
