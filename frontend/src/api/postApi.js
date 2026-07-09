@@ -79,3 +79,8 @@ export const getSinglePost = async (postId) => {
   const res = await api.get(`/posts/${postId}`);
   return res.data;
 };
+
+export const deletePost = async (postId) => {
+  const res = await api.delete(`/posts/${postId}`);
+  return res.data;
+};

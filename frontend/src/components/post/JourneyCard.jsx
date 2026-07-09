@@ -163,6 +163,12 @@ function JourneyCard({ milestone = {} }) {
   const creator = milestone.creator || {};
   const journey = milestone.journey || {};
 
+  // No parent-list plumbing needed for this — the backend soft-deletes
+  // (Journey.isDeleted) and future feed loads already exclude it, so this
+  // just has to make the card disappear from the CURRENT view the instant
+  // the delete succeeds.
+  const [journeyDeleted, setJourneyDeleted] = useState(false);
+
   const milestoneId = getId(milestone);
   const journeyId = getId(journey) || getId(milestone.journey);
 
@@ -407,6 +413,8 @@ function JourneyCard({ milestone = {} }) {
     }
   };
 
+  if (journeyDeleted) return null;
+
   return (
     <>
       <article className="imc-enter">
@@ -497,7 +505,11 @@ function JourneyCard({ milestone = {} }) {
                     {formatRelativeTime(milestone.createdAt)}
                   </p>
                 )}
-                <JourneyMenu journeyId={journeyId} />
+                <JourneyMenu
+                  journeyId={journeyId}
+                  isMine={isOwnJourney}
+                  onDeleted={() => setJourneyDeleted(true)}
+                />
               </div>
             </div>
 

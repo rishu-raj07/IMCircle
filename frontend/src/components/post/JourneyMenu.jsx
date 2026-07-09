@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   MoreVertical,
   Copy,
@@ -9,9 +9,10 @@ import {
   MessageCircleWarning,
   UserX,
   ImageOff,
+  Trash2,
 } from "lucide-react";
 
-import { reportJourney } from "../../api/journeyApi";
+import { reportJourney, deleteJourney } from "../../api/journeyApi";
 
 const reportOptions = [
   { key: "spam", label: "Spam or fake", icon: ShieldAlert },
@@ -21,25 +22,16 @@ const reportOptions = [
   { key: "impersonation", label: "Impersonation", icon: UserX },
 ];
 
-function JourneyMenu({ journeyId }) {
+function JourneyMenu({ journeyId, isMine = false, onDeleted }) {
   const [open, setOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reported, setReported] = useState(false);
   const [error, setError] = useState("");
   const menuRef = useRef(null);
 
-  useEffect(() => {
-    if (!open) return undefined;
-
-    const handleClickOutside = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
-        setOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [open]);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const copyLink = async () => {
     const url = `${window.location.origin}/journey/${journeyId || ""}`;
@@ -74,6 +66,26 @@ function JourneyMenu({ journeyId }) {
     }
   };
 
+  const confirmDelete = async () => {
+    if (!journeyId || deleting) return;
+
+    setDeleting(true);
+    setDeleteError("");
+
+    try {
+      await deleteJourney(journeyId);
+      setDeleteOpen(false);
+      setOpen(false);
+      onDeleted?.();
+    } catch (err) {
+      setDeleteError(
+        err?.response?.data?.message || "Unable to delete. Please try again."
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <>
       <div className="relative" ref={menuRef}>
@@ -89,18 +101,39 @@ function JourneyMenu({ journeyId }) {
         </button>
 
         {open && (
-          <div className="absolute right-0 top-9 z-50 w-48 overflow-hidden rounded-[18px] border border-[var(--imc-border)] bg-[var(--imc-surface)] p-1.5 shadow-xl">
-            <MenuItem icon={Copy} label="Copy link" onClick={copyLink} />
-            <MenuItem
-              icon={Flag}
-              label="Report journey"
-              red
-              onClick={() => {
-                setError("");
-                setReportOpen(true);
-              }}
-            />
-          </div>
+          <>
+            {/* Invisible full-screen tap catcher — tapping ANYWHERE else on
+                the page closes the menu, not just the three-dot button
+                again. Replaces the old mousedown/menuRef listener, which
+                wasn't reliably firing from touch taps in the WebView. */}
+            <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+
+            <div className="absolute right-0 top-9 z-50 w-48 overflow-hidden rounded-[18px] border border-[var(--imc-border)] bg-[var(--imc-surface)] p-1.5 shadow-xl">
+              <MenuItem icon={Copy} label="Copy link" onClick={copyLink} />
+
+              {isMine ? (
+                <MenuItem
+                  icon={Trash2}
+                  label="Delete journey"
+                  red
+                  onClick={() => {
+                    setDeleteError("");
+                    setDeleteOpen(true);
+                  }}
+                />
+              ) : (
+                <MenuItem
+                  icon={Flag}
+                  label="Report journey"
+                  red
+                  onClick={() => {
+                    setError("");
+                    setReportOpen(true);
+                  }}
+                />
+              )}
+            </div>
+          </>
         )}
       </div>
 
@@ -171,6 +204,57 @@ function JourneyMenu({ journeyId }) {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {deleteOpen && (
+        <div
+          className="fixed inset-0 z-[999] flex items-center justify-center bg-black/40 px-6 backdrop-blur-[2px]"
+          onClick={() => !deleting && setDeleteOpen(false)}
+        >
+          <div
+            className="w-full max-w-[360px] rounded-[26px] p-5 shadow-2xl"
+            style={{ background: "var(--imc-surface)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-[#FEF2F2] text-[#D92D20]">
+              <Trash2 size={22} />
+            </div>
+
+            <h2 className="mt-3 text-center text-[16px] font-black" style={{ color: "var(--imc-text)" }}>
+              Delete this journey?
+            </h2>
+            <p className="mt-1 text-center text-[12.5px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>
+              This removes the entire journey and all of its updates — every
+              day, every milestone. This can't be undone.
+            </p>
+
+            {deleteError && (
+              <div className="mt-3 rounded-[16px] bg-red-50 p-3 text-center text-[12px] font-black text-red-600">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="mt-4 flex gap-2.5">
+              <button
+                type="button"
+                onClick={() => setDeleteOpen(false)}
+                disabled={deleting}
+                className="h-11 flex-1 rounded-2xl text-[13px] font-black active:scale-[0.99] disabled:opacity-60"
+                style={{ background: "var(--imc-surface-2)", color: "var(--imc-text)" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={deleting}
+                className="h-11 flex-1 rounded-2xl bg-[#D92D20] text-[13px] font-black text-white active:scale-[0.99] disabled:opacity-70"
+              >
+                {deleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
           </div>
         </div>
       )}

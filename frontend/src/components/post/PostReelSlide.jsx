@@ -354,14 +354,20 @@ function PostReelSlide({ post = {}, type = "post", initialMediaIndex = 0 }) {
   };
 
   return (
-    <div className="relative h-full w-full" style={{ background: "var(--imc-bg)" }}>
+    <div className="relative h-full w-full overflow-hidden" style={{ background: "var(--imc-bg)" }}>
+      {/* Full-bleed like Instagram/TikTok stories — the photo fills the
+          entire slide edge to edge (cropped to fit, not letterboxed), with
+          the rail/caption floating on top. Used to sit inset with big
+          margins and `object-contain`, which mostly worked on a dark
+          canvas (the empty margin just read as "background"), but on a
+          light canvas the same gap looked like an unfinished page. */}
       {activeMedia ? (
         <ImageLoader
           src={activeMedia.url}
           alt="Post media"
           width={900}
-          wrapperClassName="absolute inset-x-2 top-[58px] bottom-[190px] z-0 m-auto max-h-[calc(100%-248px)] max-w-[calc(100%-16px)] rounded-[18px] shadow-[0_20px_60px_rgba(0,0,0,0.36)]"
-          className="h-full w-full object-contain"
+          wrapperClassName="absolute inset-0 z-0"
+          className="h-full w-full object-cover"
         />
       ) : (
         <div className="absolute inset-0 flex items-center justify-center">

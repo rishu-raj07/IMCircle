@@ -136,6 +136,10 @@ function PostCard({ post = {}, type = "post", currentUser = null }) {
   const [expanded, setExpanded] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   const [avatarBroken, setAvatarBroken] = useState(false);
+  // No parent-list plumbing needed — the backend soft-deletes and future
+  // feed loads already exclude it, so this just hides the card from the
+  // CURRENT view the instant the delete succeeds.
+  const [deleted, setDeleted] = useState(false);
 
   const storedUser = getStoredUser();
 
@@ -267,6 +271,8 @@ function PostCard({ post = {}, type = "post", currentUser = null }) {
     }
   };
 
+  if (deleted) return null;
+
   return (
     <>
       <article
@@ -376,7 +382,12 @@ function PostCard({ post = {}, type = "post", currentUser = null }) {
               </div>
             </div>
 
-            <PostMenu post={post} type={type} />
+            <PostMenu
+              post={post}
+              type={type}
+              isMine={isMe}
+              onDeleted={() => setDeleted(true)}
+            />
           </div>
 
           {post?.isRepostView && repostText && (

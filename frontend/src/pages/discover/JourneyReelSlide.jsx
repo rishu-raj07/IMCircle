@@ -381,17 +381,16 @@ function JourneyReelSlide({ milestone = {} }) {
       className="relative h-full w-full shrink-0 snap-start overflow-hidden"
       style={{ background: "var(--imc-bg)" }}
     >
-      {/* Image now fills nearly the whole slide — a small gap on every side
-          (top clears the fixed header, the rest is a thin breathing margin)
-          instead of the old large top/side insets, which wasted space now
-          that the journey tag/title/day-ring no longer sit on top of it
-          (that content moved down into the bottom info panel below). */}
+      {/* Full-bleed like Instagram/TikTok stories — see PostReelSlide.jsx
+          for the identical reasoning (cropped edge-to-edge instead of
+          inset + letterboxed, so there's no dead canvas margin regardless
+          of the photo/video's own aspect ratio or the app's theme). */}
       {bgImage ? (
         mediaType === "video" ? (
           <video
             ref={videoRef}
             src={bgImage}
-            className="absolute inset-x-2 top-[58px] bottom-[222px] z-0 m-auto max-h-[calc(100%-280px)] max-w-[calc(100%-16px)] rounded-[18px] object-contain shadow-[0_20px_60px_rgba(0,0,0,0.36)]"
+            className="absolute inset-0 z-0 h-full w-full object-cover"
             loop
             muted={muted}
             playsInline
@@ -402,8 +401,8 @@ function JourneyReelSlide({ milestone = {} }) {
             src={bgImage}
             alt="Journey progress"
             width={900}
-            wrapperClassName="absolute inset-x-2 top-[58px] bottom-[222px] z-0 m-auto max-h-[calc(100%-280px)] max-w-[calc(100%-16px)] rounded-[18px] shadow-[0_20px_60px_rgba(0,0,0,0.36)]"
-            className="h-full w-full object-contain"
+            wrapperClassName="absolute inset-0 z-0"
+            className="h-full w-full object-cover"
           />
         )
       ) : (
