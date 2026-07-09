@@ -99,7 +99,7 @@ function Login() {
           />
 
           <p className="mt-2 text-[12.5px] font-semibold text-[var(--imc-text-muted)]">
-            Earn. Build. Grow Together.
+            Grow With Your Circle.
           </p>
 
           <div className="mx-auto mt-3 h-[130px] w-full overflow-hidden rounded-2xl">
@@ -113,11 +113,11 @@ function Login() {
 
         <div className="mt-3 rounded-[25px] border border-[var(--imc-border)] bg-white/95 px-5 py-5 shadow-[0_18px_45px_rgba(109,40,217,0.10)]">
           <h2 className="text-[23px] font-black text-[var(--imc-text)]">
-            Welcome back
+            Welcome to IMCircle
           </h2>
 
           <p className="mt-0.5 text-[13px] font-medium text-[var(--imc-text-muted)]">
-            Login with mobile OTP or Google.
+            Continue with mobile OTP or Google.
           </p>
 
           <form className="mt-4" onSubmit={handleMobileContinue}>
@@ -174,7 +174,7 @@ function Login() {
           />
 
           <p className="mt-3 text-center text-[10.8px] leading-4 text-[var(--imc-text-muted)]">
-            By signing in, you agree to our{" "}
+            By continuing, you agree to our{" "}
             <Link to="/terms" className="font-bold text-[var(--imc-indigo-text)]">
               Terms
             </Link>{" "}
@@ -186,13 +186,6 @@ function Login() {
               Privacy Policy
             </Link>
             .
-          </p>
-
-          <p className="mt-3 text-center text-[13px] font-medium text-[var(--imc-text-muted)]">
-            New here?{" "}
-            <Link to="/signup" className="font-bold text-[var(--imc-indigo-text)]">
-              Create account
-            </Link>
           </p>
         </div>
       </div>

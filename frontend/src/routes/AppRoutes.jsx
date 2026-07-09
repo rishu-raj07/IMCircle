@@ -6,7 +6,6 @@ import AnalyticsTracker from "../components/analytics/AnalyticsTracker";
 import AdminRoutes from "../admin/AdminRoutes";
 
 import Login from "../pages/auth/Login";
-import Signup from "../pages/auth/Signup";
 import Verify from "../pages/auth/Verify";
 
 // Opportunities/Jobs and Projects are held back for this release — this
@@ -102,7 +101,14 @@ export default function AppRoutes() {
       <Route path="/" element={<Navigate to="/home" replace />} />
 
       <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
+      {/* Login and Signup used to be separate pages with identical fields
+          and the same backend endpoints (mobile OTP verify and Google
+          login both auto-create the account if it doesn't exist yet — see
+          auth.controller.js's User.create fallback in both handlers), so
+          there was never a real distinction between them. Redirecting
+          instead of removing outright keeps any old bookmarks/deep links
+          to /signup working. */}
+      <Route path="/signup" element={<Navigate to="/login" replace />} />
       <Route path="/verify" element={<Verify />} />
 
       <Route

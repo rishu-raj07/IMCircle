@@ -7,6 +7,7 @@ import {
   clearPushToken,
 } from "../utils/storage";
 import { trackEvent } from "../utils/analyticsTracker";
+import { syncPushTokenAfterLogin } from "../utils/pushNotifications";
 
 // Every successful login/register path (mobile OTP, email/password, Google)
 // converges on this one function, so it's the single choke point to fire a
@@ -26,6 +27,12 @@ export const saveLoginData = (data) => {
     entityId: data?.user?._id || data?.user?.id,
     metadata: { method: data?.method || "unknown" },
   }).catch(() => {});
+
+  // If a push token was captured on this device before the user logged
+  // in (see pushNotifications.js — it's deliberately withheld from the
+  // backend while unauthenticated to avoid a 401), send it now that
+  // there's a real session. No-op on web / no cached token.
+  syncPushTokenAfterLogin();
 };
 
 export const logoutUser = () => {

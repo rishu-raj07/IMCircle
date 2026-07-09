@@ -28,6 +28,7 @@ import {
 } from "../../api/learningApi";
 
 import { trackEvent } from "../../utils/analyticsTracker";
+import { shareLink } from "../../utils/shareLink";
 
 function formatCount(num = 0) {
   if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
@@ -269,16 +270,18 @@ function PostActions({ post = {}, type = "post" }) {
     try {
       if (type === "post") await sharePost(itemId);
 
-      if (navigator.share) {
-        await navigator.share({
-          title: "IMCircle",
-          text:
-            post.content ||
-            post.title ||
-            "Check this update on IMCircle",
-          url: window.location.href,
-        });
-      }
+      // shareLink() tries the native Capacitor share sheet first (works
+      // inside the Android/iOS app), then navigator.share (web/mobile
+      // browsers), then falls back to a clipboard copy — navigator.share
+      // alone (the old code here) is undefined inside the app's Android
+      // WebView, so this button silently did nothing on native while
+      // still appearing to work in a real browser.
+      await shareLink({
+        kind: type === "learning" ? "learning" : "post",
+        id: itemId,
+        title: "IMCircle",
+        text: post.content || post.title || "Check this update on IMCircle",
+      });
     } catch {
       // silent
     }

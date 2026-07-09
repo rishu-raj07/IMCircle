@@ -182,7 +182,25 @@ api.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError, null);
         removeAuthData();
-        window.location.href = "/login";
+
+        // Never hard-reload a page the user is already sitting on. Without
+        // this guard, any background/best-effort call made while logged
+        // out (e.g. push-token registration firing on a timer from
+        // pushNotifications.js) that 401s here forces a full reload of
+        // /login itself — wiping in-progress form state (a half-typed
+        // phone number) and, since the same background call re-fires a
+        // few seconds after every reload, looping indefinitely. If we're
+        // already on a public/auth screen there's no session to protect by
+        // redirecting, so just let this one request fail quietly.
+        const publicPaths = ["/login", "/signup", "/verify"];
+        const onPublicPath = publicPaths.some((p) =>
+          window.location.pathname.startsWith(p)
+        );
+
+        if (!onPublicPath) {
+          window.location.href = "/login";
+        }
+
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
