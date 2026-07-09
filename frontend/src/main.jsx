@@ -5,10 +5,27 @@ import { GoogleOAuthProvider } from "@react-oauth/google";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App.jsx";
 import { ThemeProvider } from "./store/themeStore.jsx";
-import { GOOGLE_CLIENT_ID, IS_ANDROID, IS_IOS } from "./config/platform.js";
+import { APP_PLATFORM, GOOGLE_CLIENT_ID, IS_ANDROID, IS_IOS } from "./config/platform.js";
 import "./index.css";
 
 const IS_NATIVE = IS_ANDROID || IS_IOS;
+
+// Boot-time visibility: the only way to confirm which code path actually ran
+// on a real device (e.g. via chrome://inspect or a future log-shipping
+// setup) without guessing from symptoms alone.
+console.log(`[boot] platform=${APP_PLATFORM} native=${IS_NATIVE}`);
+
+// Defense-in-depth: capacitor.config.ts already sets launchAutoHide: true
+// with a 400ms launchShowDuration, so the native splash hides itself even
+// if this call fails or the plugin isn't installed. This just guarantees it
+// never outlives app boot on native, independent of that config value.
+if (IS_NATIVE) {
+  import("@capacitor/splash-screen")
+    .then(({ SplashScreen }) => SplashScreen.hide())
+    .catch((err) => {
+      console.error("[boot] SplashScreen.hide() failed (non-fatal):", err);
+    });
+}
 
 // The PWA service worker is web-only (see vite.config.js's injectRegister:
 // false for why). On native, any service worker left registered from a
