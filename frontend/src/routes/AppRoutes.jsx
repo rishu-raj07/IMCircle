@@ -55,6 +55,7 @@ const Terms = lazy(() => import("../pages/settings/Terms"));
 const About = lazy(() => import("../pages/settings/About"));
 const AccountDetails = lazy(() => import("../pages/settings/AccountDetails"));
 const CommunityGuidelines = lazy(() => import("../pages/settings/CommunityGuidelines"));
+const ChildSafety = lazy(() => import("../pages/settings/ChildSafety"));
 const AccountDeletion = lazy(() => import("../pages/settings/AccountDeletion"));
 
 function Private({ children }) {
@@ -423,6 +424,11 @@ export default function AppRoutes() {
       />
 
       <Route path="/community-guidelines" element={<CommunityGuidelines />} />
+
+      {/* Google Play's Child Safety Standards policy for social apps
+          requires this page reachable without login, same as
+          /privacy-policy, /terms, and /delete-account above. */}
+      <Route path="/child-safety" element={<ChildSafety />} />
 
       <Route
         path="/about"

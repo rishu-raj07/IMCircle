@@ -9,6 +9,7 @@ import {
   MessageSquareWarning,
   Moon,
   Share2,
+  Shield,
   ShieldCheck,
   ShieldOff,
   Trash2,
@@ -139,6 +140,18 @@ function Settings() {
             icon={<FileText size={19} />}
             title="Terms of Service"
             onClick={() => navigate("/terms")}
+          />
+
+          <SettingItem
+            icon={<ShieldCheck size={19} />}
+            title="Community Guidelines"
+            onClick={() => navigate("/community-guidelines")}
+          />
+
+          <SettingItem
+            icon={<Shield size={19} />}
+            title="Child Safety Standards"
+            onClick={() => navigate("/child-safety")}
           />
 
           <SettingItem

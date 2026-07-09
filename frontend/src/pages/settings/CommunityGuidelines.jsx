@@ -56,6 +56,14 @@ const SECTIONS = [
     title: "13. Questions",
     body: "Questions about these Community Guidelines can be sent through the Report a Problem option in Settings, or via Help & Support.",
   },
+  {
+    title: "14. Prohibited content and behavior",
+    body: "The following are never allowed on IMCircle, in any form — posts, comments, messages, profiles, or communities: hate speech; harassment or bullying; terrorism or violent extremism; illegal activity of any kind; sexual exploitation; child sexual abuse material (CSAE) — see our Child Safety Standards; spam; fake or impersonation accounts; fraud or scams; copyright infringement; and violence or credible threats of violence. Content or accounts found violating any of these are removed on sight.",
+  },
+  {
+    title: "15. Enforcement and appeals",
+    body: "Violations are handled in proportion to severity and history: a warning for a first, minor issue; temporary suspension for repeated or more serious violations; and permanent ban for severe violations (including anything involving CSAE) or repeated offenses after a suspension. If you believe an enforcement action was made in error, you can appeal by contacting us through Report a Problem in Settings or the Safety Contact listed on our Child Safety Standards page — include your account details and why you believe the decision should be reviewed.",
+  },
 ];
 
 function CommunityGuidelines() {
