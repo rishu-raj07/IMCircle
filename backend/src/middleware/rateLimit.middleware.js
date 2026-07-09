@@ -1,10 +1,42 @@
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import crypto from "crypto";
+
+// This ran per-IP only, at a fairly tight 300 requests/15min in production.
+// That's fine for a single dev/tester, but in real usage most Indian mobile
+// carriers put large numbers of unrelated users behind the same public IP
+// (carrier-grade NAT) — so one busy IP could lock out many real users who
+// never actually made those requests. It also meant one person testing
+// heavily from home WiFi (phone + laptop sharing one IP, plus every screen
+// making a few calls, plus TopHeader re-fetching the streak on every route
+// change) could hit the ceiling by themselves within a normal session,
+// which is exactly what surfaced this.
+//
+// Fix: bucket logged-in requests by their token instead of by IP, so each
+// authenticated user gets their own budget regardless of who else shares
+// their network. Anonymous requests (no token yet, e.g. login/signup) still
+// fall back to IP-based limiting, which is fine since those routes are
+// separately protected by authLimiter/otpLimiter below anyway.
+function requestKey(req) {
+  const header = req.headers.authorization;
+  const token =
+    header && header.startsWith("Bearer")
+      ? header.split(" ")[1]
+      : req.cookies?.accessToken;
+
+  if (token) {
+    const hash = crypto.createHash("sha256").update(token).digest("hex").slice(0, 24);
+    return `user:${hash}`;
+  }
+
+  return `ip:${ipKeyGenerator(req.ip)}`;
+}
 
 export const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === "production" ? 300 : 5000,
+  max: process.env.NODE_ENV === "production" ? 600 : 5000,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: requestKey,
   message: {
     success: false,
     message: "Too many requests. Please try again later.",
