@@ -6,7 +6,19 @@ import connectDB from "./config/db.js";
 import { initSocket } from "./socket/socket.js";
 import { startJourneyReminderJobs } from "./services/journeyReminder.service.js";
 import { startLearningExpiryJob } from "./services/learningExpiry.service.js";
-import { warmGoogleCertCache } from "./services/google.service.js";
+// NOT a static import, on purpose: google.service.js statically imports
+// googleClients.js, whose top-level code reads process.env.GOOGLE_* once,
+// at module-evaluation time, into a frozen `const allowedGoogleClientIds`
+// array that's never recomputed afterward. ES module static imports are
+// hoisted and evaluated before any other code in THIS file runs — including
+// the dotenv.config() call two lines above, even though it's written first
+// — so a static import here made googleClients.js read process.env before
+// dotenv had populated it, permanently freezing allowedGoogleClientIds as
+// empty for the process's entire lifetime regardless of what .env actually
+// contains. Every Google login was rejected as a result, on every restart,
+// no matter how correct the .env file was. Deferred to a dynamic import
+// below (after dotenv.config() has already run) fixes it — same pattern
+// already used for ./app.js.
 
 // Fail fast on missing critical secrets instead of booting into a half-broken
 // state where auth/session/upload routes 500 unpredictably on first real
@@ -75,6 +87,7 @@ if (process.env.NODE_ENV === "production" && !process.env.CLIENT_URL) {
 }
 
 const { default: app } = await import("./app.js");
+const { warmGoogleCertCache } = await import("./services/google.service.js");
 
 connectDB();
 
