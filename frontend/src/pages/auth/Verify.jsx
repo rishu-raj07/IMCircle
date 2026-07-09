@@ -212,11 +212,11 @@ function Verify() {
   };
 
   return (
-    <div className="h-screen overflow-hidden bg-[var(--imc-surface-2)] flex justify-center">
-      <div className="relative h-screen w-full max-w-[430px] overflow-hidden bg-[var(--imc-surface-2)] px-5 pt-5">
+    <div className="min-h-screen bg-[var(--imc-surface-2)] flex justify-center">
+      <div className="relative min-h-screen w-full max-w-[430px] bg-[var(--imc-surface-2)] px-5 pt-10 pb-8">
         <Link
           to="/login"
-          className="absolute left-5 top-6 flex h-9 w-9 items-center justify-center rounded-full bg-[var(--imc-surface)] shadow-sm"
+          className="absolute left-5 top-10 flex h-9 w-9 items-center justify-center rounded-full bg-[var(--imc-surface)] shadow-sm"
         >
           <ArrowLeft size={20} className="text-[var(--imc-text)]" />
         </Link>

@@ -13,6 +13,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 
 import CommentSheet from "../../components/common/CommentSheet";
 import RepostSheet from "../../components/common/RepostSheet";
@@ -227,6 +228,13 @@ function JourneyReelSlide({ milestone = {} }) {
   const [showReplies, setShowReplies] = useState(false);
   const [showRepost, setShowRepost] = useState(false);
 
+  // Double-tap-to-like (Instagram convention) — see PostReelSlide.jsx for
+  // the identical pattern. Always pops the heart; only ever likes, never
+  // unlikes, no matter how many extra taps land after it's already liked.
+  const lastTapRef = useRef(0);
+  const heartPopTimeoutRef = useRef(null);
+  const [heartPop, setHeartPop] = useState(false);
+
   const handleLike = async () => {
     if (!milestoneId) return;
 
@@ -241,6 +249,23 @@ function JourneyReelSlide({ milestone = {} }) {
       setLiked(!nextLiked);
       setLikes((prev) => Math.max(nextLiked ? prev - 1 : prev + 1, 0));
     }
+  };
+
+  const showHeartPop = () => {
+    setHeartPop(true);
+    if (heartPopTimeoutRef.current) clearTimeout(heartPopTimeoutRef.current);
+    heartPopTimeoutRef.current = window.setTimeout(() => setHeartPop(false), 700);
+  };
+
+  const handleMediaTap = () => {
+    const now = Date.now();
+    const isDoubleTap = now - lastTapRef.current < 300;
+    lastTapRef.current = now;
+
+    if (!isDoubleTap) return;
+
+    showHeartPop();
+    if (!liked) handleLike();
   };
 
   const handleFollow = async () => {
@@ -354,7 +379,7 @@ function JourneyReelSlide({ milestone = {} }) {
     <div
       ref={slideRef}
       className="relative h-full w-full shrink-0 snap-start overflow-hidden"
-      style={{ background: INK }}
+      style={{ background: "var(--imc-bg)" }}
     >
       {/* Image now fills nearly the whole slide — a small gap on every side
           (top clears the fixed header, the rest is a thin breathing margin)
@@ -382,7 +407,7 @@ function JourneyReelSlide({ milestone = {} }) {
           />
         )
       ) : (
-        <div className="imc-lattice absolute inset-0" style={{ background: INK }} />
+        <div className="imc-lattice absolute inset-0" style={{ background: "var(--imc-bg)" }} />
       )}
 
       {mediaType === "video" && bgImage && (
@@ -397,17 +422,34 @@ function JourneyReelSlide({ milestone = {} }) {
         </button>
       )}
 
+      {/* Also doubles as the double-tap-to-like hit area — see
+          PostReelSlide.jsx for the identical pattern/reasoning. */}
       <div
+        onClick={handleMediaTap}
         className="absolute inset-0"
         style={{
           background:
-            "linear-gradient(to bottom, rgba(18,20,28,0.65) 0%, rgba(18,20,28,0.02) 22%, rgba(18,20,28,0.02) 55%, rgba(18,20,28,0.9) 100%)",
+            "linear-gradient(to bottom, rgba(var(--imc-reel-scrim-rgb),0.65) 0%, rgba(var(--imc-reel-scrim-rgb),0.02) 22%, rgba(var(--imc-reel-scrim-rgb),0.02) 55%, rgba(var(--imc-reel-scrim-rgb),0.9) 100%)",
         }}
       />
 
+      <AnimatePresence>
+        {heartPop && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.6 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.15 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            className="pointer-events-none absolute inset-0 z-[6] flex items-center justify-center"
+          >
+            <Heart size={92} color="#fff" fill="#E11D48" strokeWidth={1.5} style={{ filter: "drop-shadow(0 6px 18px rgba(0,0,0,0.35))" }} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Right action rail */}
       <div className="absolute right-3 flex flex-col items-center gap-4" style={{ bottom: 160 }}>
-        <RailAction icon={Heart} count={likes} active={liked} onClick={handleLike} />
+        <RailAction icon={Heart} count={likes} active={liked} onClick={handleLike} variant="like" />
         <RailAction icon={MessageCircle} count={replies} onClick={() => setShowReplies(true)} />
         <RailAction
           icon={Repeat2}
@@ -430,8 +472,8 @@ function JourneyReelSlide({ milestone = {} }) {
         <div className="flex items-center gap-2">
           <button type="button" onClick={openCreatorProfile} className="shrink-0 active:scale-95">
             <div className="relative h-9 w-9 shrink-0 rounded-full bg-white p-[1.5px]">
-              <div className="grid h-full w-full place-items-center overflow-hidden rounded-full p-[1.5px]" style={{ background: INK }}>
-                <div className="grid h-full w-full place-items-center overflow-hidden rounded-full text-[11px] font-black" style={{ background: INK, color: "#fff" }}>
+              <div className="grid h-full w-full place-items-center overflow-hidden rounded-full p-[1.5px]" style={{ background: "var(--imc-bg)" }}>
+                <div className="grid h-full w-full place-items-center overflow-hidden rounded-full text-[11px] font-black" style={{ background: "var(--imc-reel-chip-bg)", color: "var(--imc-text)" }}>
                   {avatar && !avatarBroken ? (
                     <ImageLoader
                       src={avatar}
@@ -453,7 +495,7 @@ function JourneyReelSlide({ milestone = {} }) {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <button type="button" onClick={openCreatorProfile} className="min-w-0 active:scale-[0.98]">
-                <span className="truncate text-[13px] font-black text-white">{finalName}</span>
+                <span className="truncate text-[13px] font-black" style={{ color: "var(--imc-text)" }}>{finalName}</span>
               </button>
 
               {/* Follows the CREATOR's account — distinct from the "Follow
@@ -464,8 +506,8 @@ function JourneyReelSlide({ milestone = {} }) {
                   className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black active:scale-95"
                   style={
                     userFollowing
-                      ? { background: "rgba(255,255,255,0.16)", color: "#fff" }
-                      : { background: "#fff", color: INK }
+                      ? { background: "var(--imc-reel-chip-active-bg)", color: "var(--imc-text)" }
+                      : { background: "#fff", color: INK, border: "1px solid var(--imc-border)" }
                   }
                 >
                   <span className="flex items-center gap-1">
@@ -477,7 +519,7 @@ function JourneyReelSlide({ milestone = {} }) {
             </div>
 
             {creatorTagline && (
-              <p className="truncate text-[11px] font-semibold text-white/55">
+              <p className="truncate text-[11px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>
                 {creatorTagline}
               </p>
             )}
@@ -485,9 +527,9 @@ function JourneyReelSlide({ milestone = {} }) {
         </div>
 
         <div className="mt-2 flex items-center gap-2">
-          <span className="flex min-w-0 items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1">
+          <span className="flex min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1" style={{ background: "var(--imc-reel-chip-bg)" }}>
             <Flame size={11} style={{ color: "#EC9A1E" }} />
-            <span className="truncate text-[11px] font-black text-white">
+            <span className="truncate text-[11px] font-black" style={{ color: "var(--imc-text)" }}>
               {finalTitle}
             </span>
           </span>
@@ -501,7 +543,7 @@ function JourneyReelSlide({ milestone = {} }) {
               className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black active:scale-95"
               style={
                 following
-                  ? { background: "rgba(255,255,255,0.16)", color: "#fff" }
+                  ? { background: "var(--imc-reel-chip-active-bg)", color: "var(--imc-text)" }
                   : { background: "#4338CA", color: "#fff" }
               }
             >
@@ -514,34 +556,34 @@ function JourneyReelSlide({ milestone = {} }) {
         </div>
 
         {journeyAbout && (
-          <p className="mt-1 line-clamp-2 text-[11.5px] font-semibold leading-4 text-white/65">
+          <p className="mt-1 line-clamp-2 text-[11.5px] font-semibold leading-4" style={{ color: "var(--imc-text-muted)" }}>
             {journeyAbout}
           </p>
         )}
 
-        <p className="mt-2 line-clamp-2 text-[13px] font-semibold leading-5 text-white/90">
+        <p className="mt-2 line-clamp-2 text-[13px] font-semibold leading-5" style={{ color: "var(--imc-text)" }}>
           {finalText}
         </p>
 
         <div className="mt-2.5 flex items-center justify-between">
-          <p className="text-[10px] font-extrabold text-white/60">
+          <p className="text-[10px] font-extrabold" style={{ color: "var(--imc-text-muted)" }}>
             Day {finalDay} of {targetDays} · {progress}%
           </p>
 
           <button
             onClick={handleViewJourney}
             className="flex items-center gap-1 text-[11px] font-black active:scale-95"
-            style={{ color: "#fff" }}
+            style={{ color: "var(--imc-text)" }}
           >
             View journey
             <ArrowRight size={13} />
           </button>
         </div>
 
-        <div className="mt-1.5 h-1 overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.18)" }}>
+        <div className="mt-1.5 h-1 overflow-hidden rounded-full" style={{ background: "var(--imc-reel-chip-bg)" }}>
           <div
             className="h-full rounded-full"
-            style={{ width: `${progress}%`, background: "#fff" }}
+            style={{ width: `${progress}%`, background: "var(--imc-text)" }}
           />
         </div>
       </div>
@@ -572,7 +614,12 @@ function JourneyReelSlide({ milestone = {} }) {
   );
 }
 
-function RailAction({ icon: Icon, count, active, onClick }) {
+// This rail floats directly over the media/canvas — see PostReelSlide.jsx's
+// RailAction for why it deliberately stays a fixed dark-glass chip
+// regardless of app theme, with the like heart as the one exception.
+function RailAction({ icon: Icon, count, active, onClick, variant }) {
+  const isLike = variant === "like";
+
   return (
     <button onClick={onClick} className="flex flex-col items-center gap-1 active:scale-90">
       <span
@@ -581,7 +628,7 @@ function RailAction({ icon: Icon, count, active, onClick }) {
           borderColor: active ? "rgba(255,255,255,0.78)" : "rgba(255,255,255,0.14)",
           background: active ? "rgba(255,255,255,0.24)" : "rgba(18,20,28,0.58)",
           backdropFilter: "blur(8px)",
-          color: "#fff",
+          color: active && isLike ? "#E11D48" : "#fff",
         }}
       >
         <Icon size={20} fill={active ? "currentColor" : "none"} />

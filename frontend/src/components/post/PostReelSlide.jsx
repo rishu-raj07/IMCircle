@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Heart,
   MessageCircle,
@@ -11,6 +11,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
 
 import CommentSheet from "../common/CommentSheet";
 import RepostSheet from "../common/RepostSheet";
@@ -173,6 +174,15 @@ function PostReelSlide({ post = {}, type = "post", initialMediaIndex = 0 }) {
   const [showReplies, setShowReplies] = useState(false);
   const [showRepost, setShowRepost] = useState(false);
 
+  // Double-tap-to-like (Instagram convention): tapping the media twice
+  // quickly always shows the heart pop, but only ever LIKES — never
+  // unlikes — even if the second tap lands after the post was already
+  // liked. lastTapRef tracks the timestamp of the previous tap so we can
+  // tell a real double-tap apart from two unrelated single taps.
+  const lastTapRef = useRef(0);
+  const heartPopTimeoutRef = useRef(null);
+  const [heartPop, setHeartPop] = useState(false);
+
   const handleLike = async () => {
     if (!post?._id) return;
 
@@ -201,6 +211,23 @@ function PostReelSlide({ post = {}, type = "post", initialMediaIndex = 0 }) {
       setLiked(!nextLiked);
       setLikes((prev) => Math.max(nextLiked ? prev - 1 : prev + 1, 0));
     }
+  };
+
+  const showHeartPop = () => {
+    setHeartPop(true);
+    if (heartPopTimeoutRef.current) clearTimeout(heartPopTimeoutRef.current);
+    heartPopTimeoutRef.current = window.setTimeout(() => setHeartPop(false), 700);
+  };
+
+  const handleMediaTap = () => {
+    const now = Date.now();
+    const isDoubleTap = now - lastTapRef.current < 300;
+    lastTapRef.current = now;
+
+    if (!isDoubleTap) return;
+
+    showHeartPop();
+    if (!liked) handleLike();
   };
 
   const handleSave = async () => {
@@ -294,7 +321,7 @@ function PostReelSlide({ post = {}, type = "post", initialMediaIndex = 0 }) {
     try {
       await followUserById(authorId);
       trackEvent("follow", { entityType: "user", entityId: authorId }).catch(() => {});
-    } catch (error) {
+    } catch {
       setFollowing(false);
     }
   };
@@ -327,7 +354,7 @@ function PostReelSlide({ post = {}, type = "post", initialMediaIndex = 0 }) {
   };
 
   return (
-    <div className="relative h-full w-full" style={{ background: INK }}>
+    <div className="relative h-full w-full" style={{ background: "var(--imc-bg)" }}>
       {activeMedia ? (
         <ImageLoader
           src={activeMedia.url}
@@ -338,7 +365,7 @@ function PostReelSlide({ post = {}, type = "post", initialMediaIndex = 0 }) {
         />
       ) : (
         <div className="absolute inset-0 flex items-center justify-center">
-          <p className="max-w-[80%] px-4 text-center text-[15px] font-semibold leading-6 text-white/85">
+          <p className="max-w-[80%] px-4 text-center text-[15px] font-semibold leading-6" style={{ color: "var(--imc-text-muted)" }}>
             {finalText}
           </p>
         </div>
@@ -381,17 +408,36 @@ function PostReelSlide({ post = {}, type = "post", initialMediaIndex = 0 }) {
         </>
       )}
 
+      {/* Also doubles as the double-tap-to-like hit area — it already
+          covers the full slide and sits above the media in DOM order, so
+          it's the topmost element under the rail/caption (which come after
+          it and correctly still receive their own taps). */}
       <div
+        onClick={handleMediaTap}
         className="absolute inset-0"
         style={{
           background:
-            "linear-gradient(to bottom, rgba(18,20,28,0.65) 0%, rgba(18,20,28,0.02) 22%, rgba(18,20,28,0.02) 55%, rgba(18,20,28,0.9) 100%)",
+            "linear-gradient(to bottom, rgba(var(--imc-reel-scrim-rgb),0.65) 0%, rgba(var(--imc-reel-scrim-rgb),0.02) 22%, rgba(var(--imc-reel-scrim-rgb),0.02) 55%, rgba(var(--imc-reel-scrim-rgb),0.9) 100%)",
         }}
       />
 
+      <AnimatePresence>
+        {heartPop && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.6 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.15 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            className="pointer-events-none absolute inset-0 z-[6] flex items-center justify-center"
+          >
+            <Heart size={92} color="#fff" fill="#E11D48" strokeWidth={1.5} style={{ filter: "drop-shadow(0 6px 18px rgba(0,0,0,0.35))" }} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Right action rail */}
       <div className="absolute right-3 flex flex-col items-center gap-4" style={{ bottom: 130 }}>
-        <RailAction icon={Heart} count={likes} active={liked} onClick={handleLike} />
+        <RailAction icon={Heart} count={likes} active={liked} onClick={handleLike} variant="like" />
         <RailAction icon={MessageCircle} count={replies} onClick={() => setShowReplies(true)} />
         <RailAction
           icon={Repeat2}
@@ -410,7 +456,7 @@ function PostReelSlide({ post = {}, type = "post", initialMediaIndex = 0 }) {
       <div className="absolute inset-x-3" style={{ bottom: 20 }}>
         <div className="flex items-center gap-2">
           <button type="button" onClick={openAuthorProfile} className="shrink-0 active:scale-95">
-            <div className="grid h-9 w-9 place-items-center overflow-hidden rounded-full text-[11px] font-black" style={{ background: INK, color: "#fff", border: "1.5px solid rgba(255,255,255,0.7)" }}>
+            <div className="grid h-9 w-9 place-items-center overflow-hidden rounded-full text-[11px] font-black" style={{ background: "var(--imc-reel-chip-bg)", color: "var(--imc-text)", border: "1.5px solid var(--imc-border)" }}>
               {avatar && !avatarBroken ? (
                 <ImageLoader
                   src={avatar}
@@ -430,14 +476,14 @@ function PostReelSlide({ post = {}, type = "post", initialMediaIndex = 0 }) {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <button type="button" onClick={openAuthorProfile} className="min-w-0 active:scale-[0.98]">
-                <span className="truncate text-[13px] font-black text-white">{finalName}</span>
+                <span className="truncate text-[13px] font-black" style={{ color: "var(--imc-text)" }}>{finalName}</span>
               </button>
 
               {!isMe && !following && (
                 <button
                   onClick={handleFollow}
                   className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black active:scale-95"
-                  style={{ background: "#fff", color: INK }}
+                  style={{ background: "#fff", color: INK, border: "1px solid var(--imc-border)" }}
                 >
                   <span className="flex items-center gap-1">
                     <UserPlus size={11} />
@@ -449,7 +495,7 @@ function PostReelSlide({ post = {}, type = "post", initialMediaIndex = 0 }) {
               {!isMe && following && (
                 <span
                   className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black"
-                  style={{ background: "rgba(255,255,255,0.16)", color: "#fff" }}
+                  style={{ background: "var(--imc-reel-chip-active-bg)", color: "var(--imc-text)" }}
                 >
                   <Check size={11} />
                   Following
@@ -458,13 +504,13 @@ function PostReelSlide({ post = {}, type = "post", initialMediaIndex = 0 }) {
             </div>
 
             {tagline && (
-              <p className="truncate text-[11px] font-semibold text-white/55">{tagline}</p>
+              <p className="truncate text-[11px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>{tagline}</p>
             )}
           </div>
         </div>
 
         {activeMedia && (
-          <p className="mt-2.5 line-clamp-3 text-[13px] font-semibold leading-5 text-white/90">
+          <p className="mt-2.5 line-clamp-3 text-[13px] font-semibold leading-5" style={{ color: "var(--imc-text)" }}>
             {finalText}
           </p>
         )}
@@ -496,7 +542,17 @@ function PostReelSlide({ post = {}, type = "post", initialMediaIndex = 0 }) {
   );
 }
 
-function RailAction({ icon: Icon, count, active, onClick }) {
+// This rail floats directly over the media itself, so — unlike the rest of
+// this slide — it deliberately stays a fixed dark-glass chip regardless of
+// the app's light/dark theme (a photo's own brightness is unpredictable
+// either way, so a theme-following chip could just as easily land on top
+// of a bright photo in "dark mode" or a dark photo in "light mode"; a
+// consistent dark-glass treatment reads reliably against any image).
+// `variant="like"` is the one exception: an active heart turns red like
+// everywhere else in the app, not just a lighter-glass circle.
+function RailAction({ icon: Icon, count, active, onClick, variant }) {
+  const isLike = variant === "like";
+
   return (
     <button onClick={onClick} className="flex flex-col items-center gap-1 active:scale-90">
       <span
@@ -505,7 +561,7 @@ function RailAction({ icon: Icon, count, active, onClick }) {
           borderColor: active ? "rgba(255,255,255,0.78)" : "rgba(255,255,255,0.14)",
           background: active ? "rgba(255,255,255,0.24)" : "rgba(18,20,28,0.58)",
           backdropFilter: "blur(8px)",
-          color: "#fff",
+          color: active && isLike ? "#E11D48" : "#fff",
         }}
       >
         <Icon size={20} fill={active ? "currentColor" : "none"} />

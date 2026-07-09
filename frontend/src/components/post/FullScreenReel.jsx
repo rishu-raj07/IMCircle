@@ -1,9 +1,10 @@
 import { X } from "lucide-react";
 
 // Shared full-screen chrome for the single-item reel view — just a close
-// button over a fixed, viewport-height black backdrop. The actual content
-// (PostReelSlide or JourneyReelSlide) is passed in as children so this stays
-// a thin wrapper rather than a second copy of the reel UI.
+// button over a fixed, viewport-height backdrop that follows the app's
+// light/dark theme. The actual content (PostReelSlide or JourneyReelSlide)
+// is passed in as children so this stays a thin wrapper rather than a
+// second copy of the reel UI.
 //
 // z-index has to stay BELOW 120: CommentSheet and RepostSheet (opened from
 // inside the reel) are both fixed, viewport-level overlays at z-[120], and
@@ -14,7 +15,7 @@ import { X } from "lucide-react";
 // "broken" even though the click handlers were firing correctly.
 function FullScreenReel({ onClose, children }) {
   return (
-    <div className="fixed inset-0 z-[110]" style={{ background: "#000" }}>
+    <div className="fixed inset-0 z-[110]" style={{ background: "var(--imc-bg)" }}>
       <button
         type="button"
         onClick={onClose}

@@ -74,6 +74,19 @@
      unaffected. Falls back to --imc-bg automatically in dark mode since
      this token is intentionally left undefined under [data-theme="dark"]. */
   --imc-learning-bg: #fffcf7;
+
+  /* REEL CHROME — the full-bleed post/journey media viewer (FullScreenReel +
+     PostReelSlide/JourneyReelSlide, also used by the Discover reels feed)
+     used to be hardcoded to an always-dark Instagram/TikTok-style canvas.
+     The canvas and caption text now just reuse --imc-bg/--imc-text (already
+     an inverted light/dark pair) — these two extras exist because the
+     caption scrim's tint needs a colour that flips with the theme (a plain
+     "rgba(0,0,0,x)" darkens for dark text on a light canvas the wrong way),
+     and a couple of secondary chips (e.g. "Following") need a background
+     that isn't quite --imc-surface. Used as `rgba(var(--imc-reel-scrim-rgb), x)`. */
+  --imc-reel-scrim-rgb: 255, 255, 255;
+  --imc-reel-chip-bg: rgba(18, 20, 28, 0.08);
+  --imc-reel-chip-active-bg: rgba(18, 20, 28, 0.14);
 }
 
 [data-theme="dark"] {
@@ -88,6 +101,10 @@
   --imc-text-faint: #868b93;
   --imc-border: rgba(255, 255, 255, 0.12);
   --imc-indigo-text: #9b90ee;
+
+  --imc-reel-scrim-rgb: 18, 20, 28;
+  --imc-reel-chip-bg: rgba(255, 255, 255, 0.14);
+  --imc-reel-chip-active-bg: rgba(255, 255, 255, 0.24);
 }
 
 @theme {
@@ -124,6 +141,21 @@ body {
   background: var(--imc-bg);
   color: var(--imc-text);
   transition: background-color 0.2s ease, color 0.2s ease;
+
+  /* Every page in this app builds its own top-level `min-h-screen` wrapper
+     with no shared Layout component, and none of them account for the
+     status bar / camera cutout — so on real devices (this shipped first on
+     a Pixel, but every Android OEM and iPhone notch/Dynamic Island varies)
+     header icons like the top-right message/notification buttons render
+     partly underneath the status bar and become hard or impossible to tap.
+     `env(safe-area-inset-top)` reports 0 on devices without a cutout and
+     the actual inset on ones that have it (enabled by `viewport-fit=cover`
+     in index.html), so pushing it down here fixes every page at once
+     without touching 40+ individual page files. `position: fixed` elements
+     (BottomNav, FullScreenReel, modals, SplashIntro) are unaffected by
+     ancestor padding, so this only ever shifts normal in-flow page content —
+     exactly what needs to move. */
+  padding-top: env(safe-area-inset-top);
 }
 
 button,

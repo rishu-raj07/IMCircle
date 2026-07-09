@@ -173,7 +173,6 @@ function PostActions({ post = {}, type = "post" }) {
         const data = nextSaved
           ? await saveLearning(itemId)
           : await unsaveLearning(itemId);
-
         if (typeof data.savesCount === "number") setSaves(data.savesCount);
       } else {
         const data = await savePost(itemId);
@@ -288,7 +287,7 @@ function PostActions({ post = {}, type = "post" }) {
   return (
     <>
       <div className="mt-3 flex items-center justify-between border-t border-[var(--imc-border)] pt-2">
-        <Action icon={Heart} count={likes} active={liked} onClick={handleLike} />
+        <Action icon={Heart} count={likes} active={liked} onClick={handleLike} tone="like" />
 
         <Action
           icon={Repeat2}
@@ -352,15 +351,34 @@ function PostActions({ post = {}, type = "post" }) {
   );
 }
 
-function Action({ icon: Icon, count, active, label, onClick }) {
+// "tone" lets the like button break from the shared indigo "active" look —
+// a heart turning indigo doesn't read as "liked" the way red universally
+// does everywhere else (Instagram, Twitter/X, etc.), so `tone="like"` swaps
+// in the app's danger/red token for just this one action while repost/save
+// keep the normal indigo chip style.
+function Action({ icon: Icon, count, active, label, onClick, tone }) {
+  const isLike = tone === "like";
+
   return (
     <button
       onClick={onClick}
       className="flex h-10 min-w-10 items-center justify-center gap-1 rounded-full border px-3 text-[12px] font-black active:scale-95"
       style={{
-        borderColor: active ? "rgba(67,56,202,0.42)" : "var(--imc-border)",
-        background: active ? "rgba(67,56,202,0.12)" : "var(--imc-surface)",
-        color: active ? "var(--imc-indigo-text)" : "var(--imc-text-muted)",
+        borderColor: active
+          ? isLike
+            ? "rgba(217,45,32,0.38)"
+            : "rgba(67,56,202,0.42)"
+          : "var(--imc-border)",
+        background: active
+          ? isLike
+            ? "rgba(217,45,32,0.12)"
+            : "rgba(67,56,202,0.12)"
+          : "var(--imc-surface)",
+        color: active
+          ? isLike
+            ? "var(--imc-danger)"
+            : "var(--imc-indigo-text)"
+          : "var(--imc-text-muted)",
       }}
     >
       <Icon size={18} fill={active ? "currentColor" : "none"} />
