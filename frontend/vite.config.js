@@ -11,7 +11,17 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: "autoUpdate",
-      injectRegister: "auto",
+      // "auto" used to inject a <script> into index.html that registers the
+      // service worker unconditionally — including inside the Capacitor
+      // native app. A service worker adds nothing there (the app already
+      // ships its assets bundled in the APK) and actively conflicts with
+      // it: registerType "autoUpdate" reloads the page whenever a new SW
+      // takes control, and in the WebView's file/https-localhost origin the
+      // SW kept re-registering as "new" on every launch, causing an endless
+      // reload loop — the app (or its splash) restarting over and over
+      // instead of settling on a page. Registration is now done by hand in
+      // main.jsx, which only calls it on a real web build.
+      injectRegister: false,
       includeAssets: [
         "favicon.svg",
         "favicon.ico",
