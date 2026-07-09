@@ -81,19 +81,19 @@ function Login() {
 
   return (
     <div className="h-screen overflow-hidden bg-[var(--imc-surface-2)] flex justify-center">
-      <div className="relative h-screen w-full max-w-[430px] overflow-hidden bg-[var(--imc-surface-2)] px-5 pt-5">
+      <div className="relative h-screen w-full max-w-[430px] overflow-hidden bg-[var(--imc-surface-2)] px-5 pt-14">
         <div className="text-center">
           <img
             src="/logo.png"
             alt="IMCircle"
-            className="mx-auto h-10 w-auto object-contain"
+            className="mx-auto h-14 w-auto object-contain"
           />
 
           <p className="mt-2 text-[12.5px] font-semibold text-[var(--imc-text-muted)]">
             Earn. Build. Grow Together.
           </p>
 
-          <div className="mx-auto mt-2 h-[78px] w-full overflow-hidden rounded-2xl">
+          <div className="mx-auto mt-3 h-[130px] w-full overflow-hidden rounded-2xl">
             <img
               src={heroImg}
               alt=""
