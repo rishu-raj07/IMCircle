@@ -75,12 +75,17 @@ function NativeGoogleButton({ onSuccess, onError, text }) {
       // Login.jsx/Signup.jsx don't need to know which flow ran.
       onSuccess({ credential: idToken });
     } catch (err) {
-      // User cancelling the native account picker is not a real error —
-      // don't show an error toast for that.
-      const message = String(err?.message || err || "");
-      if (!/cancel/i.test(message)) {
-        onError(err);
-      }
+      // TEMPORARY DIAGNOSTIC: a real cert/config mismatch (e.g. the app's
+      // signing SHA-1 no longer matching a registered Android OAuth client)
+      // surfaces from Android's Credential Manager as a
+      // GetCredentialCancellationException — whose message contains the
+      // word "Cancellation", which used to match this same /cancel/i check
+      // meant for genuine user-tapped-cancel. That made a real failure look
+      // identical to "user backed out of the picker": nothing shown, stuck
+      // on the login page with zero feedback. Always surface it for now so
+      // the actual message is visible on screen instead of guessed at blind.
+      console.error("[GoogleAuthButton] native sign-in failed:", err);
+      onError(err);
     } finally {
       setLoading(false);
     }
