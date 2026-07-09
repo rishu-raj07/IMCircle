@@ -61,8 +61,10 @@ keystore.properties
 .externalNativeBuild
 .cxx/
 
-# Google Services (e.g. APIs or Firebase)
-# google-services.json
+# Google Services (e.g. APIs or Firebase) — each environment/dev machine
+# needs its own copy placed at android/app/google-services.json (from the
+# Firebase console), never committed. See launch/docs/ for setup notes.
+google-services.json
 
 # Freeline
 freeline.py

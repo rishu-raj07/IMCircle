@@ -21,6 +21,7 @@ import { useTheme } from "../../store/themeStore.jsx";
 import { getSessionUser } from "../../utils/sessionUser";
 import { logoutUser } from "../../store/authStore";
 import { logoutApi } from "../../api/authApi";
+import { unregisterPushToken } from "../../utils/pushNotifications";
 import { reportProblem } from "../../api/supportApi";
 import { deleteMyAccount } from "../../api/profileApi";
 
@@ -63,6 +64,15 @@ function Settings() {
   const handleLogout = async () => {
     if (loggingOut) return;
     setLoggingOut(true);
+
+    try {
+      // Must run before logoutApi() invalidates this session's auth
+      // cookies — the push-token removal request needs to still be
+      // authenticated as this user.
+      await unregisterPushToken();
+    } catch {
+      // best-effort
+    }
 
     try {
       await logoutApi();

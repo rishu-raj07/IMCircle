@@ -2,6 +2,7 @@ const ACCESS_TOKEN_KEY = "bn_access_token";
 const USER_KEY = "bn_user";
 const AUTH_EXPIRES_KEY = "bn_auth_expires_at";
 const PENDING_AUTH_KEY = "bn_pending_auth";
+const PUSH_TOKEN_KEY = "bn_push_token";
 
 const AUTH_DAYS = 60;
 const memoryStorage = {};
@@ -119,4 +120,19 @@ export const removeAuthData = () => {
   removeItem(ACCESS_TOKEN_KEY);
   removeItem(USER_KEY);
   removeItem(AUTH_EXPIRES_KEY);
+};
+
+// Caches this device's FCM registration token locally so logoutUser() can
+// tell the backend to stop pushing to it, without needing to re-fetch a
+// fresh token just to remove one (see utils/pushNotifications.js).
+export const setPushToken = (token) => {
+  setItem(PUSH_TOKEN_KEY, token);
+};
+
+export const getPushToken = () => {
+  return getItem(PUSH_TOKEN_KEY);
+};
+
+export const clearPushToken = () => {
+  removeItem(PUSH_TOKEN_KEY);
 };

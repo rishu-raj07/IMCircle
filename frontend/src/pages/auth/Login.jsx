@@ -69,8 +69,14 @@ function Login() {
     [navigate]
   );
 
-  const handleGoogleError = useCallback(() => {
-    setError("Google login failed");
+  // On native (Android/iOS), NativeGoogleButton passes the actual thrown
+  // error object here — surface its real message instead of a generic
+  // string, so a failure is diagnosable from the screen itself without
+  // needing adb logcat / chrome://inspect. The web GoogleLogin widget's
+  // onError doesn't pass anything useful, so this falls back gracefully.
+  const handleGoogleError = useCallback((err) => {
+    const detail = err?.message || err?.error || (typeof err === "string" ? err : "");
+    setError(detail ? `Google login failed: ${detail}` : "Google login failed");
   }, []);
 
   return (

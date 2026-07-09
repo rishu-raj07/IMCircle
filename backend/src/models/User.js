@@ -731,6 +731,20 @@ const userSchema = new mongoose.Schema(
       },
     ],
 
+    // FCM registration tokens for this user's native app installs — a
+    // person can be logged in on more than one device, so this is a list,
+    // not a single value. Populated by POST /users/me/push-token (native
+    // app only, see frontend/src/utils/pushNotifications.js). Read by
+    // push.service.js every time a notification is created (see
+    // socket.js's emitNotification) to also fire a native push alongside
+    // the existing socket event. Tokens Firebase reports as
+    // unregistered/invalid are pruned from this array automatically.
+    pushTokens: [
+      {
+        type: String,
+      },
+    ],
+
     reports: [
       {
         user: {

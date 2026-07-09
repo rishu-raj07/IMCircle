@@ -51,6 +51,7 @@ connection strings are backend-only and must never get a `VITE_` prefix.
 | `MSG91_OTP_EXPIRY_MINUTES` | optional | defaults to 5 |
 | `GOOGLE_WEB_CLIENT_ID` / `GOOGLE_ANDROID_CLIENT_ID` / `GOOGLE_IOS_CLIENT_ID` | **at least one required** | see `google-oauth-setup.md` |
 | `GOOGLE_MAPS_API_KEY` | optional, unused today | reserved for a future backend-side Maps API call; nothing currently reads it |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` / `FIREBASE_SERVICE_ACCOUNT_PATH` | optional — set one to enable push notifications | see `src/config/firebaseAdmin.js`; without either, in-app notifications still work, only the native phone push is skipped |
 
 **No `CLOUDFLARE_*` variables exist anywhere in this app.** Cloudflare, if
 you use it at all, is DNS/SSL/CDN in front of your domain — it needs zero

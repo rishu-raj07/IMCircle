@@ -29,7 +29,11 @@ const config: CapacitorConfig = {
 
   plugins: {
     SplashScreen: {
-      launchShowDuration: 1200,
+      // Kept short on purpose — this just covers the native WebView's
+      // initial blank frame. The actual designed "intro feel" is the
+      // animated logo handoff in src/components/common/SplashIntro.jsx,
+      // which takes over immediately after this hides.
+      launchShowDuration: 400,
       launchAutoHide: true,
       backgroundColor: '#FFFCF7',
       androidSplashResourceName: 'splash',

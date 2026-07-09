@@ -22,6 +22,8 @@ import {
   unblockUser,
   getBlockedUsers,
   reportUser,
+  registerPushToken,
+  removePushToken,
 } from "../controllers/user.controller.js";
 
 import { protect } from "../middleware/auth.middleware.js";
@@ -42,6 +44,9 @@ const router = express.Router();
 router.get("/search", protect, searchUserValidator, validate, searchUsers);
 router.get("/suggestions", protect, getSuggestions);
 router.post("/contacts/match", protect, matchContacts);
+
+router.post("/me/push-token", protect, registerPushToken);
+router.delete("/me/push-token", protect, removePushToken);
 
 router.get("/followers", protect, getFollowers);
 router.get("/following", protect, getFollowing);

@@ -3,6 +3,7 @@ import { Server } from "socket.io";
 import Message from "../models/Message.js";
 import Conversation from "../models/Conversation.js";
 import User from "../models/User.js";
+import { sendPushToUser } from "../services/push.service.js";
 
 let io;
 const onlineUsers = new Map();
@@ -219,6 +220,15 @@ export const isUserOnline = (userId) => {
 export const emitNotification = (recipientId, notification) => {
   if (!io || !recipientId) return;
   io.to(recipientId.toString()).emit("new_notification", notification);
+
+  // Fire the native push alongside the socket event — deliberately not
+  // awaited. This function is called synchronously from ~12 controller
+  // call sites right before they respond to the request that triggered
+  // the notification (a like/comment/follow/etc); a push send (DB lookup
+  // + Firebase API call) must never add latency to that response, and a
+  // push failure must never surface as an error to that unrelated action.
+  // See push.service.js for the full explanation and error handling.
+  sendPushToUser(recipientId, notification).catch(() => {});
 };
 
 export const emitMessage = (conversationId, message) => {

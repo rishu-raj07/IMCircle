@@ -9,6 +9,13 @@ node_modules
 !.env.example
 !.env.production.example
 
+# Firebase service account key (push notifications — see
+# src/config/firebaseAdmin.js). This grants admin access to the Firebase
+# project; never commit it. Prefer storing it outside this repo entirely
+# on the server and pointing FIREBASE_SERVICE_ACCOUNT_PATH at it, but this
+# ignore rule is a backstop in case a copy ever ends up in this folder.
+firebase-service-account*.json
+
 # Logs
 logs
 *.log

@@ -4,6 +4,7 @@ import {
   setAccessToken,
   setUser,
   isAuthSessionValid,
+  clearPushToken,
 } from "../utils/storage";
 import { trackEvent } from "../utils/analyticsTracker";
 
@@ -30,6 +31,12 @@ export const saveLoginData = (data) => {
 export const logoutUser = () => {
   trackEvent("logout").catch(() => {});
   removeAuthData();
+  // Only clears the locally-cached token here — the actual "stop pushing
+  // to this device" API call must happen *before* the session's auth
+  // cookies are invalidated (see utils/pushNotifications.js's
+  // unregisterPushToken, called explicitly ahead of logoutApi() at each
+  // logout call site), otherwise it'd fail as an unauthenticated request.
+  clearPushToken();
 };
 
 export const isAuthenticated = () => {

@@ -1051,3 +1051,61 @@ export const reportUser = async (req, res) => {
     });
   }
 };
+
+// Registers (or refreshes) this device's FCM token so push.service.js can
+// reach it whenever a notification is created for this user. Called from
+// frontend/src/utils/pushNotifications.js right after the native
+// PushNotifications plugin hands back a token — on every app foreground,
+// not just first install, since FCM tokens can rotate. $addToSet keeps the
+// array free of duplicates if the same device registers again.
+export const registerPushToken = async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token || typeof token !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "A valid push token is required",
+      });
+    }
+
+    await User.updateOne(
+      { _id: req.user._id },
+      { $addToSet: { pushTokens: token } }
+    );
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+// Called on logout from a native app so a signed-out device stops
+// receiving pushes meant for the account that just logged out of it.
+export const removePushToken = async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token || typeof token !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "A valid push token is required",
+      });
+    }
+
+    await User.updateOne(
+      { _id: req.user._id },
+      { $pull: { pushTokens: token } }
+    );
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};

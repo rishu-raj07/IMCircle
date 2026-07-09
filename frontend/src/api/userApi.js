@@ -20,6 +20,18 @@ export const matchContacts = async (contacts = []) => {
   return res.data;
 };
 
+// Native push notifications — see src/utils/pushNotifications.js for where
+// these are called from (registration on app boot, removal on logout).
+export const registerPushToken = async (token) => {
+  const res = await api.post("/users/me/push-token", { token });
+  return res.data;
+};
+
+export const removePushToken = async (token) => {
+  const res = await api.delete("/users/me/push-token", { data: { token } });
+  return res.data;
+};
+
 // Real name/username/skill search against the backend — unlike suggestions,
 // this can surface any user regardless of whether they were preloaded, e.g.
 // typing an exact username like "rishuraj07". Backend requires 2+ chars.
