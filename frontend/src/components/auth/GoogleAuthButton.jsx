@@ -50,11 +50,17 @@ function NativeGoogleButton({ onSuccess, onError, text }) {
     try {
       await ensureNativeInitialized();
 
+      // No custom `scopes` here on purpose: the native plugin already
+      // requests the default email/profile/openid scopes needed for the ID
+      // token (see GoogleProvider.java's default scope set). Passing a
+      // custom `scopes` array switches the plugin into a mode that requires
+      // MainActivity to implement `ModifiedMainActivityForSocialLoginPlugin`
+      // — without that, every login attempt is rejected with "You CANNOT
+      // use scopes without modifying the main activity." We don't need any
+      // scope beyond the default, so we just don't ask for one.
       const res = await SocialLogin.login({
         provider: "google",
-        options: {
-          scopes: ["email", "profile"],
-        },
+        options: {},
       });
 
       // Response shape is { provider, result: { idToken, ... } } — the ID

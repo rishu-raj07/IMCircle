@@ -80,8 +80,8 @@ function Login() {
   }, []);
 
   return (
-    <div className="h-screen overflow-hidden bg-[var(--imc-surface-2)] flex justify-center">
-      <div className="relative h-screen w-full max-w-[430px] overflow-hidden bg-[var(--imc-surface-2)] px-5 pt-14">
+    <div className="min-h-screen bg-[var(--imc-surface-2)] flex justify-center">
+      <div className="relative min-h-screen w-full max-w-[430px] bg-[var(--imc-surface-2)] px-5 pt-14 pb-8">
         <div className="text-center">
           <img
             src="/logo.png"
