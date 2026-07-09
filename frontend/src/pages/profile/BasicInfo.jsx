@@ -18,16 +18,33 @@ import {
 
 const genderOptions = ["Male", "Female", "Other", "Prefer not to say"];
 
+// Fixed onboarding chips. "Other" is handled separately below — picking it
+// reveals a text field, and whatever the person types becomes the actual
+// saved category (not the literal word "Other").
 const INTEREST_OPTIONS = [
   "Startup",
   "Career",
+  "Student",
   "AI & Tech",
   "Marketing",
   "Finance",
   "Design",
   "Content & Creator",
-  "Other",
 ];
+
+function formatDobDisplay(value) {
+  if (!value) return "";
+
+  try {
+    return new Date(value).toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return "";
+  }
+}
 
 function getDobBounds() {
   const today = new Date();
@@ -361,6 +378,27 @@ function BasicInfo({
   setPrimaryInterest,
 }) {
   const dobBounds = getDobBounds();
+  const dobInputRef = useRef(null);
+
+  const isCustomInterest = Boolean(primaryInterest) && !INTEREST_OPTIONS.includes(primaryInterest);
+  const [otherMode, setOtherMode] = useState(isCustomInterest);
+  const [customInterest, setCustomInterest] = useState(isCustomInterest ? primaryInterest : "");
+
+  const openDobPicker = () => {
+    const input = dobInputRef.current;
+    if (!input) return;
+
+    if (typeof input.showPicker === "function") {
+      try {
+        input.showPicker();
+        return;
+      } catch {
+        // fall through to focus below
+      }
+    }
+
+    input.focus();
+  };
 
   return (
     <section className="mt-1">
@@ -405,19 +443,33 @@ function BasicInfo({
             Date of Birth <span className="text-red-500">*</span>
           </label>
 
-          <div className="relative">
+          <div className="relative" onClick={openDobPicker}>
             <CalendarDays
               size={18}
-              className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--imc-indigo-text)]"
+              className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 z-10 text-[var(--imc-indigo-text)]"
             />
 
+            <div className="flex h-[58px] w-full items-center rounded-[20px] border border-[var(--imc-border)] bg-[var(--imc-surface)] pl-11 pr-4 text-[16px] font-black">
+              <span
+                className={dob ? "text-[var(--imc-text)]" : "text-[var(--imc-text-faint)]"}
+              >
+                {dob ? formatDobDisplay(dob) : "Select date of birth"}
+              </span>
+            </div>
+
+            {/* Sits on top of the styled field above and is the exact same
+                size, so a tap anywhere on the field opens the native date
+                picker — not just on a small icon. showPicker() above is a
+                belt-and-braces call for browsers that only auto-open on a
+                direct click on this input. */}
             <input
+              ref={dobInputRef}
               type="date"
               value={dob}
               max={dobBounds.max}
               min={dobBounds.min}
               onChange={(e) => setDob(e.target.value)}
-              className="h-[58px] w-full rounded-[20px] border border-[var(--imc-border)] bg-[var(--imc-surface)] pl-11 pr-4 text-[16px] font-black text-[var(--imc-text)] outline-none focus:border-[var(--imc-indigo-text)]"
+              className="absolute inset-0 h-[58px] w-full cursor-pointer opacity-0"
             />
           </div>
 
@@ -453,7 +505,7 @@ function BasicInfo({
         <div>
           <div className="mb-2 flex items-center justify-between">
             <label className="text-[13px] font-black text-[var(--imc-text-muted)]">
-              Tagline <span className="text-red-500">*</span>
+              Tagline <span className="text-[11px] font-bold text-[var(--imc-text-faint)]">(optional)</span>
             </label>
             <span className="text-[11px] font-bold text-[var(--imc-text-faint)]">
               {tagline.length}/320
@@ -468,7 +520,7 @@ function BasicInfo({
           />
 
           <p className="mt-1.5 text-[11px] font-bold text-[var(--imc-text-faint)]">
-            About 5-6 lines is a good length.
+            About 5-6 lines is a good length. You can skip this for now and add it later.
           </p>
         </div>
 
@@ -488,9 +540,12 @@ function BasicInfo({
               <button
                 key={item}
                 type="button"
-                onClick={() => setPrimaryInterest(item)}
+                onClick={() => {
+                  setOtherMode(false);
+                  setPrimaryInterest(item);
+                }}
                 className={`rounded-full px-3.5 py-2 text-[12px] font-black ${
-                  primaryInterest === item
+                  !otherMode && primaryInterest === item
                     ? "bg-[#4338CA] text-white"
                     : "bg-[rgba(67,56,202,0.12)] text-[var(--imc-indigo-text)]"
                 }`}
@@ -498,7 +553,36 @@ function BasicInfo({
                 {item}
               </button>
             ))}
+
+            <button
+              type="button"
+              onClick={() => {
+                setOtherMode(true);
+                setPrimaryInterest(customInterest.trim());
+              }}
+              className={`rounded-full px-3.5 py-2 text-[12px] font-black ${
+                otherMode
+                  ? "bg-[#4338CA] text-white"
+                  : "bg-[rgba(67,56,202,0.12)] text-[var(--imc-indigo-text)]"
+              }`}
+            >
+              Other
+            </button>
           </div>
+
+          {otherMode && (
+            <input
+              autoFocus
+              value={customInterest}
+              onChange={(e) => {
+                const value = e.target.value.slice(0, 60);
+                setCustomInterest(value);
+                setPrimaryInterest(value.trim());
+              }}
+              placeholder="Tell us what you're here to explore"
+              className="mt-2.5 h-[52px] w-full rounded-[18px] border border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 text-[14px] font-bold text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)] focus:border-[var(--imc-indigo-text)]"
+            />
+          )}
         </div>
       </div>
     </section>

@@ -73,19 +73,14 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
+    // Free text on purpose: the onboarding "What are you here to explore?"
+    // screen offers fixed chips (Startup, Career, Student, AI & Tech, ...)
+    // plus an "Other" chip that opens a custom text input — whatever the
+    // person types becomes the saved category verbatim, so this can't be a
+    // strict enum. Length-capped and trimmed in profile.controller.js.
     primaryInterest: {
       type: String,
-      enum: [
-        "",
-        "Startup",
-        "Career",
-        "AI & Tech",
-        "Marketing",
-        "Finance",
-        "Design",
-        "Content & Creator",
-        "Other",
-      ],
+      maxlength: 60,
       default: "",
     },
 

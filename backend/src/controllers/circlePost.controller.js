@@ -135,6 +135,14 @@ export const createCirclePost = async (req, res) => {
                 type: "circle_message",
                 title: circle?.name || "Circle message",
                 message: `${authorName}: ${preview}`,
+                // Without this, deriveTarget() in notification.controller.js
+                // has no circleId to resolve and falls back to /network —
+                // this is what was sending "community message"
+                // notifications to the wrong page.
+                circle: circleId,
+                targetType: "circle",
+                targetId: circleId,
+                data: { circle: circleId, post: post._id },
               });
 
               emitNotification(member.user, notification);

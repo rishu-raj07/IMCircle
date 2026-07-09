@@ -1,10 +1,12 @@
 import Conversation from "../models/Conversation.js";
 import Message from "../models/Message.js";
+import Notification from "../models/Notification.js";
 import User from "../models/User.js";
 
 import {
   emitMessage,
   emitMessageSeen,
+  emitNotification,
   isUserOnline,
 } from "../socket/socket.js";
 
@@ -399,6 +401,35 @@ export const sendMessage = async (req, res) => {
     messageObj.status = getMessageStatus(messageObj, receiverId);
 
     emitMessage(conversation._id, messageObj);
+
+    // Best-effort notification so a direct message shows up in the
+    // recipient's Notifications tab and, when tapped, opens this exact
+    // conversation (see targetType "message" handling in
+    // notification.controller.js) instead of falling back to Network.
+    // Skipped while the recipient is actively online/connected (they're
+    // already seeing it live via the socket) to avoid flooding the
+    // Notifications tab during a live back-and-forth conversation.
+    if (receiverId && !isUserOnline(receiverId)) {
+      try {
+        const senderName =
+          req.user.fullName || req.user.name || req.user.username || "Someone";
+
+        const notification = await Notification.create({
+          recipient: receiverId,
+          sender: req.user._id,
+          type: "message",
+          title: senderName,
+          message: preview || "Sent you a message",
+          targetType: "message",
+          targetId: conversation._id,
+          data: { conversationId: conversation._id, senderId: req.user._id },
+        });
+
+        emitNotification(receiverId, notification);
+      } catch (notifyError) {
+        console.error("Message notification skipped:", notifyError.message);
+      }
+    }
 
     return res.status(201).json({
       success: true,

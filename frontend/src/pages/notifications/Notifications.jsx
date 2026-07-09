@@ -21,6 +21,7 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "../../api/notificationApi";
+import { createConversation } from "../../api/messageApi";
 
 const INK = "#12141C";
 const PAPER = "#F8F4EA";
@@ -204,6 +205,14 @@ function resolveNotificationRoute(item) {
       return (item?.journeyId || targetId) ? `/journey/${item?.journeyId || targetId}` : actorProfileRoute;
     case "circle":
       return targetId ? `/circles/${targetId}` : "/network";
+    case "message": {
+      // Direct-message notifications: open the exact chat. openNotification()
+      // handles the "no conversationId yet, only senderId" case (fetch-or-
+      // create via createConversation) before this synchronous fallback is
+      // ever reached.
+      const conversationId = item?.conversationId || targetId;
+      return conversationId ? `/chat/${conversationId}` : actorProfileRoute;
+    }
     case "post":
       // No dedicated post detail route exists — these are always "on your
       // post", so the recipient's own profile is the closest real place to
@@ -304,6 +313,40 @@ function Notifications() {
         // Keep navigation responsive even if read-state fails.
       } finally {
         setActionId("");
+      }
+    }
+
+    // Message notifications should open the exact conversation. If we only
+    // have the sender (no conversationId yet — e.g. an older notification
+    // document), fetch-or-create the conversation via the existing message
+    // API before navigating, same pattern as UserProfile.jsx's "Message"
+    // button.
+    const targetType = String(item?.targetType || "").toLowerCase();
+
+    if (targetType === "message") {
+      const conversationId = item?.conversationId || item?.targetId;
+
+      if (conversationId) {
+        navigate(`/chat/${conversationId}`);
+        return;
+      }
+
+      const actor = getSender(item);
+      const actorId = getId(actor) || item?.senderId;
+
+      if (actorId) {
+        try {
+          const res = await createConversation(actorId);
+          const conversation = res?.conversation || res?.data?.conversation || res;
+          const newConversationId = conversation?._id || conversation?.id;
+
+          if (newConversationId) {
+            navigate(`/chat/${newConversationId}`, { state: { conversation } });
+            return;
+          }
+        } catch {
+          // fall through to the generic resolver below
+        }
       }
     }
 

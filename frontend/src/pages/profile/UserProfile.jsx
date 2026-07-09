@@ -253,6 +253,14 @@ function hasEducation(value) {
   return Boolean(item?.degree || item?.college || item?.collegeName);
 }
 
+function isStudentUser(user) {
+  const interest = String(user?.primaryInterest || "").trim().toLowerCase();
+  const role = String(user?.role || "").trim().toLowerCase();
+  return interest === "student" || role === "student";
+}
+
+// Profile photo and tagline are optional (see ProfileSetup.jsx) — they never
+// block reaching 100%. Mirrors Profile.jsx / backend profile.controller.js.
 function getCompletionPercent(user) {
   if (typeof user?.profileCompletionPercent === "number") {
     return Math.min(Math.max(user.profileCompletionPercent, 0), 100);
@@ -262,9 +270,11 @@ function getCompletionPercent(user) {
 
   if (
     user?.fullName &&
-    user?.headline &&
+    user?.username &&
+    user?.dob &&
+    user?.gender &&
     user?.location?.city &&
-    user?.gender
+    user?.primaryInterest
   ) {
     score += 40;
   }
@@ -273,7 +283,7 @@ function getCompletionPercent(user) {
     score += 20;
   }
 
-  if (Array.isArray(user?.experience) && user.experience.length > 0) {
+  if (isStudentUser(user) || (Array.isArray(user?.experience) && user.experience.length > 0)) {
     score += 20;
   }
 

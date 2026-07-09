@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   Building2,
@@ -9,11 +9,38 @@ import {
 import { createCompany } from "../../api/companyApi";
 import { uploadImage } from "../../api/uploadApi";
 import {
-  validateOptionalDomain,
   validateOptionalEmail,
   validateOptionalWebsite,
   validateOrgName,
 } from "../../utils/orgValidation";
+
+// Best-effort domain inference so the email field can be "front part only" —
+// the person never types or edits the domain themselves. Prefers the real
+// website's hostname; falls back to a slugified version of the company name
+// (e.g. "IMCircle" -> "imcircle.com") so the email row still works for
+// companies that don't have a website yet.
+function inferDomain(website, name) {
+  const cleanWebsite = String(website || "").trim();
+
+  if (cleanWebsite) {
+    try {
+      const withProtocol = /^https?:\/\//i.test(cleanWebsite)
+        ? cleanWebsite
+        : `https://${cleanWebsite}`;
+      const hostname = new URL(withProtocol).hostname.replace(/^www\./i, "").toLowerCase();
+      if (hostname.includes(".")) return hostname;
+    } catch {
+      // fall through to name-based inference
+    }
+  }
+
+  const slug = String(name || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "");
+
+  return slug ? `${slug}.com` : "";
+}
 
 export default function AddCompanyModal({
   open,
@@ -25,8 +52,7 @@ export default function AddCompanyModal({
 
   const [name, setName] = useState(initialName);
   const [website, setWebsite] = useState("");
-  const [domain, setDomain] = useState("");
-  const [email, setEmail] = useState("");
+  const [emailLocalPart, setEmailLocalPart] = useState("");
   const [industry, setIndustry] = useState("");
   const [companySize, setCompanySize] = useState("");
   const [type, setType] = useState("Company");
@@ -36,6 +62,9 @@ export default function AddCompanyModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
+
+  const domain = useMemo(() => inferDomain(website, name), [website, name]);
+  const email = emailLocalPart.trim() && domain ? `${emailLocalPart.trim()}@${domain}` : "";
 
   useEffect(() => {
     if (!open) return;
@@ -71,7 +100,6 @@ export default function AddCompanyModal({
     const nextErrors = {
       name: validateOrgName(name, "Company name"),
       website: validateOptionalWebsite(website),
-      domain: validateOptionalDomain(domain),
       email: validateOptionalEmail(email),
     };
     const visibleErrors = Object.fromEntries(
@@ -91,8 +119,8 @@ export default function AddCompanyModal({
       const company = await createCompany({
         name: name.trim(),
         website: website.trim(),
-        domain: domain.trim(),
-        email: email.trim(),
+        domain,
+        email,
         industry: industry.trim(),
         companySize,
         type,
@@ -200,27 +228,45 @@ export default function AddCompanyModal({
             error={fieldErrors.website}
           />
 
-          <TextInput
-            label="Domain"
-            value={domain}
-            onChange={(value) => {
-              setDomain(value);
-              setFieldErrors((prev) => ({ ...prev, domain: "" }));
-            }}
-            placeholder="example.com"
-            error={fieldErrors.domain}
-          />
+          <div>
+            <label className="mb-2 block text-[13px] font-black text-[#2B2E38]">
+              Company Email <span className="text-[11px] font-bold text-[var(--imc-text-faint)]">(optional)</span>
+            </label>
 
-          <TextInput
-            label="Company Email"
-            value={email}
-            onChange={(value) => {
-              setEmail(value);
-              setFieldErrors((prev) => ({ ...prev, email: "" }));
-            }}
-            placeholder="hello@example.com"
-            error={fieldErrors.email}
-          />
+            <div
+              className={`flex h-[56px] w-full items-center overflow-hidden rounded-[18px] border bg-[var(--imc-surface)] pl-4 text-[16px] font-bold text-[var(--imc-text)] focus-within:border-[#4338CA] ${
+                fieldErrors.email ? "border-red-300" : "border-[rgba(18,20,28,0.08)]"
+              }`}
+            >
+              <input
+                value={emailLocalPart}
+                onChange={(e) => {
+                  setEmailLocalPart(
+                    e.target.value.replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 64)
+                  );
+                  setFieldErrors((prev) => ({ ...prev, email: "" }));
+                }}
+                placeholder="hello"
+                className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-[var(--imc-text-faint)]"
+              />
+
+              {domain ? (
+                <span className="shrink-0 bg-[var(--imc-surface-2)] px-3 py-2 text-[13px] font-black text-[var(--imc-text-muted)]">
+                  @{domain}
+                </span>
+              ) : null}
+            </div>
+
+            <p className="mt-2 text-[11px] font-bold text-[var(--imc-text-faint)]">
+              {domain
+                ? "Domain is set from the website (or company name) and can't be edited here."
+                : "Add a website or company name to set the email domain."}
+            </p>
+
+            {fieldErrors.email && (
+              <p className="mt-2 text-[11px] font-black text-red-500">{fieldErrors.email}</p>
+            )}
+          </div>
 
           <TextInput
             label="Industry"

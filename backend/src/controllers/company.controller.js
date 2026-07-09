@@ -11,6 +11,73 @@ function makeSlug(value = "") {
     .replace(/^-+|-+$/g, "");
 }
 
+const COMPANY_TYPES = [
+  "Startup",
+  "Company",
+  "Agency",
+  "Small Business",
+  "NGO",
+  "Government",
+  "Self Employed",
+  "Other",
+];
+
+const COMPANY_SIZES = [
+  "",
+  "1-10",
+  "11-50",
+  "51-200",
+  "201-500",
+  "501-1000",
+  "1001-5000",
+  "5001-10000",
+  "10000+",
+];
+
+function normalizeWebsite(value = "") {
+  const text = String(value || "").trim();
+  if (!text) return "";
+
+  const withProtocol = /^https?:\/\//i.test(text) ? text : `https://${text}`;
+
+  try {
+    const url = new URL(withProtocol);
+    return `${url.protocol}//${url.hostname.replace(/^www\./i, "")}${url.pathname === "/" ? "" : url.pathname}`;
+  } catch {
+    return "";
+  }
+}
+
+function normalizeDomain(value = "", website = "") {
+  const raw = String(value || "").trim().toLowerCase();
+
+  if (raw) {
+    try {
+      const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+      return new URL(withProtocol).hostname.replace(/^www\./i, "").toLowerCase();
+    } catch {
+      // fall through to website-based inference
+    }
+  }
+
+  if (website) {
+    try {
+      const withProtocol = /^https?:\/\//i.test(website) ? website : `https://${website}`;
+      return new URL(withProtocol).hostname.replace(/^www\./i, "").toLowerCase();
+    } catch {
+      return "";
+    }
+  }
+
+  return "";
+}
+
+function normalizeEmail(value = "") {
+  const text = String(value || "").trim().toLowerCase();
+  if (!text || !/^\S+@\S+\.\S+$/.test(text)) return "";
+  return text;
+}
+
 export const searchCompanies = async (req, res) => {
   try {
     const q = String(req.query.q || "").trim();
@@ -77,17 +144,39 @@ export const createCompany = async (req, res) => {
       logo = {},
     } = req.body;
 
-    if (!name?.trim()) {
+    // Only name is required — website/domain/email/industry/company size are
+    // all optional. The email's domain is inferred by the frontend (from the
+    // website, or the company name) and is never hand-typed, but we still
+    // re-derive it here defensively in case the domain field is missing.
+    if (!name?.trim() || name.trim().length < 2) {
       return res.status(400).json({
         success: false,
         message: "Company name is required",
       });
     }
 
-    const slug = makeSlug(name);
+    const trimmedName = name.trim().slice(0, 120);
+    const safeWebsite = normalizeWebsite(website);
+    const safeDomain = normalizeDomain(domain, safeWebsite);
+    const safeEmail = normalizeEmail(email);
+    const safeType = COMPANY_TYPES.includes(type) ? type : "Company";
+    const safeCompanySize = COMPANY_SIZES.includes(companySize) ? companySize : "";
+    const slug = makeSlug(trimmedName);
+
+    // Avoid duplicates by normalized name OR domain — "IMCircle" and
+    // "imcircle" (or two pages that both resolve to imcircle.com) should
+    // collapse into the same company page instead of forking.
+    const dedupeConditions = [
+      { slug },
+      { name: new RegExp(`^${trimmedName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
+    ];
+
+    if (safeDomain) {
+      dedupeConditions.push({ domain: safeDomain });
+    }
 
     let company = await Company.findOne({
-      $or: [{ slug }, { name: new RegExp(`^${name.trim()}$`, "i") }],
+      $or: dedupeConditions,
       isDeleted: false,
     });
 
@@ -96,17 +185,24 @@ export const createCompany = async (req, res) => {
     }
 
     company = await Company.create({
-      name: name.trim(),
+      name: trimmedName,
       slug,
-      website,
-      domain,
-      email,
-      industry,
-      companySize,
-      type,
-      location,
-      description,
-      logo,
+      website: safeWebsite,
+      domain: safeDomain,
+      email: safeEmail,
+      industry: String(industry || "").trim().slice(0, 80),
+      companySize: safeCompanySize,
+      type: safeType,
+      location: {
+        city: String(location?.city || "").trim().slice(0, 80),
+        state: String(location?.state || "").trim().slice(0, 80),
+        country: String(location?.country || "India").trim().slice(0, 80) || "India",
+      },
+      description: String(description || "").trim().slice(0, 1000),
+      logo: {
+        url: logo?.url || "",
+        publicId: logo?.publicId || "",
+      },
       createdBy: req.user?._id || null,
       admins: req.user?._id ? [req.user._id] : [],
       isClaimed: Boolean(req.user?._id),

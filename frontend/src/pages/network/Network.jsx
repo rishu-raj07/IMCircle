@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
-  Contact,
   Loader2,
   MapPin,
   MessageCircle,
-  Phone,
   PlusCircle,
   Search,
   Sparkles,
@@ -36,7 +34,7 @@ import {
   requestToJoinCircle,
   getMySentCircleJoinRequests,
 } from "../../api/circleApi";
-import { getUserSuggestions, matchContacts } from "../../api/userApi";
+import { getUserSuggestions } from "../../api/userApi";
 import { getMyProfile } from "../../api/profileApi";
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
@@ -59,10 +57,6 @@ const REVEAL_INITIAL = 5;
 const REVEAL_STEP = 20;
 const PEOPLE_REVEAL_INITIAL = 5;
 const PEOPLE_REVEAL_STEP = 10;
-const PERMISSION_STATUS_KEY = "imcircle_permission_status";
-const CONTACT_MATCHES_KEY = "imcircle_contact_matches_cache";
-const INVITE_TEXT =
-  "Join me on IMCircle, the social network for people who grow. Download/open IMCircle and connect with me.";
 
 function getId(value) {
   if (!value) return "";
@@ -143,57 +137,6 @@ function normalizeRequestList(response) {
   return Array.isArray(list) ? list : [];
 }
 
-function normalizeContactPhone(value) {
-  const digits = String(value || "").replace(/\D/g, "");
-  if (!digits) return "";
-  return digits.startsWith("91") && digits.length === 12 ? digits.slice(2) : digits;
-}
-
-function getContactName(contact) {
-  if (Array.isArray(contact?.name)) return contact.name.filter(Boolean).join(" ");
-  return contact?.name || contact?.displayName || "Contact";
-}
-
-function getContactPhones(contact) {
-  const phones = Array.isArray(contact?.tel) ? contact.tel : [];
-  return phones.map(normalizeContactPhone).filter(Boolean);
-}
-
-function getInviteLinks() {
-  const text = encodeURIComponent(INVITE_TEXT);
-  return {
-    whatsapp: `https://wa.me/?text=${text}`,
-    sms: `sms:?&body=${text}`,
-  };
-}
-
-function getCachedContactMatches() {
-  try {
-    const cached = JSON.parse(localStorage.getItem(CONTACT_MATCHES_KEY) || "[]");
-    return Array.isArray(cached) ? cached : [];
-  } catch {
-    return [];
-  }
-}
-
-function getCachedPermissionStatus() {
-  try {
-    return localStorage.getItem(PERMISSION_STATUS_KEY) || "idle";
-  } catch {
-    return "idle";
-  }
-}
-
-function setCachedContactState(status, matches = []) {
-  try {
-    localStorage.setItem(PERMISSION_STATUS_KEY, status);
-    localStorage.setItem(CONTACT_MATCHES_KEY, JSON.stringify(matches));
-    window.dispatchEvent(new Event("imcircle-permissions-updated"));
-  } catch {
-    // Local cache is only a convenience for this page.
-  }
-}
-
 function getPendingReceiverId(request) {
   return getId(request?.receiver || request?.receiverId || request?.to);
 }
@@ -222,15 +165,6 @@ export default function Network() {
 
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState("");
-  const [permissionStatus, setPermissionStatus] = useState(() => getCachedPermissionStatus());
-  const [permissionMessage, setPermissionMessage] = useState("");
-  const [contactMatches, setContactMatches] = useState(() => getCachedContactMatches());
-  const [contactSyncAttempted, setContactSyncAttempted] = useState(
-    () => getCachedPermissionStatus() === "allowed"
-  );
-  const [contactsSupported, setContactsSupported] = useState(() =>
-    typeof navigator !== "undefined" && Boolean(navigator.contacts?.select)
-  );
 
   const topRequests = useMemo(() => requests.slice(0, 3), [requests]);
 
@@ -395,24 +329,6 @@ export default function Network() {
 
   useEffect(() => {
     loadNetwork();
-  }, []);
-
-  useEffect(() => {
-    const syncCachedContacts = () => {
-      const cachedStatus = getCachedPermissionStatus();
-      const cachedMatches = getCachedContactMatches();
-      setPermissionStatus(cachedStatus);
-      setContactMatches(cachedMatches);
-      setContactSyncAttempted(cachedStatus === "allowed");
-    };
-
-    window.addEventListener("imcircle-permissions-updated", syncCachedContacts);
-    window.addEventListener("storage", syncCachedContacts);
-
-    return () => {
-      window.removeEventListener("imcircle-permissions-updated", syncCachedContacts);
-      window.removeEventListener("storage", syncCachedContacts);
-    };
   }, []);
 
   const removeRequest = (requestId) => {
@@ -636,70 +552,6 @@ export default function Network() {
       setRequestedUserIds((prev) => prev.filter((item) => item !== id));
     } finally {
       setActionId("");
-    }
-  };
-
-  const requestMediaAndContacts = async () => {
-    if (permissionStatus === "loading") return;
-
-    setPermissionStatus("loading");
-    setPermissionMessage("");
-    setContactSyncAttempted(true);
-
-    try {
-      if (navigator.mediaDevices?.getUserMedia) {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
-            video: true,
-          });
-          stream.getTracks().forEach((track) => track.stop());
-        } catch {
-          // Contacts can still be used even if media/microphone is denied.
-        }
-      }
-
-      if (!navigator.contacts?.select) {
-        setContactsSupported(false);
-        setPermissionStatus("denied");
-        setCachedContactState("denied", []);
-        setPermissionMessage("Contact permission is not available on this browser. Invite friends instead.");
-        return;
-      }
-
-      const contacts = await navigator.contacts.select(["name", "tel"], {
-        multiple: true,
-      });
-
-      const cleanContacts = (contacts || [])
-        .map((contact) => ({
-          name: getContactName(contact),
-          phones: getContactPhones(contact),
-        }))
-        .filter((contact) => contact.phones.length > 0);
-
-      if (!cleanContacts.length) {
-        setPermissionStatus("allowed");
-        setContactMatches([]);
-        setCachedContactState("allowed", []);
-        setPermissionMessage("No phone numbers were selected from contacts.");
-        return;
-      }
-
-      const res = await matchContacts(cleanContacts);
-      const matches = res?.matches || [];
-      setContactMatches(matches);
-      setPermissionStatus("allowed");
-      setCachedContactState("allowed", matches);
-      setPermissionMessage(
-        matches.length
-          ? "These contacts are already on IMCircle."
-          : "None of the selected contacts are on IMCircle yet. Invite them below."
-      );
-    } catch (error) {
-      setPermissionStatus("denied");
-      setCachedContactState("denied", []);
-      setPermissionMessage("Permission was not allowed. You can still invite people to IMCircle.");
     }
   };
 
@@ -987,23 +839,6 @@ export default function Network() {
               />
             )}
 
-            <ContactsSection
-              status={permissionStatus}
-              message={permissionMessage}
-              matches={contactMatches}
-              syncAttempted={contactSyncAttempted}
-              contactsSupported={contactsSupported}
-              requestedUserIds={requestedUserIds}
-              actionId={actionId}
-              onRequest={requestMediaAndContacts}
-              onCircle={handleCircleRequest}
-              onView={(person) => {
-                const userId = String(getId(person));
-                person?.username
-                  ? navigate(`/profile/${person.username}`)
-                  : navigate(`/profile/user/${userId}`);
-              }}
-            />
           </main>
         </div>
 
@@ -1073,142 +908,6 @@ function SectionTitle({ title, badge, action, onAction }) {
           {action}
         </button>
       )}
-    </div>
-  );
-}
-
-function ContactsSection({
-  status,
-  message,
-  matches,
-  contactsSupported,
-  syncAttempted,
-  requestedUserIds,
-  actionId,
-  onRequest,
-  onCircle,
-  onView,
-}) {
-  const showInvite = syncAttempted && status !== "loading" && matches.length === 0;
-
-  return (
-    <>
-      <SectionTitle title="Contacts" />
-      {matches.length > 0 && (
-        <>
-          <section className="space-y-3">
-          {matches.map((match) => {
-            const person = match?.user || {};
-            const userId = String(getId(person));
-            const requested = requestedUserIds.includes(userId);
-
-            return (
-              <div key={`${userId}-${match?.contactName || ""}`}>
-                <p className="mb-1 px-1 text-[10px] font-black uppercase tracking-[0.08em]" style={{ color: MUTED }}>
-                  From contacts: {match?.contactName || getName(person)}
-                </p>
-                <PeopleCard
-                  person={person}
-                  requested={requested}
-                  loading={actionId === userId}
-                  onCircle={() => onCircle(userId)}
-                  onView={() => onView(person)}
-                />
-              </div>
-            );
-          })}
-          </section>
-
-          <button
-            type="button"
-            onClick={onRequest}
-            disabled={status === "loading"}
-            className="imc-press mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-[14px] text-[11px] font-black disabled:opacity-60"
-            style={{ background: "var(--imc-surface-2)", color: INK, border: `1px solid ${LINE}` }}
-          >
-            {status === "loading" ? <Loader2 size={14} className="animate-spin" /> : <Contact size={14} />}
-            {status === "loading" ? "Syncing contacts..." : "Sync contacts again"}
-          </button>
-        </>
-      )}
-
-      {matches.length === 0 && (
-        <section
-          className="rounded-[22px] bg-[var(--imc-surface)] p-4 shadow-[0_10px_26px_rgba(18,20,28,0.035)]"
-          style={{ border: `1px solid ${LINE}` }}
-        >
-          <div className="flex gap-3">
-            <div
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-[16px]"
-              style={{ background: "rgba(67,56,202,0.1)", color: INDIGO }}
-            >
-              <Contact size={19} />
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <h2 className="text-[14px] font-black" style={{ color: INK }}>
-                Find friends from contacts
-              </h2>
-              <p className="mt-1 text-[11px] font-bold leading-4" style={{ color: MUTED }}>
-                Sync contacts to show people you already know on IMCircle.
-              </p>
-
-              {message && syncAttempted && (
-                <p className="mt-3 text-[11px] font-bold leading-4" style={{ color: MUTED }}>
-                  {message}
-                </p>
-              )}
-
-              {!contactsSupported && syncAttempted && (
-                <p className="mt-2 text-[10px] font-bold leading-4" style={{ color: MUTED }}>
-                  Contact picker is not available on this browser.
-                </p>
-              )}
-
-              <button
-                type="button"
-                onClick={onRequest}
-                disabled={status === "loading"}
-                className="imc-press mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-[14px] text-[11px] font-black disabled:opacity-60"
-                style={{ background: MARIGOLD, color: INK }}
-              >
-                {status === "loading" ? <Loader2 size={14} className="animate-spin" /> : <Contact size={14} />}
-                {status === "loading" ? "Syncing contacts..." : "Sync contacts"}
-              </button>
-            </div>
-          </div>
-
-          {showInvite && <ContactInviteActions />}
-        </section>
-      )}
-    </>
-  );
-}
-
-function ContactInviteActions() {
-  const inviteLinks = getInviteLinks();
-
-  return (
-    <div className="mt-4 grid grid-cols-2 gap-2">
-      <a
-        href={inviteLinks.whatsapp}
-        target="_blank"
-        rel="noreferrer"
-        className="imc-press flex h-10 items-center justify-center gap-2 rounded-[14px] text-[11px] font-black text-white"
-        style={{ background: "#25D366" }}
-      >
-        <MessageCircle size={14} />
-        WhatsApp
-      </a>
-
-      <a
-        href={inviteLinks.sms}
-        className="imc-press flex h-10 items-center justify-center gap-2 rounded-[14px] text-[11px] font-black"
-        style={{ background: "var(--imc-surface-2)", color: INK, border: `1px solid ${LINE}` }}
-      >
-        <Phone size={14} />
-        SMS
-      </a>
     </div>
   );
 }

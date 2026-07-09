@@ -177,26 +177,26 @@ function ProfileSetup() {
     }
   }, [searchParams]);
 
+  // Profile photo and tagline are optional — only these fields actually gate
+  // finishing setup. Missing photo/tagline no longer blocks "Continue".
   const hasBasicInfo = Boolean(
-    profileImage.trim() &&
-      fullName.trim() &&
+    fullName.trim() &&
       username.trim() &&
       dob.trim() &&
-      tagline.trim() &&
       location.city.trim() &&
       gender.trim() &&
       primaryInterest.trim()
   );
 
+  const isStudentCategory = primaryInterest.trim().toLowerCase() === "student";
+
   const progress = useMemo(() => {
     let score = 0;
 
     if (
-      profileImage.trim() &&
       fullName.trim() &&
       username.trim() &&
       dob.trim() &&
-      tagline.trim() &&
       location.city.trim() &&
       gender.trim() &&
       primaryInterest.trim()
@@ -205,34 +205,45 @@ function ProfileSetup() {
     }
 
     if (education.length > 0) score += 20;
-    if (experience.length > 0) score += 20;
+    if (isStudentCategory || experience.length > 0) score += 20;
     if (skills.length > 0) score += 20;
 
     return Math.min(score, 100);
   }, [
-    profileImage,
     fullName,
     username,
     dob,
-    tagline,
     location,
     gender,
     primaryInterest,
+    isStudentCategory,
     education.length,
     experience.length,
     skills.length,
   ]);
 
+  const missingItems = useMemo(() => {
+    const items = [];
+
+    if (!profileImage.trim()) items.push("Profile photo");
+    if (!tagline.trim()) items.push("Tagline");
+    if (education.length === 0) items.push("Education");
+    if (!isStudentCategory && experience.length === 0) items.push("Experience");
+    if (skills.length === 0) items.push("Skills");
+
+    return items;
+  }, [profileImage, tagline, education.length, experience.length, skills.length, isStudentCategory]);
+
   const progressSubtitle = useMemo(() => {
     if (!hasBasicInfo) return "Basic info required";
     if (progress === 100) return "Profile completed";
+    if (missingItems.length > 0) return `Add ${missingItems[0].toLowerCase()} to improve your profile`;
     return "Add experience, education or skills from your profile";
-  }, [progress, hasBasicInfo]);
+  }, [progress, hasBasicInfo, missingItems]);
 
   const handleSave = async () => {
     setError("");
 
-    if (!profileImage.trim()) return setError("Add a profile photo");
     if (!fullName.trim()) return setError("Name is required");
     if (!username.trim()) return setError("Username is required");
     if (!/^[a-z0-9_]{3,30}$/.test(username.trim().toLowerCase())) {
@@ -242,7 +253,6 @@ function ProfileSetup() {
     }
     if (!dob.trim()) return setError("Date of birth is required");
     if (!gender.trim()) return setError("Gender is required");
-    if (!tagline.trim()) return setError("Tagline is required");
     if (!location.city.trim()) return setError("Location is required");
     if (!primaryInterest.trim()) return setError("Pick what you're here to explore");
 
@@ -385,8 +395,8 @@ function ProfileSetup() {
         />
 
         {!profileImage && (
-          <p className="-mt-4 mb-2 text-center text-[11px] font-bold text-red-500">
-            A profile photo is required
+          <p className="-mt-4 mb-2 text-center text-[11px] font-bold text-[var(--imc-text-faint)]">
+            Profile photo is optional — you can add one later.
           </p>
         )}
 

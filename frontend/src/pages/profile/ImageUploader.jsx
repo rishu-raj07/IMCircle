@@ -1,16 +1,8 @@
 import { useRef, useState } from "react";
-import { Camera, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 
 import { uploadImage } from "../../api/uploadApi";
-
-function getInitials(name = "") {
-  return name
-    .split(" ")
-    .map((word) => word[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
+import Avatar from "../../components/common/Avatar";
 
 export default function ImageUploader({
   imageUrl,
@@ -47,18 +39,16 @@ export default function ImageUploader({
   return (
     <div className="py-8 flex justify-center">
       <div className="relative">
-        {imageUrl ? (
-          <img
-            src={imageUrl}
-            alt={name}
-            className="h-28 w-28 rounded-full object-cover shadow-xl"
-            style={{ border: "5px solid var(--imc-surface)" }}
-          />
-        ) : (
-          <div className="flex h-28 w-28 items-center justify-center rounded-full bg-[#12141C] text-3xl font-black text-[#EC9A1E] shadow-xl">
-            {getInitials(name)}
-          </div>
-        )}
+        <Avatar
+          src={imageUrl}
+          name={name}
+          size={112}
+          className="shadow-xl"
+        />
+        <div
+          className="pointer-events-none absolute inset-0 rounded-full"
+          style={{ border: "5px solid var(--imc-surface)" }}
+        />
 
         <button
           type="button"

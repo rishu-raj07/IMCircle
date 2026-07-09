@@ -26,20 +26,14 @@ export const updateProfileValidator = [
     .isISO8601()
     .withMessage("Date of birth must be a valid date"),
 
+  // Free text: onboarding's "Other" chip opens a custom input and whatever
+  // the person types becomes the saved category, so this can't be a fixed
+  // enum any more (Student is also a valid built-in chip now).
   body("primaryInterest")
     .optional()
-    .isIn([
-      "",
-      "Startup",
-      "Career",
-      "AI & Tech",
-      "Marketing",
-      "Finance",
-      "Design",
-      "Content & Creator",
-      "Other",
-    ])
-    .withMessage("Invalid interest selected"),
+    .trim()
+    .isLength({ max: 60 })
+    .withMessage("Interest must be under 60 characters"),
 
   body("company")
     .optional()

@@ -25,6 +25,21 @@ function Verify() {
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
 
+  // Resend cooldown: 60s after the first send, 60s after the first resend
+  // (the 2nd send overall), then 120s from the 3rd send onward — and it
+  // stays at 120s for every resend after that. `sendAttempt` starts at 1
+  // because getting to this page already means one OTP was just sent.
+  const [sendAttempt, setSendAttempt] = useState(1);
+  const [resendCooldown, setResendCooldown] = useState(60);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setResendCooldown((seconds) => (seconds > 0 ? seconds - 1 : 0));
+    }, 1000);
+
+    return () => clearInterval(id);
+  }, []);
+
   const otp = otpDigits.join("");
 
   useEffect(() => {
@@ -168,6 +183,10 @@ function Verify() {
   };
 
   const handleResendOtp = async () => {
+    // Guards against duplicate OTP calls from a double-tap/double-submit —
+    // the button is also visually disabled during both of these states.
+    if (resending || resendCooldown > 0) return;
+
     setError("");
     setDevOtp("");
     setOtpDigits(emptyDigits());
@@ -181,6 +200,10 @@ function Verify() {
       if (data?.devOtp) {
         setDevOtp(data.devOtp);
       }
+
+      const nextAttempt = sendAttempt + 1;
+      setSendAttempt(nextAttempt);
+      setResendCooldown(nextAttempt <= 2 ? 60 : 120);
     } catch (err) {
       setError(err.response?.data?.message || "Failed to resend OTP");
     } finally {
@@ -278,10 +301,14 @@ function Verify() {
             <button
               type="button"
               onClick={handleResendOtp}
-              disabled={resending}
+              disabled={resending || resendCooldown > 0}
               className="mt-4 w-full text-center text-[13px] font-bold text-[var(--imc-indigo-text)] disabled:opacity-60"
             >
-              {resending ? "Resending..." : "Resend OTP"}
+              {resending
+                ? "Resending..."
+                : resendCooldown > 0
+                ? `Resend OTP in ${resendCooldown}s`
+                : "Resend OTP"}
             </button>
           </form>
         </div>

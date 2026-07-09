@@ -27,8 +27,13 @@ function deriveTarget(raw) {
     : "";
   const repostId = raw?.repost ? String(raw.repost) : data.repost ? String(data.repost) : "";
   const circleId = raw?.circle ? String(raw.circle) : data.circle ? String(data.circle) : "";
+  const conversationId = raw?.conversationId
+    ? String(raw.conversationId)
+    : data.conversationId
+    ? String(data.conversationId)
+    : "";
 
-  const actorId = String(raw?.actor || raw?.sender || "");
+  const actorId = String(raw?.actor || raw?.sender || data.senderId || "");
 
   let targetType = raw?.targetType || "";
   let targetId = raw?.targetId ? String(raw.targetId) : "";
@@ -46,6 +51,9 @@ function deriveTarget(raw) {
     } else if (learningId) {
       targetType = "learning";
       targetId = learningId;
+    } else if (type === "message" || conversationId) {
+      targetType = "message";
+      targetId = conversationId;
     } else if (circleId) {
       targetType = "circle";
       targetId = circleId;
@@ -61,12 +69,19 @@ function deriveTarget(raw) {
     }
   }
 
+  // Direct-message notifications ("message") always carry a conversationId
+  // even when targetType came from raw.targetType directly (older/edge-case
+  // documents) — the frontend needs this to open the exact chat.
+  const resolvedConversationId =
+    targetType === "message" ? conversationId || targetId : conversationId;
+
   let link = raw?.link || "";
   if (!link) {
     if (targetType === "journey" && journeyId) link = `/journey/${journeyId}`;
     else if (targetType === "journey_milestone" && journeyId) link = `/journey/${journeyId}`;
     else if (targetType === "learning" && learningId) link = `/learning-view/${learningId}`;
     else if (targetType === "circle" && circleId) link = `/circles/${circleId}`;
+    else if (targetType === "message" && resolvedConversationId) link = `/chat/${resolvedConversationId}`;
     // "post" has no dedicated single-post route yet — leave link empty and
     // let the frontend fall back to a safe existing route (the recipient's
     // own profile, since these are always "commented/liked your post").
@@ -80,6 +95,8 @@ function deriveTarget(raw) {
     learningId,
     repostId,
     circleId,
+    conversationId: resolvedConversationId,
+    senderId: actorId,
     link,
   };
 }

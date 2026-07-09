@@ -1,5 +1,8 @@
 import { memo, useEffect, useRef, useState } from "react";
+import { TriangleAlert } from "lucide-react";
 import { GoogleLogin } from "@react-oauth/google";
+
+import { APP_PLATFORM, GOOGLE_CLIENT_ID } from "../../config/platform.js";
 
 // Google's Identity Services button only accepts a `width` in *pixels*
 // (see google.accounts.id.renderButton docs) — it does not understand
@@ -31,6 +34,26 @@ function GoogleAuthButton({ onSuccess, onError, text = "continue_with" }) {
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  // A missing client ID for this platform (VITE_GOOGLE_WEB_CLIENT_ID /
+  // VITE_GOOGLE_ANDROID_CLIENT_ID / VITE_GOOGLE_IOS_CLIENT_ID — see
+  // config/platform.js) must never fail silently. Rendering Google's button
+  // anyway with an empty clientId just produces a confusing failure the
+  // moment someone taps it, and hiding the button entirely looks like a
+  // missing feature rather than a config problem — so show a clear,
+  // visible error in its place instead.
+  if (!GOOGLE_CLIENT_ID) {
+    return (
+      <div
+        ref={containerRef}
+        className="flex h-[46px] w-full shrink-0 items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-3 text-center text-[11.5px] font-bold text-red-600"
+      >
+        <TriangleAlert size={15} className="shrink-0" />
+        Google Sign-In is not configured for {APP_PLATFORM} (missing VITE_GOOGLE_
+        {APP_PLATFORM.toUpperCase()}_CLIENT_ID)
+      </div>
+    );
+  }
 
   return (
     <div

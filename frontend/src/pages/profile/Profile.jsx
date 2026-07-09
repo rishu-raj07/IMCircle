@@ -4,7 +4,9 @@ import {
   ChevronDown,
   Eye,
   GraduationCap,
+  ImagePlus,
   MapPin,
+  PenLine,
   Plus,
   Shield,
   Sparkles,
@@ -223,6 +225,27 @@ function buildRepostCardPost(item) {
   };
 }
 
+function isStudentUser(user) {
+  const interest = String(user?.primaryInterest || "").trim().toLowerCase();
+  const role = String(user?.role || "").trim().toLowerCase();
+  return interest === "student" || role === "student";
+}
+
+function hasRequiredBasics(user) {
+  return Boolean(
+    user?.fullName &&
+      user?.username &&
+      user?.dob &&
+      user?.gender &&
+      user?.location?.city &&
+      user?.primaryInterest
+  );
+}
+
+// Profile photo and tagline are optional (see ProfileSetup.jsx) — they never
+// block reaching 100%. The required-onboarding-fields group earns the base
+// 40%, then Education/Experience-or-Student/Skills each add 20%. Mirrors
+// getProfileCompletionPercent in backend/src/controllers/profile.controller.js.
 function getCompletionPercent(user) {
   if (typeof user?.profileCompletionPercent === "number") {
     return Math.min(Math.max(user.profileCompletionPercent, 0), 100);
@@ -230,12 +253,7 @@ function getCompletionPercent(user) {
 
   let score = 0;
 
-  if (
-    user?.fullName &&
-    user?.headline &&
-    user?.location?.city &&
-    user?.gender
-  ) {
+  if (hasRequiredBasics(user)) {
     score += 40;
   }
 
@@ -243,7 +261,7 @@ function getCompletionPercent(user) {
     score += 20;
   }
 
-  if (Array.isArray(user?.experience) && user.experience.length > 0) {
+  if (isStudentUser(user) || (Array.isArray(user?.experience) && user.experience.length > 0)) {
     score += 20;
   }
 
@@ -252,6 +270,24 @@ function getCompletionPercent(user) {
   }
 
   return Math.min(score, 100);
+}
+
+// Mirrors getMissingProfileItems on the backend so the checklist always
+// matches the percent math above.
+function getMissingProfileItems(user) {
+  if (Array.isArray(user?.missingProfileItems)) return user.missingProfileItems;
+
+  const missing = [];
+
+  if (!user?.avatar && !user?.profileImage) missing.push("Profile photo");
+  if (!user?.headline && !user?.tagline) missing.push("Tagline");
+  if (!(Array.isArray(user?.education) && user.education.length > 0)) missing.push("Education");
+  if (!isStudentUser(user) && !(Array.isArray(user?.experience) && user.experience.length > 0)) {
+    missing.push("Experience");
+  }
+  if (!(Array.isArray(user?.skills) && user.skills.length > 0)) missing.push("Skills");
+
+  return missing;
 }
 
 function getJourneyStatus(journey = {}) {
@@ -430,8 +466,9 @@ function Profile() {
     user?.username ||
     "IMCircle Builder";
 
-  const tagline =
-    user?.headline || user?.tagline || "Building something new on IMCircle";
+  // Tagline is optional (see ProfileSetup.jsx) — show blank when missing,
+  // never a placeholder like "Building something new on IMCircle".
+  const tagline = user?.headline || user?.tagline || "";
   const interest =
     user?.primaryInterest || user?.field || user?.role || "Building in public";
 
@@ -448,6 +485,7 @@ function Profile() {
   const stats = user?.stats || {};
   const overview = analyticsDashboard?.overview || {};
   const completionPercent = getCompletionPercent(user);
+  const missingProfileItems = getMissingProfileItems(user);
   const longestStreak = builderScore?.longestStreak || 0;
   const streakTier = getStreakBadgeTier(longestStreak);
 
@@ -588,9 +626,11 @@ function Profile() {
                   </p>
                 )}
 
-                <p className="mt-1.5 line-clamp-2 text-[12.5px] font-bold leading-5 text-[var(--imc-text-muted)]">
-                  {tagline}
-                </p>
+                {tagline && (
+                  <p className="mt-1.5 line-clamp-2 text-[12.5px] font-bold leading-5 text-[var(--imc-text-muted)]">
+                    {tagline}
+                  </p>
+                )}
 
                 <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-[var(--imc-text-faint)]">
                   <MapPin size={13} />
@@ -673,12 +713,16 @@ function Profile() {
               <>
                 <ProfileCompletionCard
                   percent={completionPercent}
+                  missingItems={missingProfileItems}
                   expanded={completionOpen}
                   onClick={() => setCompletionOpen((value) => !value)}
                 />
 
                 {completionOpen && (
                   <ProfileCompletionActions
+                    missingItems={missingProfileItems}
+                    onPhoto={() => navigate("/profile-setup")}
+                    onTagline={() => navigate("/profile-setup")}
                     onExperience={() =>
                       navigate("/profile-setup?section=experience&mode=add")
                     }
@@ -1113,7 +1157,12 @@ function Profile() {
   );
 }
 
-function ProfileCompletionCard({ percent, expanded, onClick }) {
+function ProfileCompletionCard({ percent, missingItems = [], expanded, onClick }) {
+  const subtitle =
+    missingItems.length > 0
+      ? `Add ${missingItems.join(", ").toLowerCase()}.`
+      : "Complete education, experience and skills.";
+
   return (
     <button
       type="button"
@@ -1126,7 +1175,7 @@ function ProfileCompletionCard({ percent, expanded, onClick }) {
             Profile {percent}% completed
           </p>
           <p className="mt-1 text-[11px] font-bold text-[var(--imc-text-muted)]">
-            Complete education, experience and skills.
+            {subtitle}
           </p>
         </div>
 
@@ -1198,9 +1247,35 @@ function ProfileCompleteSheet({ onClose }) {
   );
 }
 
-function ProfileCompletionActions({ onExperience, onEducation, onSkill }) {
-  const actions = [
+function ProfileCompletionActions({
+  missingItems = [],
+  onPhoto,
+  onTagline,
+  onExperience,
+  onEducation,
+  onSkill,
+}) {
+  const allActions = [
     {
+      key: "Profile photo",
+      title: "Profile photo",
+      text: "Add a profile photo (optional)",
+      icon: ImagePlus,
+      color: "#EC9A1E",
+      bg: "rgba(236,154,30,0.14)",
+      onClick: onPhoto,
+    },
+    {
+      key: "Tagline",
+      title: "Tagline",
+      text: "Add a short tagline (optional)",
+      icon: PenLine,
+      color: "#059669",
+      bg: "rgba(5,150,105,0.12)",
+      onClick: onTagline,
+    },
+    {
+      key: "Experience",
       title: "Experience",
       text: "Add your role and work proof",
       icon: BriefcaseBusiness,
@@ -1209,6 +1284,7 @@ function ProfileCompletionActions({ onExperience, onEducation, onSkill }) {
       onClick: onExperience,
     },
     {
+      key: "Education",
       title: "Education",
       text: "Add college, degree or stream",
       icon: GraduationCap,
@@ -1217,6 +1293,7 @@ function ProfileCompletionActions({ onExperience, onEducation, onSkill }) {
       onClick: onEducation,
     },
     {
+      key: "Skills",
       title: "Skills",
       text: "Add your strongest skills",
       icon: Sparkles,
@@ -1225,6 +1302,8 @@ function ProfileCompletionActions({ onExperience, onEducation, onSkill }) {
       onClick: onSkill,
     },
   ];
+
+  const actions = allActions.filter((action) => missingItems.includes(action.key));
 
   return (
     <div className="mt-3 grid gap-2 rounded-[24px] border border-[var(--imc-border)] bg-[var(--imc-surface)] p-3 shadow-[0_14px_30px_rgba(15,23,42,0.06)] animate-[profileSlideDown_220ms_ease-out]">

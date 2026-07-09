@@ -11,6 +11,28 @@ function makeSlug(value = "") {
     .replace(/^-+|-+$/g, "");
 }
 
+const COLLEGE_TYPES = ["School", "College", "University", "Institute", "Other"];
+
+function normalizeWebsite(value = "") {
+  const text = String(value || "").trim();
+  if (!text) return "";
+
+  const withProtocol = /^https?:\/\//i.test(text) ? text : `https://${text}`;
+
+  try {
+    const url = new URL(withProtocol);
+    return `${url.protocol}//${url.hostname.replace(/^www\./i, "")}${url.pathname === "/" ? "" : url.pathname}`;
+  } catch {
+    return "";
+  }
+}
+
+function normalizeEmail(value = "") {
+  const text = String(value || "").trim().toLowerCase();
+  if (!text || !/^\S+@\S+\.\S+$/.test(text)) return "";
+  return text;
+}
+
 export const searchColleges = async (req, res) => {
   try {
     const q = String(req.query.q || "").trim();
@@ -85,17 +107,27 @@ export const createCollege = async (req, res) => {
       logo = {},
     } = req.body;
 
-    if (!name?.trim()) {
+    // Only name is truly required — type/website/email/logo/city/state are
+    // all optional per the "Add school/college" flow spec.
+    if (!name?.trim() || name.trim().length < 2) {
       return res.status(400).json({
         success: false,
-        message: "College name is required",
+        message: "School / college name is required",
       });
     }
 
-    const slug = makeSlug(name);
+    const safeType = COLLEGE_TYPES.includes(type) ? type : "College";
+    const safeWebsite = normalizeWebsite(website);
+    const safeEmail = normalizeEmail(email);
+    const trimmedName = name.trim().slice(0, 150);
+    const slug = makeSlug(trimmedName);
 
+    // Case-insensitive dedupe by name (and slug, which is itself a
+    // normalized/lowercased form of the name) so "IIT Delhi", "iit delhi"
+    // and "IIT   Delhi" all resolve to the same college instead of creating
+    // duplicates the next person can't find.
     let college = await College.findOne({
-      $or: [{ slug }, { name: new RegExp(`^${name.trim()}$`, "i") }],
+      $or: [{ slug }, { name: new RegExp(`^${trimmedName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }],
       isDeleted: false,
     });
 
@@ -104,14 +136,21 @@ export const createCollege = async (req, res) => {
     }
 
     college = await College.create({
-      name: name.trim(),
+      name: trimmedName,
       slug,
-      type,
-      website,
-      email,
-      location,
-      description,
-      logo,
+      type: safeType,
+      website: safeWebsite,
+      email: safeEmail,
+      location: {
+        city: String(location?.city || "").trim().slice(0, 80),
+        state: String(location?.state || "").trim().slice(0, 80),
+        country: String(location?.country || "India").trim().slice(0, 80) || "India",
+      },
+      description: String(description || "").trim().slice(0, 1000),
+      logo: {
+        url: logo?.url || "",
+        publicId: logo?.publicId || "",
+      },
       createdBy: req.user?._id || null,
       admins: req.user?._id ? [req.user._id] : [],
       isClaimed: Boolean(req.user?._id),

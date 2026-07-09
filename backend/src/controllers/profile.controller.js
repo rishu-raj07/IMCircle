@@ -81,16 +81,36 @@ const hasArrayData = (value) => {
   return Array.isArray(value) && value.length > 0;
 };
 
-const getProfileCompletion = (user) => {
-  const hasBasicInfo = Boolean(
-    user.fullName && user.headline && user.location?.city && user.gender
-  );
+// Profile photo and tagline are optional (see ProfileSetup.jsx) — they are
+// never required to reach 100%, so the required-onboarding-fields group
+// (name, username, DOB, gender, location, category) is what earns the base
+// 40%. Education/Experience-or-Student/Skills each add another 20%. A
+// "Student" category exempts Experience from the checklist entirely (it
+// stays optional/addable from the profile page, per product spec).
+const isStudentUser = (user) => {
+  const interest = String(user.primaryInterest || "").trim().toLowerCase();
+  const role = String(user.role || "").trim().toLowerCase();
+  return interest === "student" || role === "student";
+};
 
+const hasRequiredBasics = (user) => {
+  return Boolean(
+    user.fullName &&
+      user.fullName !== "BN User" &&
+      user.username &&
+      user.dob &&
+      user.gender &&
+      user.location?.city &&
+      user.primaryInterest
+  );
+};
+
+const getProfileCompletion = (user) => {
   return {
-    basicInfo: hasBasicInfo,
+    basicInfo: hasRequiredBasics(user),
     skills: hasArrayData(user.skills),
     education: hasArrayData(user.education),
-    experience: hasArrayData(user.experience),
+    experience: isStudentUser(user) || hasArrayData(user.experience),
     portfolio: hasArrayData(user.portfolio),
     verification: Boolean(user.verification?.mobile || user.verification?.email),
   };
@@ -99,7 +119,7 @@ const getProfileCompletion = (user) => {
 const getProfileCompletionPercent = (user) => {
   let percent = 0;
 
-  if (user.fullName && user.headline && user.location?.city && user.gender) {
+  if (hasRequiredBasics(user)) {
     percent += 40;
   }
 
@@ -107,7 +127,7 @@ const getProfileCompletionPercent = (user) => {
     percent += 20;
   }
 
-  if (hasArrayData(user.experience)) {
+  if (isStudentUser(user) || hasArrayData(user.experience)) {
     percent += 20;
   }
 
@@ -116,6 +136,22 @@ const getProfileCompletionPercent = (user) => {
   }
 
   return Math.min(percent, 100);
+};
+
+// Mirrors the percent math above as a named checklist so the frontend can
+// show exactly what's left ("Profile photo", "Tagline", "Education", ...)
+// instead of a bare number. Photo/tagline are always-optional nudges (they
+// don't block 100%), the rest are weighted completion items.
+const getMissingProfileItems = (user) => {
+  const missing = [];
+
+  if (!user.avatar) missing.push("Profile photo");
+  if (!user.headline) missing.push("Tagline");
+  if (!hasArrayData(user.education)) missing.push("Education");
+  if (!isStudentUser(user) && !hasArrayData(user.experience)) missing.push("Experience");
+  if (!hasArrayData(user.skills)) missing.push("Skills");
+
+  return missing;
 };
 
 const getSafeField = (field) => {
@@ -135,20 +171,11 @@ const getSafeField = (field) => {
   return allowedFields.includes(field) ? field : "Other";
 };
 
-const INTEREST_OPTIONS = [
-  "Startup",
-  "Career",
-  "AI & Tech",
-  "Marketing",
-  "Finance",
-  "Design",
-  "Content & Creator",
-  "Other",
-];
-
-const getSafeInterest = (value) => {
-  return INTEREST_OPTIONS.includes(value) ? value : "";
-};
+// The fixed onboarding chips (Startup, Career, Student, AI & Tech, ...) are
+// just suggestions from the frontend — "Other" opens a custom text field and
+// whatever the person types is the real category, so this intentionally
+// accepts any cleaned, length-capped string rather than only the fixed list.
+const getSafeInterest = (value) => cleanString(value, 60);
 
 const isValidDob = (value) => {
   if (!value) return false;
@@ -292,6 +319,8 @@ export const getProfile = async (req, res) => {
       user,
       signupRank,
       rankBadge,
+      profileCompletionPercent: getProfileCompletionPercent(user),
+      missingProfileItems: getMissingProfileItems(user),
     });
   } catch (error) {
     console.error("GET PROFILE ERROR:", error);
@@ -562,17 +591,11 @@ export const updateProfile = async (req, res) => {
     const profileCompletion = getProfileCompletion(updatedUser);
     const profileCompletionPercent = getProfileCompletionPercent(updatedUser);
 
-    const onboardingCompleted = Boolean(
-      updatedUser.avatar &&
-        updatedUser.username &&
-        updatedUser.fullName &&
-        updatedUser.fullName !== "BN User" &&
-        updatedUser.dob &&
-        updatedUser.gender &&
-        updatedUser.headline &&
-        updatedUser.location?.city &&
-        updatedUser.primaryInterest
-    );
+    // Profile photo and tagline are optional (Task: "Keep profile image and
+    // tagline optional") — onboarding is done once the fields that are still
+    // actually required are filled in. Missing photo/tagline no longer blocks
+    // a person from finishing setup or from reaching 100% completion.
+    const onboardingCompleted = hasRequiredBasics(updatedUser);
 
     await User.findByIdAndUpdate(
       req.user._id,
@@ -596,6 +619,8 @@ export const updateProfile = async (req, res) => {
       success: true,
       message: "Profile updated successfully",
       user: freshUser,
+      profileCompletionPercent,
+      missingProfileItems: getMissingProfileItems(updatedUser),
     });
   } catch (error) {
     console.error("UPDATE PROFILE ERROR:", error);
