@@ -418,12 +418,19 @@ function PostReelSlide({ post = {}, type = "post", initialMediaIndex = 0 }) {
           covers the full slide and sits above the media in DOM order, so
           it's the topmost element under the rail/caption (which come after
           it and correctly still receive their own taps). */}
+      {/* This scrim sits directly on top of the user's photo, not the app's
+          own chrome — following the app's light/dark theme here meant a
+          WHITE gradient washed out every photo in light mode ("white shade"
+          over the image). Photos are unpredictable in brightness regardless
+          of app theme, so — like RailAction below — this stays a fixed dark
+          vignette (Instagram/TikTok convention), with the caption/name text
+          below staying fixed light to match. */}
       <div
         onClick={handleMediaTap}
         className="absolute inset-0"
         style={{
           background:
-            "linear-gradient(to bottom, rgba(var(--imc-reel-scrim-rgb),0.65) 0%, rgba(var(--imc-reel-scrim-rgb),0.02) 22%, rgba(var(--imc-reel-scrim-rgb),0.02) 55%, rgba(var(--imc-reel-scrim-rgb),0.9) 100%)",
+            "linear-gradient(to bottom, rgba(18,20,28,0.65) 0%, rgba(18,20,28,0.02) 22%, rgba(18,20,28,0.02) 55%, rgba(18,20,28,0.9) 100%)",
         }}
       />
 
@@ -462,7 +469,7 @@ function PostReelSlide({ post = {}, type = "post", initialMediaIndex = 0 }) {
       <div className="absolute inset-x-3" style={{ bottom: 20 }}>
         <div className="flex items-center gap-2">
           <button type="button" onClick={openAuthorProfile} className="shrink-0 active:scale-95">
-            <div className="grid h-9 w-9 place-items-center overflow-hidden rounded-full text-[11px] font-black" style={{ background: "var(--imc-reel-chip-bg)", color: "var(--imc-text)", border: "1.5px solid var(--imc-border)" }}>
+            <div className="grid h-9 w-9 place-items-center overflow-hidden rounded-full text-[11px] font-black" style={{ background: "rgba(255,255,255,0.16)", color: "#fff", border: "1.5px solid rgba(255,255,255,0.35)" }}>
               {avatar && !avatarBroken ? (
                 <ImageLoader
                   src={avatar}
@@ -482,14 +489,14 @@ function PostReelSlide({ post = {}, type = "post", initialMediaIndex = 0 }) {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <button type="button" onClick={openAuthorProfile} className="min-w-0 active:scale-[0.98]">
-                <span className="truncate text-[13px] font-black" style={{ color: "var(--imc-text)" }}>{finalName}</span>
+                <span className="truncate text-[13px] font-black text-white">{finalName}</span>
               </button>
 
               {!isMe && !following && (
                 <button
                   onClick={handleFollow}
                   className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black active:scale-95"
-                  style={{ background: "#fff", color: INK, border: "1px solid var(--imc-border)" }}
+                  style={{ background: "#fff", color: INK }}
                 >
                   <span className="flex items-center gap-1">
                     <UserPlus size={11} />
@@ -500,8 +507,8 @@ function PostReelSlide({ post = {}, type = "post", initialMediaIndex = 0 }) {
 
               {!isMe && following && (
                 <span
-                  className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black"
-                  style={{ background: "var(--imc-reel-chip-active-bg)", color: "var(--imc-text)" }}
+                  className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black text-white"
+                  style={{ background: "rgba(255,255,255,0.18)" }}
                 >
                   <Check size={11} />
                   Following
@@ -510,13 +517,13 @@ function PostReelSlide({ post = {}, type = "post", initialMediaIndex = 0 }) {
             </div>
 
             {tagline && (
-              <p className="truncate text-[11px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>{tagline}</p>
+              <p className="truncate text-[11px] font-semibold text-white/75">{tagline}</p>
             )}
           </div>
         </div>
 
         {activeMedia && (
-          <p className="mt-2.5 line-clamp-3 text-[13px] font-semibold leading-5" style={{ color: "var(--imc-text)" }}>
+          <p className="mt-2.5 line-clamp-3 text-[13px] font-semibold leading-5 text-white">
             {finalText}
           </p>
         )}

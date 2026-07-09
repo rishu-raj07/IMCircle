@@ -684,6 +684,7 @@ function JourneyCard({ milestone = {} }) {
                 count={likes}
                 active={liked}
                 onClick={handleLike}
+                tone="like"
               />
 
               <Action
@@ -775,15 +776,34 @@ function JourneyCard({ milestone = {} }) {
   );
 }
 
-function Action({ icon: Icon, count, active, onClick }) {
+// "tone" lets the like button break from the shared indigo "active" look —
+// same reasoning/values as PostActions.jsx's Action component: a heart
+// turning indigo doesn't read as "liked" the way red universally does
+// (Instagram, Twitter/X, etc.), so `tone="like"` swaps in the danger/red
+// token for just this one action while repost/save keep the indigo style.
+function Action({ icon: Icon, count, active, onClick, tone }) {
+  const isLike = tone === "like";
+
   return (
     <button
       onClick={onClick}
       className="flex h-8 min-w-8 items-center justify-center gap-1 rounded-full border px-2 text-[11px] font-black active:scale-95"
       style={{
-        borderColor: active ? "rgba(67,56,202,0.42)" : "var(--imc-border)",
-        background: active ? "rgba(67,56,202,0.12)" : "var(--imc-surface)",
-        color: active ? "var(--imc-indigo-text)" : "var(--imc-text-muted)",
+        borderColor: active
+          ? isLike
+            ? "rgba(217,45,32,0.38)"
+            : "rgba(67,56,202,0.42)"
+          : "var(--imc-border)",
+        background: active
+          ? isLike
+            ? "rgba(217,45,32,0.12)"
+            : "rgba(67,56,202,0.12)"
+          : "var(--imc-surface)",
+        color: active
+          ? isLike
+            ? "var(--imc-danger)"
+            : "var(--imc-indigo-text)"
+          : "var(--imc-text-muted)",
       }}
     >
       <Icon size={16} fill={active ? "currentColor" : "none"} />

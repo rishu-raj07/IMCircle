@@ -421,14 +421,18 @@ function JourneyReelSlide({ milestone = {} }) {
         </button>
       )}
 
-      {/* Also doubles as the double-tap-to-like hit area — see
-          PostReelSlide.jsx for the identical pattern/reasoning. */}
+      {/* Also doubles as the double-tap-to-like hit area. This scrim sits
+          directly on the user's photo, not the app's own chrome — a
+          theme-following white gradient washed every photo out in light
+          mode, so like RailAction below, it stays a fixed dark vignette
+          (Instagram/TikTok convention) regardless of app theme, with the
+          caption/name text below staying fixed light to match. */}
       <div
         onClick={handleMediaTap}
         className="absolute inset-0"
         style={{
           background:
-            "linear-gradient(to bottom, rgba(var(--imc-reel-scrim-rgb),0.65) 0%, rgba(var(--imc-reel-scrim-rgb),0.02) 22%, rgba(var(--imc-reel-scrim-rgb),0.02) 55%, rgba(var(--imc-reel-scrim-rgb),0.9) 100%)",
+            "linear-gradient(to bottom, rgba(18,20,28,0.65) 0%, rgba(18,20,28,0.02) 22%, rgba(18,20,28,0.02) 55%, rgba(18,20,28,0.9) 100%)",
         }}
       />
 
@@ -472,7 +476,7 @@ function JourneyReelSlide({ milestone = {} }) {
           <button type="button" onClick={openCreatorProfile} className="shrink-0 active:scale-95">
             <div className="relative h-9 w-9 shrink-0 rounded-full bg-white p-[1.5px]">
               <div className="grid h-full w-full place-items-center overflow-hidden rounded-full p-[1.5px]" style={{ background: "var(--imc-bg)" }}>
-                <div className="grid h-full w-full place-items-center overflow-hidden rounded-full text-[11px] font-black" style={{ background: "var(--imc-reel-chip-bg)", color: "var(--imc-text)" }}>
+                <div className="grid h-full w-full place-items-center overflow-hidden rounded-full text-[11px] font-black" style={{ background: "rgba(255,255,255,0.16)", color: "#fff" }}>
                   {avatar && !avatarBroken ? (
                     <ImageLoader
                       src={avatar}
@@ -494,7 +498,7 @@ function JourneyReelSlide({ milestone = {} }) {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <button type="button" onClick={openCreatorProfile} className="min-w-0 active:scale-[0.98]">
-                <span className="truncate text-[13px] font-black" style={{ color: "var(--imc-text)" }}>{finalName}</span>
+                <span className="truncate text-[13px] font-black text-white">{finalName}</span>
               </button>
 
               {/* Follows the CREATOR's account — distinct from the "Follow
@@ -505,8 +509,8 @@ function JourneyReelSlide({ milestone = {} }) {
                   className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black active:scale-95"
                   style={
                     userFollowing
-                      ? { background: "var(--imc-reel-chip-active-bg)", color: "var(--imc-text)" }
-                      : { background: "#fff", color: INK, border: "1px solid var(--imc-border)" }
+                      ? { background: "rgba(255,255,255,0.18)", color: "#fff" }
+                      : { background: "#fff", color: INK }
                   }
                 >
                   <span className="flex items-center gap-1">
@@ -518,7 +522,7 @@ function JourneyReelSlide({ milestone = {} }) {
             </div>
 
             {creatorTagline && (
-              <p className="truncate text-[11px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>
+              <p className="truncate text-[11px] font-semibold text-white/75">
                 {creatorTagline}
               </p>
             )}
@@ -526,9 +530,9 @@ function JourneyReelSlide({ milestone = {} }) {
         </div>
 
         <div className="mt-2 flex items-center gap-2">
-          <span className="flex min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1" style={{ background: "var(--imc-reel-chip-bg)" }}>
+          <span className="flex min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1" style={{ background: "rgba(255,255,255,0.16)" }}>
             <Flame size={11} style={{ color: "#EC9A1E" }} />
-            <span className="truncate text-[11px] font-black" style={{ color: "var(--imc-text)" }}>
+            <span className="truncate text-[11px] font-black text-white">
               {finalTitle}
             </span>
           </span>
@@ -542,7 +546,7 @@ function JourneyReelSlide({ milestone = {} }) {
               className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black active:scale-95"
               style={
                 following
-                  ? { background: "var(--imc-reel-chip-active-bg)", color: "var(--imc-text)" }
+                  ? { background: "rgba(255,255,255,0.18)", color: "#fff" }
                   : { background: "#4338CA", color: "#fff" }
               }
             >
@@ -555,34 +559,33 @@ function JourneyReelSlide({ milestone = {} }) {
         </div>
 
         {journeyAbout && (
-          <p className="mt-1 line-clamp-2 text-[11.5px] font-semibold leading-4" style={{ color: "var(--imc-text-muted)" }}>
+          <p className="mt-1 line-clamp-2 text-[11.5px] font-semibold leading-4 text-white/75">
             {journeyAbout}
           </p>
         )}
 
-        <p className="mt-2 line-clamp-2 text-[13px] font-semibold leading-5" style={{ color: "var(--imc-text)" }}>
+        <p className="mt-2 line-clamp-2 text-[13px] font-semibold leading-5 text-white">
           {finalText}
         </p>
 
         <div className="mt-2.5 flex items-center justify-between">
-          <p className="text-[10px] font-extrabold" style={{ color: "var(--imc-text-muted)" }}>
+          <p className="text-[10px] font-extrabold text-white/75">
             Day {finalDay} of {targetDays} · {progress}%
           </p>
 
           <button
             onClick={handleViewJourney}
-            className="flex items-center gap-1 text-[11px] font-black active:scale-95"
-            style={{ color: "var(--imc-text)" }}
+            className="flex items-center gap-1 text-[11px] font-black text-white active:scale-95"
           >
             View journey
             <ArrowRight size={13} />
           </button>
         </div>
 
-        <div className="mt-1.5 h-1 overflow-hidden rounded-full" style={{ background: "var(--imc-reel-chip-bg)" }}>
+        <div className="mt-1.5 h-1 overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.25)" }}>
           <div
-            className="h-full rounded-full"
-            style={{ width: `${progress}%`, background: "var(--imc-text)" }}
+            className="h-full rounded-full bg-white"
+            style={{ width: `${progress}%` }}
           />
         </div>
       </div>
