@@ -26,6 +26,7 @@ import { getMyProfile } from "../../api/profileApi";
 import { getUserSuggestions } from "../../api/userApi";
 import { getMyBuilderScore } from "../../api/builderScoreApi";
 import { getMyJourneys } from "../../api/journeyApi";
+import { getMyLearnings } from "../../api/learningApi";
 import {
   getSentCircleRequests,
   sendCircleRequest,
@@ -302,6 +303,7 @@ function Home() {
   const [watchedLearningIds, setWatchedLearningIds] = useState(() => {
     return safeJsonParse(localStorage.getItem("watched_learning_ids")) || [];
   });
+  const [myLearning, setMyLearning] = useState(null);
 
   const pullStartYRef = useRef(null);
   const seenInSessionRef = useRef(new Set());
@@ -330,14 +332,30 @@ function Home() {
 
     const loadProfileCircle = async () => {
       try {
-        const [data, suggestionsRes, sentRequestsRes] = await Promise.all([
+        const [data, suggestionsRes, sentRequestsRes, myLearningsRes] = await Promise.all([
           getMyProfile(),
           getUserSuggestions().catch(() => ({ users: [] })),
           getSentCircleRequests().catch(() => ({ requests: [] })),
+          getMyLearnings().catch(() => ({ learnings: [] })),
         ]);
         const user = data?.user || data?.data?.user || data?.data || data;
 
         setMe(user || getLocalUser());
+
+        // The "My Learning" ring used to be derived by searching for the
+        // viewer's own post inside `items` — the home feed's own paginated,
+        // ranked list. That only works if today's learning happens to land
+        // within whatever page/rank the feed has loaded so far; once other
+        // content outranks it or it's not on the currently-loaded page, the
+        // search comes back empty and the ring falls back to "you have no
+        // learning today", sending a tap straight to /create-learning even
+        // though the post genuinely exists. /learnings/my is a dedicated,
+        // unpaginated endpoint scoped to just the viewer's own active
+        // (non-expired) learning, so it's authoritative regardless of feed
+        // ranking/pagination.
+        const myLearnings =
+          myLearningsRes?.learnings || myLearningsRes?.data?.learnings || [];
+        setMyLearning(myLearnings[0] || null);
 
         const circle =
           user?.circle ||
@@ -660,13 +678,6 @@ function Home() {
 
   const renderLearningCircles = () => {
     const myAvatar = getUserAvatar(me);
-    const myLearningItem = learningItems.find((item) => {
-      const data = getItemData(item);
-      const author = getAuthor(data);
-      return String(getId(author)) === String(getId(me));
-    });
-
-    const myLearning = getItemData(myLearningItem);
     const isMyLearningWatched = watchedLearningIds.includes(myLearning?._id);
     const circleStoryUsers = circleUsers
       .map((user) => {
