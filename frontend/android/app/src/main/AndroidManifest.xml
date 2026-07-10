@@ -9,17 +9,6 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
-    <!--
-      Required for voice notes (Chat/CreatePost) and the in-app camera/mic
-      permission bootstrap. These were never declared, which meant Android
-      could never durably grant the underlying runtime permission — every
-      getUserMedia() call in the WebView re-surfaced a permission prompt
-      instead of reusing a cached grant, which is what showed up as the
-      mic/camera prompt appearing "again and again."
-    -->
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.CAMERA" />
-
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -76,4 +65,4 @@
 
     </application>
 
-</manifest>
+</manifest>      

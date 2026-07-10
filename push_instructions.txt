@@ -1,0 +1,12 @@
+cd C:\Users\Rishu\Documents\bn
+git push
+
+ssh root@200.97.163.64
+cd /var/www/imcircle
+git checkout -- backend/package-lock.json frontend/src/api/axios.js
+git pull
+git log -1 --oneline
+cd frontend && npm install && npm run build
+sudo nginx -t && sudo systemctl reload nginx
+cd ../backend && npm install
+pm2 restart imcircle-api

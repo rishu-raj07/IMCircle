@@ -5,10 +5,33 @@ import tailwindcss from "@tailwindcss/vite";
 const pwaPackageName = "vite-plugin-pwa";
 const { VitePWA = () => null } = await import(pwaPackageName).catch(() => ({}));
 
+// Every native (Capacitor) build runs `vite build` through one of the
+// "cap:*" package.json scripts (cap:sync, cap:android, cap:ios) — npm sets
+// npm_lifecycle_event to the script name being run, so this is a reliable,
+// zero-dependency way to tell "building for the native app" apart from a
+// plain `npm run build` (real web deploy) without needing a separate env
+// file or cross-platform env-var syntax (which doesn't work the same way
+// in PowerShell vs bash anyway).
+//
+// Root-cause fix for the repeated splash/reload-loop bugs (see
+// SplashIntro.jsx, main.jsx): those were ultimately caused by a Workbox
+// service worker getting registered inside the Capacitor WebView — the app
+// already ships fully bundled in the APK, so a service worker adds nothing
+// there and only risks re-triggering the exact same reload loop every time
+// a stale one is still active from a previous build (unregistering it at
+// boot, in main.jsx, only takes effect once the CURRENT WebView session
+// ends — it can't dislodge a SW that's already controlling the running
+// page). The only fully reliable fix is for native builds to never contain
+// a service worker file at all, so there is nothing left for a stale
+// registration to ever re-arm itself from. Real web builds (`npm run
+// build`) are unaffected — this only skips the plugin for cap:* builds.
+const isCapacitorBuild = (process.env.npm_lifecycle_event || "").startsWith("cap:");
+
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    !isCapacitorBuild &&
     VitePWA({
       registerType: "autoUpdate",
       // "auto" used to inject a <script> into index.html that registers the
