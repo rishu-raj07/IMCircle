@@ -31,9 +31,26 @@ function requestKey(req) {
   return `ip:${ipKeyGenerator(req.ip)}`;
 }
 
+// 600/15min (40/min) per authenticated user sounds generous but wasn't in
+// practice: a single Home page load alone fires ~10-12 GET requests (feed,
+// profile, suggestions, streak, journeys, sent circle requests, plus
+// TopHeader/BottomNav's own badge fetches), and a plain browser refresh
+// re-fires all of them from scratch (no SPA route change to dedupe against,
+// see axios.js's GET cache). A handful of manual refreshes during normal use
+// — or anyone actively testing the app — burns through that budget in
+// minutes, well before 15 fill back up. Anonymous (`ip:`) traffic is worse:
+// Indian mobile carriers put large numbers of unrelated real users behind
+// one shared public IP (carrier-grade NAT), so that bucket represents many
+// people, not one, and needs a proportionally higher ceiling than a single
+// user's own bucket.
+function globalLimiterMax(req) {
+  if (process.env.NODE_ENV !== "production") return 10000;
+  return requestKey(req).startsWith("ip:") ? 6000 : 3000;
+}
+
 export const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === "production" ? 600 : 5000,
+  max: globalLimiterMax,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: requestKey,
@@ -76,32 +93,4 @@ export const otpVerifyLimiter = rateLimit({
   },
 });
 
-// Shared limiter for lower-frequency but still spammable/abusable write
-// actions — reporting or blocking a user, reporting content, sending a
-// support message. Generous enough for normal use, tight enough to stop a
-// script from mass-reporting/blocking or flooding the support inbox.
-export const actionLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    message: "Too many requests. Please slow down and try again later.",
-  },
-});
-
-// Chat messages are legitimately high-frequency (a real conversation can
-// easily send dozens of messages a minute), so this is deliberately much
-// looser than actionLimiter — it's only here to stop a scripted flood, not
-// to throttle normal typing/sending.
-export const messageLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 60,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    message: "You're sending messages too fast. Please slow down.",
-  },
-});
+// Shared limiter for lower-frequency but still spammable/abusable 
