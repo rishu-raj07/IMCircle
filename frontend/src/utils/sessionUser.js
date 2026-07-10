@@ -63,14 +63,27 @@ export function getSessionUser() {
 
 // A user only needs to pass through the mandatory first-login profile setup
 // once. `onboardingCompleted` is the authoritative flag set by the backend
-// once every required field (photo, username, dob, gender, tagline,
-// location, interest) is filled in. The extra fallback checks exist so
-// accounts created before this flag existed (already has headline/location/
-// gender/username filled in) aren't forced back through the flow.
+// once every required field is filled in — see hasRequiredBasics() in
+// backend/src/controllers/profile.controller.js, which this fallback must
+// mirror exactly: fullName (a real one, not the "BN User" placeholder every
+// account is created with before setup), username, dob, gender,
+// location.city, and primaryInterest. The fallback exists only for accounts
+// created before onboardingCompleted/isProfileCompleted existed as fields;
+// it previously checked headline+location.city+gender+username, which
+// doesn't match hasRequiredBasics (missing dob/primaryInterest, and
+// headline was never actually a required field) — a mismatch that could
+// let an account through this check before the backend would actually
+// consider it complete.
 export function isOnboardingComplete(user) {
   return Boolean(
     user?.onboardingCompleted ||
       user?.isProfileCompleted ||
-      (user?.headline && user?.location?.city && user?.gender && user?.username)
+      (user?.fullName &&
+        user.fullName !== "BN User" &&
+        user?.username &&
+        user?.dob &&
+        user?.gender &&
+        user?.location?.city &&
+        user?.primaryInterest)
   );
 }

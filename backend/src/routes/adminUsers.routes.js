@@ -2,6 +2,7 @@ import express from "express";
 import {
   getAdminUserDetail,
   listAdminUsers,
+  restoreAdminUser,
   softDeleteAdminUser,
   suspendAdminUser,
   unsuspendAdminUser,
@@ -14,6 +15,7 @@ router.get("/", adminProtect, listAdminUsers);
 router.get("/:userId", adminProtect, getAdminUserDetail);
 router.patch("/:userId/suspend", adminProtect, suspendAdminUser);
 router.patch("/:userId/unsuspend", adminProtect, unsuspendAdminUser);
+router.patch("/:userId/restore", adminProtect, restoreAdminUser);
 router.delete("/:userId", adminProtect, softDeleteAdminUser);
 
 export default router;

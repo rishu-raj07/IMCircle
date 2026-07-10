@@ -6,6 +6,7 @@ import {
   Mail,
   MapPin,
   Phone,
+  RotateCcw,
   Search,
   ShieldAlert,
   Trash2,
@@ -34,6 +35,12 @@ const ACTION_COPY = {
     description: "This soft-deletes the account. Their content stays but the profile is marked deleted.",
     confirmLabel: "Delete",
     danger: true,
+  },
+  restore: {
+    title: "Restore this user?",
+    description: "This un-deletes the account and gives them back access to their existing data.",
+    confirmLabel: "Restore",
+    danger: false,
   },
 };
 
@@ -109,6 +116,17 @@ function getLocation(user) {
     user?.location?.country,
   ].filter(Boolean);
   return parts.join(", ") || "Location not added";
+}
+
+// Every account is created with fullName "BN User" the moment someone
+// requests an OTP or gets OTP-verified — it only becomes their real name
+// once they finish the mandatory profile-setup form (see ProfileSetup.jsx).
+// Showing that internal placeholder as if it were their actual name in the
+// admin list reads as broken/confusing, so surface it as an explicit
+// "hasn't finished signup" state instead of fabricating a display name.
+function getDisplayName(user) {
+  if (user?.fullName && user.fullName !== "BN User") return user.fullName;
+  return null;
 }
 
 function getStatus(user) {
@@ -229,7 +247,11 @@ export default function AdminUsers() {
                 <Avatar user={user} />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-black text-[#12141C]">{user.fullName || user.username || "User"}</p>
+                    {getDisplayName(user) ? (
+                      <p className="font-black text-[#12141C]">{getDisplayName(user)}</p>
+                    ) : (
+                      <p className="italic text-[#98A2B3]">Signup incomplete</p>
+                    )}
                     <span className={`text-[11px] font-black ${statusInfo.className}`}>
                       {statusInfo.label}
                     </span>
@@ -265,11 +287,19 @@ export default function AdminUsers() {
                     </span>
                   </AdminButton>
                 )}
-                <AdminButton danger onClick={() => setPendingAction({ user, kind: "delete" })}>
-                  <span className="flex items-center gap-1.5">
-                    <Trash2 size={13} /> Delete
-                  </span>
-                </AdminButton>
+                {user.isDeleted ? (
+                  <AdminButton onClick={() => setPendingAction({ user, kind: "restore" })}>
+                    <span className="flex items-center gap-1.5">
+                      <RotateCcw size={13} /> Restore
+                    </span>
+                  </AdminButton>
+                ) : (
+                  <AdminButton danger onClick={() => setPendingAction({ user, kind: "delete" })}>
+                    <span className="flex items-center gap-1.5">
+                      <Trash2 size={13} /> Delete
+                    </span>
+                  </AdminButton>
+                )}
               </div>
             </div>
             );
@@ -322,9 +352,15 @@ function UserDetailBody({ detail }) {
           <Avatar user={user} size="lg" />
           <div className="mt-3 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="truncate text-[18px] font-black text-[#12141C]">
-                {user.fullName || user.username || "User"}
-              </p>
+              {getDisplayName(user) ? (
+                <p className="truncate text-[18px] font-black text-[#12141C]">
+                  {getDisplayName(user)}
+                </p>
+              ) : (
+                <p className="truncate text-[18px] font-black italic text-[#98A2B3]">
+                  Signup incomplete
+                </p>
+              )}
               <span className={`rounded-full bg-[#F2F4F7] px-2 py-0.5 text-[10px] font-black ${statusInfo.className}`}>
                 {statusInfo.label}
               </span>

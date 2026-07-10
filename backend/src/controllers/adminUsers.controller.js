@@ -163,3 +163,28 @@ export const softDeleteAdminUser = async (req, res) => {
     res.status(500).json({ success: false, message: "Something went wrong. Please try again." });
   }
 };
+
+export const restoreAdminUser = async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.params.userId,
+      { isDeleted: false },
+      { new: true }
+    ).select(publicFields);
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    await AnalyticsEvent.create({
+      user: user._id,
+      sessionId: `admin-${req.admin._id}`,
+      eventName: "user_restored_by_admin",
+      entityType: "user",
+      entityId: user._id,
+      metadata: { admin: req.admin._id },
+      ip: req.ip,
+    });
+
+    res.status(200).json({ success: true, user });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Something went wrong. Please try again." });
+  }
+};
