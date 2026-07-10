@@ -287,12 +287,38 @@ export const getReceivedCircleRequests = async (req, res) => {
 
 export const getSentCircleRequests = async (req, res) => {
   try {
-    const requests = await CircleRequest.find({
+    const rawRequests = await CircleRequest.find({
       sender: req.user._id,
       status: "pending",
     })
-      .populate("receiver", publicUserFields)
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const receiverIds = rawRequests.map((request) => request.receiver);
+    const receivers = await User.find({ _id: { $in: receiverIds } }).select(
+      publicUserFields
+    );
+    const receiverById = new Map(
+      receivers.map((user) => [String(user._id), user])
+    );
+
+    // populate("receiver", ...) used to be used here directly, but Mongoose
+    // silently sets the field to null if that User document can't be
+    // resolved (e.g. it was deleted between the request being sent and this
+    // being fetched) — which threw away the raw id along with it. The
+    // frontend (Home.jsx/Network.jsx's getPendingReceiverId) already falls
+    // back to a `receiverId` field for exactly this case, but this endpoint
+    // never sent one, so a request whose receiver failed to populate
+    // silently dropped out of the "already requested" list — the Suggested
+    // People card for that person would show "+Circle" again even though a
+    // pending request genuinely still existed. Resolving receivers
+    // separately (instead of via populate) means the raw id is always sent
+    // regardless of whether the receiver doc itself was found.
+    const requests = rawRequests.map((request) => ({
+      ...request,
+      receiverId: String(request.receiver),
+      receiver: receiverById.get(String(request.receiver)) || null,
+    }));
 
     return res.status(200).json({
       success: true,
