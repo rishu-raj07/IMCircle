@@ -83,26 +83,24 @@ function Signup() {
     <div className="min-h-screen bg-[var(--imc-surface-2)] flex justify-center">
       <div className="relative min-h-screen w-full max-w-[430px] bg-[var(--imc-surface-2)] px-5 pt-14 pb-8">
         <div className="text-center">
-          <img
-            src="/logo.png"
-            alt="IMCircle"
-            className="mx-auto h-14 w-auto object-contain"
-          />
+          <div className="text-[34px] font-black leading-none tracking-[-1.5px] text-[var(--imc-text)]" aria-label="IMCircle">
+            <span className="text-[var(--imc-indigo-text)]">IM</span>Circle
+          </div>
 
           <p className="mt-2 text-[12.5px] font-semibold text-[var(--imc-text-muted)]">
             Earn. Build. Grow Together.
           </p>
 
-          <div className="mx-auto mt-3 h-[130px] w-full overflow-hidden rounded-2xl">
+          <div className="mx-auto mt-3 h-[130px] w-full overflow-hidden rounded-2xl border border-[var(--imc-border)] bg-[var(--imc-surface)]">
             <img
               src={heroImg}
               alt=""
-              className="h-full w-full object-cover object-center opacity-95"
+              className="auth-hero-image h-full w-full object-cover object-center"
             />
           </div>
         </div>
 
-        <div className="mt-3 rounded-[25px] border border-[var(--imc-border)] bg-white/95 px-5 py-5 shadow-[0_18px_45px_rgba(109,40,217,0.10)]">
+        <div className="mt-3 rounded-[25px] border border-[var(--imc-border)] bg-[var(--imc-surface)] px-5 py-5 shadow-[0_18px_45px_rgba(18,20,28,0.10)]">
           <h2 className="text-[23px] font-black text-[var(--imc-text)]">
             Create account
           </h2>
@@ -116,7 +114,7 @@ function Signup() {
               Mobile Number
             </label>
 
-            <div className="mt-1.5 flex h-[46px] items-center gap-3 rounded-2xl border border-[var(--imc-border)] px-3">
+            <div className="mt-1.5 flex h-[46px] items-center gap-3 rounded-2xl border border-[var(--imc-border)] bg-[var(--imc-surface-2)] px-3">
               <Phone size={18} className="text-[var(--imc-indigo-text)]" />
               <span className="text-[13px] font-bold text-[var(--imc-text)]">+91</span>
 
@@ -127,7 +125,7 @@ function Signup() {
                   setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))
                 }
                 placeholder="Enter mobile number"
-                className="w-full bg-transparent text-[13px] font-medium outline-none placeholder:text-[var(--imc-text-muted)]"
+                className="w-full bg-transparent text-[13px] font-medium text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-muted)]"
               />
             </div>
 
@@ -153,9 +151,9 @@ function Signup() {
           </form>
 
           <div className="my-4 flex items-center gap-3">
-            <div className="h-px flex-1 bg-[rgba(18,20,28,0.08)]" />
+            <div className="h-px flex-1 bg-[var(--imc-border)]" />
             <span className="text-[12px] font-semibold text-[var(--imc-text-muted)]">or</span>
-            <div className="h-px flex-1 bg-[rgba(18,20,28,0.08)]" />
+            <div className="h-px flex-1 bg-[var(--imc-border)]" />
           </div>
 
           <GoogleAuthButton

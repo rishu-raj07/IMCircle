@@ -15,6 +15,8 @@ const publicFields =
 export const listAdminUsers = async (req, res) => {
   try {
     const { q = "", status = "all", page = 1, limit = 20 } = req.query;
+    const currentPage = Math.max(1, Number(page) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(limit) || 20));
     const filter = {};
 
     if (status === "active") {
@@ -34,13 +36,20 @@ export const listAdminUsers = async (req, res) => {
       ];
     }
 
-    const skip = (Number(page) - 1) * Number(limit);
+    const skip = (currentPage - 1) * pageSize;
     const [users, total] = await Promise.all([
-      User.find(filter).select(publicFields).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)),
+      User.find(filter).select(publicFields).sort({ createdAt: -1 }).skip(skip).limit(pageSize),
       User.countDocuments(filter),
     ]);
 
-    res.status(200).json({ success: true, users, total, page: Number(page) });
+    res.status(200).json({
+      success: true,
+      users,
+      total,
+      page: currentPage,
+      limit: pageSize,
+      pages: Math.ceil(total / pageSize),
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: "Something went wrong. Please try again." });
   }

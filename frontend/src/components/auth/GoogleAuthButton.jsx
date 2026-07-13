@@ -101,7 +101,7 @@ function NativeGoogleButton({ onSuccess, onError, text }) {
       type="button"
       onClick={handlePress}
       disabled={loading}
-      className="flex h-[46px] w-full shrink-0 items-center justify-center gap-2 rounded-2xl border border-[var(--imc-border)] bg-white px-3 text-[14px] font-semibold text-[var(--imc-text)] disabled:opacity-60"
+      className="flex h-[46px] w-full shrink-0 items-center justify-center gap-2 rounded-2xl border border-[var(--imc-border)] bg-[var(--imc-surface-2)] px-3 text-[14px] font-semibold text-[var(--imc-text)] disabled:opacity-60"
     >
       <FcGoogle size={18} className="shrink-0" />
       {loading

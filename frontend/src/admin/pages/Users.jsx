@@ -8,7 +8,6 @@ import {
   Phone,
   RotateCcw,
   Search,
-  ShieldAlert,
   Trash2,
   UserRound,
 } from "lucide-react";
@@ -16,6 +15,8 @@ import adminApi from "../api/adminApi";
 import { AdminButton, AdminEmpty, AdminError, AdminLoading } from "../components/AdminStates";
 import Drawer from "../components/Drawer";
 import ConfirmDialog from "../components/ConfirmDialog";
+
+const USERS_PAGE_SIZE = 50;
 
 const ACTION_COPY = {
   suspend: {
@@ -157,7 +158,10 @@ export default function AdminUsers() {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
 
   const [pendingAction, setPendingAction] = useState(null); // { user, kind }
   const [actionLoading, setActionLoading] = useState(false);
@@ -166,21 +170,29 @@ export default function AdminUsers() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async ({ pageNumber = 1, append = false } = {}) => {
+    if (append) setLoadingMore(true);
+    else setLoading(true);
     setError("");
     try {
-      const res = await adminApi.get("/admin/users", { params: { q, status } });
-      setUsers(res.data.users || []);
+      const res = await adminApi.get("/admin/users", {
+        params: { q, status, page: pageNumber, limit: USERS_PAGE_SIZE },
+      });
+      const nextUsers = res.data.users || [];
+      setUsers((current) => (append ? [...current, ...nextUsers] : nextUsers));
+      setPage(res.data.page || pageNumber);
+      setTotal(res.data.total || 0);
     } catch (err) {
       setError(err.response?.data?.message || "Could not load users");
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   }, [q, status]);
 
   useEffect(() => {
-    load();
+    const request = window.setTimeout(() => load({ pageNumber: 1 }), 0);
+    return () => window.clearTimeout(request);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
@@ -193,7 +205,7 @@ export default function AdminUsers() {
       if (kind === "delete") await adminApi.delete(`/admin/users/${user._id}`);
       else await adminApi.patch(`/admin/users/${user._id}/${kind}`);
       setPendingAction(null);
-      await load();
+      await load({ pageNumber: 1 });
     } catch (err) {
       setError(err.response?.data?.message || "That action failed. Try again.");
       setPendingAction(null);
@@ -222,7 +234,13 @@ export default function AdminUsers() {
 
   return (
     <div className="space-y-4">
-      <AdminToolbar q={q} setQ={setQ} onSearch={load} status={status} setStatus={setStatus} />
+      <AdminToolbar
+        q={q}
+        setQ={setQ}
+        onSearch={() => load({ pageNumber: 1 })}
+        status={status}
+        setStatus={setStatus}
+      />
 
       {loading ? (
         <AdminLoading />
@@ -304,6 +322,21 @@ export default function AdminUsers() {
             </div>
             );
           })}
+          <div className="flex flex-col items-center justify-between gap-3 border-t border-[#EAECF0] px-4 py-4 sm:flex-row">
+            <p className="text-[12px] font-bold text-[#667085]">
+              Showing {users.length} of {total} user{total === 1 ? "" : "s"}
+            </p>
+            {users.length < total && (
+              <button
+                type="button"
+                onClick={() => load({ pageNumber: page + 1, append: true })}
+                disabled={loadingMore}
+                className="h-10 rounded-2xl border border-[#D0D5DD] bg-white px-5 text-[12px] font-black text-[#344054] disabled:opacity-60"
+              >
+                {loadingMore ? "Loading..." : "Load more users"}
+              </button>
+            )}
+          </div>
         </div>
       )}
 

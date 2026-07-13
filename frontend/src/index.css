@@ -148,6 +148,16 @@ html[data-theme="dark"] {
   color-scheme: dark;
 }
 
+.auth-hero-image {
+  opacity: 0.95;
+  transition: filter 0.2s ease, opacity 0.2s ease;
+}
+
+[data-theme="dark"] .auth-hero-image {
+  filter: brightness(0.62) saturate(0.85);
+  opacity: 0.9;
+}
+
 body {
   margin: 0;
   font-family: var(--font-sans);

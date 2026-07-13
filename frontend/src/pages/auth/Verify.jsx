@@ -222,11 +222,9 @@ function Verify() {
         </Link>
 
         <div className="flex items-center justify-center">
-          <img
-            src="/logo.png"
-            alt="IMCircle"
-            className="h-9 w-auto object-contain"
-          />
+          <div className="text-[25px] font-black leading-none tracking-[-1px] text-[var(--imc-text)]" aria-label="IMCircle">
+            <span className="text-[var(--imc-indigo-text)]">IM</span>Circle
+          </div>
         </div>
 
         <div className="mt-6 text-center">
@@ -238,7 +236,7 @@ function Verify() {
           </p>
         </div>
 
-        <div className="mt-6 rounded-[25px] border border-[var(--imc-border)] bg-white/95 px-5 py-5 shadow-[0_18px_45px_rgba(109,40,217,0.10)]">
+        <div className="mt-6 rounded-[25px] border border-[var(--imc-border)] bg-[var(--imc-surface)] px-5 py-5 shadow-[0_18px_45px_rgba(18,20,28,0.10)]">
           <form onSubmit={handleVerifySubmit}>
             <div className="flex items-center gap-3 rounded-2xl bg-[var(--imc-surface-2)] p-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--imc-surface)]">
@@ -273,7 +271,7 @@ function Verify() {
                   onKeyDown={(e) => handleDigitKeyDown(index, e)}
                   onPaste={handleOtpPaste}
                   disabled={loading}
-                  className="h-[54px] w-[15%] rounded-2xl border border-[var(--imc-border)] bg-transparent text-center text-[22px] font-black text-[var(--imc-text)] outline-none focus:border-[var(--imc-indigo-text)] disabled:opacity-60"
+                  className="h-[54px] w-[15%] rounded-2xl border border-[var(--imc-border)] bg-[var(--imc-surface-2)] text-center text-[22px] font-black text-[var(--imc-text)] outline-none focus:border-[var(--imc-indigo-text)] disabled:opacity-60"
                 />
               ))}
             </div>
