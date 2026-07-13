@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { getMyProfile, updateProfile } from "../../api/profileApi";
@@ -92,6 +92,8 @@ function ProfileSetup() {
   const [editingIndex, setEditingIndex] = useState(null);
 
   const [initialLoading, setInitialLoading] = useState(true);
+  const [setupStep, setSetupStep] = useState(1);
+  const [isEditingExisting, setIsEditingExisting] = useState(false);
 
   const [profileImage, setProfileImage] = useState("");
   const [fullName, setFullName] = useState("");
@@ -128,6 +130,13 @@ function ProfileSetup() {
       try {
         const data = await getMyProfile();
         const user = data?.user || data?.data?.user || data?.data || data;
+
+        setIsEditingExisting(
+          Boolean(
+            user?.onboardingCompleted ||
+              (user?.username && user?.dob && user?.location?.city && user?.primaryInterest)
+          )
+        );
 
         setProfileImage(getImageUrl(user));
         setFullName(
@@ -248,6 +257,45 @@ function ProfileSetup() {
     return "Add experience, education or skills from your profile";
   }, [progress, hasBasicInfo, missingItems]);
 
+  const handleNextStep = () => {
+    setError("");
+
+    if (setupStep === 1) {
+      if (!fullName.trim()) {
+        setError("Add your name before continuing");
+        return;
+      }
+    }
+
+    if (setupStep === 2) {
+      if (!username.trim()) {
+        setError("Choose a username before continuing");
+        return;
+      }
+      if (!/^[a-z0-9_]{3,30}$/.test(username.trim().toLowerCase())) {
+        setError("Username must be 3-30 letters, numbers, or underscores");
+        return;
+      }
+      if (!dob.trim()) {
+        setError("Add your date of birth before continuing");
+        return;
+      }
+      if (!gender.trim()) {
+        setError("Select your gender before continuing");
+        return;
+      }
+    }
+
+    setSetupStep((current) => Math.min(3, current + 1));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handlePreviousStep = () => {
+    setError("");
+    setSetupStep((current) => Math.max(1, current - 1));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const handleSave = async () => {
     setError("");
 
@@ -261,7 +309,9 @@ function ProfileSetup() {
     if (!dob.trim()) return setError("Date of birth is required");
     if (!gender.trim()) return setError("Gender is required");
     if (!location.city.trim()) return setError("Location is required");
-    if (!primaryInterest.trim()) return setError("Pick what you're here to explore");
+    if (!primaryInterest.trim()) {
+      return setError("Select an interest, or write your interest in the Other field");
+    }
 
     try {
       setLoading(true);
@@ -388,26 +438,35 @@ function ProfileSetup() {
     <div className="min-h-screen bg-[var(--imc-bg)]">
       <div className="mx-auto min-h-screen w-full max-w-[430px] bg-[var(--imc-bg)] px-5 pb-8">
         <ProgressHeader
-          title="Complete Profile"
-          subtitle={progressSubtitle}
-          progress={progress}
-          onSave={handleSave}
-          loading={loading}
+          title={isEditingExisting ? "Edit Profile" : "Complete Profile"}
+          subtitle={
+            setupStep === 1
+              ? "Start with what people will see"
+              : setupStep === 2
+              ? "Choose your unique IMCircle identity"
+              : "Personalize your IMCircle experience"
+          }
+          progress={(setupStep / 3) * 100}
+          step={setupStep}
+          totalSteps={3}
         />
 
-        <ImageUploader
-          name={fullName}
-          imageUrl={profileImage}
-          onChange={setProfileImage}
-        />
+        {setupStep === 1 && (
+          <ImageUploader
+            name={fullName}
+            imageUrl={profileImage}
+            onChange={setProfileImage}
+          />
+        )}
 
-        {!profileImage && (
-          <p className="-mt-4 mb-2 text-center text-[11px] font-bold text-[var(--imc-text-faint)]">
+        {setupStep === 1 && !profileImage && (
+          <p className="mt-2 text-center text-[11px] font-medium text-[var(--imc-text-faint)]">
             Profile photo is optional — you can add one later.
           </p>
         )}
 
         <BasicInfo
+          step={setupStep}
           fullName={fullName}
           setFullName={setFullName}
           username={username}
@@ -434,15 +493,33 @@ function ProfileSetup() {
           </div>
         )}
 
-        <div className="sticky bottom-0 mt-8 bg-[var(--imc-bg)] pb-4 pt-3">
+        <div className="sticky bottom-0 z-20 -mx-2 mt-8 flex gap-2.5 border-t border-[var(--imc-border)] bg-[color:var(--imc-bg)] px-2 pb-[max(16px,env(safe-area-inset-bottom))] pt-3">
+          {setupStep > 1 && (
+            <button
+              type="button"
+              onClick={handlePreviousStep}
+              disabled={loading}
+              className="flex h-[50px] min-w-[108px] items-center justify-center gap-1.5 rounded-[16px] border border-[var(--imc-border)] bg-[var(--imc-surface)] text-[13px] font-black text-[var(--imc-text)] active:scale-[0.98] disabled:opacity-60"
+            >
+              <ChevronLeft size={17} />
+              Back
+            </button>
+          )}
+
           <button
             type="button"
-            onClick={handleSave}
+            onClick={setupStep === 3 ? handleSave : handleNextStep}
             disabled={loading}
-            className="flex h-[54px] w-full items-center justify-center gap-2 rounded-full bg-[var(--imc-surface-strong)] text-[16px] font-black text-[var(--imc-on-surface-strong)] active:scale-[0.98] disabled:opacity-60"
+            className="flex h-[50px] flex-1 items-center justify-center gap-2 rounded-[16px] border border-[rgba(67,56,202,0.24)] bg-[rgba(67,56,202,0.10)] text-[14px] font-bold text-[var(--imc-indigo-text)] shadow-[0_6px_18px_rgba(67,56,202,0.08)] transition active:scale-[0.98] active:bg-[rgba(67,56,202,0.16)] disabled:opacity-60"
           >
-            {loading ? "Saving..." : progress === 100 ? "Complete Profile" : "Continue"}
-            {!loading && <Check size={19} className="text-[#EC9A1E]" />}
+            {loading
+              ? "Saving..."
+              : setupStep === 3
+              ? isEditingExisting
+                ? "Save Changes"
+                : "Complete Profile"
+              : "Next"}
+            {!loading && (setupStep === 3 ? <Check size={17} /> : <ChevronRight size={17} />)}
           </button>
         </div>
       </div>

@@ -1,6 +1,5 @@
 import { ArrowLeft, Ban, Flag, Mail, MessageCircle, Scale, ShieldCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import BottomNav from "../../components/navigation/BottomNav";
 import { useSEO } from "../../hooks/useSEO";
 
 // Google Play's Child Safety Standards policy (required for social apps)
@@ -60,7 +59,7 @@ function ChildSafety() {
 
   return (
     <div className="min-h-screen bg-[var(--imc-bg)]">
-      <div className="mx-auto min-h-screen max-w-[430px] bg-[var(--imc-bg)] pb-28">
+      <div className="mx-auto min-h-screen max-w-[430px] bg-[var(--imc-bg)] pb-8">
         <div className="sticky top-0 z-30 border-b border-[var(--imc-border)] bg-[var(--imc-bg)]/95 px-5 py-4 backdrop-blur-xl">
           <div className="flex items-center gap-3">
             <button
@@ -161,10 +160,10 @@ function ChildSafety() {
             </p>
 
             <a
-              href="mailto:rishurajmld@gmail.com"
+              href="mailto:rishu@imcircle.com"
               className="mt-3 inline-block text-[13px] font-black text-[var(--imc-indigo-text)]"
             >
-              rishurajmld@gmail.com
+              rishu@imcircle.com
             </a>
           </div>
 
@@ -173,7 +172,6 @@ function ChildSafety() {
           </p>
         </div>
 
-        <BottomNav />
       </div>
     </div>
   );

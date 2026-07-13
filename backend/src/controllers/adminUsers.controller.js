@@ -3,6 +3,10 @@ import AnalyticsEvent from "../models/AnalyticsEvent.js";
 import Post from "../models/Post.js";
 import Learning from "../models/Learning.js";
 import Journey from "../models/Journey.js";
+import {
+  hideContentForDeletedAccount,
+  restoreContentForDeletedAccount,
+} from "../utils/accountDeletion.js";
 
 const publicFields =
   "fullName username mobile email avatar profilePicture profileImage photo photoURL picture coverImage headline bio role field primaryInterest dob gender location stats builderScore journeyStats profileCompletion profileCompletionPercent preferences verification isProfileCompleted onboardingCompleted isBlocked isDeleted createdAt updatedAt lastActiveAt usernameLastChangedAt";
@@ -141,6 +145,8 @@ export const unsuspendAdminUser = async (req, res) => {
 
 export const softDeleteAdminUser = async (req, res) => {
   try {
+    await hideContentForDeletedAccount(req.params.userId);
+
     const user = await User.findByIdAndUpdate(
       req.params.userId,
       { isDeleted: true },
@@ -166,6 +172,8 @@ export const softDeleteAdminUser = async (req, res) => {
 
 export const restoreAdminUser = async (req, res) => {
   try {
+    await restoreContentForDeletedAccount(req.params.userId);
+
     const user = await User.findByIdAndUpdate(
       req.params.userId,
       { isDeleted: false },

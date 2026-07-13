@@ -24,6 +24,8 @@ import {
   reportUser,
   registerPushToken,
   removePushToken,
+  getUserPosts,
+  getUserReposts,
 } from "../controllers/user.controller.js";
 
 import { protect } from "../middleware/auth.middleware.js";
@@ -56,6 +58,13 @@ router.get("/id/:userId", protect, getUserById);
 router.get("/:userId/followers", protect, getFollowersById);
 router.get("/:userId/following", protect, getFollowingById);
 router.get("/:userId/circle", protect, getCircleById);
+
+// Profile "Posts"/"Reposts" tabs — scoped strictly to :userId (the profile
+// being viewed), never to the logged-in viewer. See getUserPosts/
+// getUserReposts in user.controller.js for why this replaces the old
+// approach of re-filtering the personalized /feed response.
+router.get("/:userId/posts", protect, getUserPosts);
+router.get("/:userId/reposts", protect, getUserReposts);
 
 router.patch("/:userId/follow", protect, followUser);
 router.patch("/:userId/unfollow", protect, unfollowUser);

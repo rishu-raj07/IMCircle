@@ -17,3 +17,8 @@ export const getCollegeBySlug = async (slug) => {
   const res = await api.get(`/colleges/${slug}`);
   return res.data?.college || res.data?.data || res.data;
 };
+
+export const verifyCollegeWebsite = async (website) => {
+  const res = await api.post("/colleges/verify-domain", { website });
+  return res.data?.verification;
+};

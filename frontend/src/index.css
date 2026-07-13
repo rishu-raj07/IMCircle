@@ -67,6 +67,8 @@
   --imc-text-faint: #9aa1ae;
   --imc-border: rgba(18, 20, 28, 0.08);
   --imc-indigo-text: #4338ca;
+  --imc-action-soft: rgba(67, 56, 202, 0.07);
+  --imc-action-border: rgba(67, 56, 202, 0.2);
 
   /* Scoped to the Learning reader only (Learning View redesign) — a warm
      cream surface distinct from the neutral --imc-bg used app-wide.
@@ -100,7 +102,9 @@
   --imc-text-muted: #a7acb4;
   --imc-text-faint: #868b93;
   --imc-border: rgba(255, 255, 255, 0.12);
-  --imc-indigo-text: #9b90ee;
+  --imc-indigo-text: #f2f1ec;
+  --imc-action-soft: rgba(255, 255, 255, 0.08);
+  --imc-action-border: rgba(255, 255, 255, 0.18);
 
   --imc-reel-scrim-rgb: 18, 20, 28;
   --imc-reel-chip-bg: rgba(255, 255, 255, 0.14);
@@ -155,7 +159,7 @@ body {
      (BottomNav, FullScreenReel, modals, SplashIntro) are unaffected by
      ancestor padding, so this only ever shifts normal in-flow page content —
      exactly what needs to move. */
-  padding-top: env(safe-area-inset-top);
+  padding-top: calc(env(safe-area-inset-top, 0px) + 8px);
 }
 
 button,

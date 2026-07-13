@@ -1,3 +1,5 @@
+import QRCode from "qrcode";
+
 // Client-side branded share-card generator.
 //
 // Renders a 1080x1350 PNG entirely in the browser (no server round-trip,
@@ -212,13 +214,15 @@ async function drawAvatar(ctx, avatarUrl, initial, cx, cy, radius) {
     const h = img.height * scale;
     ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h);
   } else {
-    ctx.fillStyle = INDIGO;
+    ctx.fillStyle = "#EEF2FF";
     ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
-    ctx.fillStyle = MARIGOLD;
-    ctx.font = `700 ${Math.round(radius)}px Fraunces, Georgia, serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText((initial || "I").toUpperCase(), cx, cy + radius * 0.08);
+    ctx.fillStyle = INDIGO;
+    ctx.beginPath();
+    ctx.arc(cx, cy - radius * 0.22, radius * 0.27, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx, cy + radius * 0.72, radius * 0.58, Math.PI, Math.PI * 2);
+    ctx.fill();
   }
 
   ctx.restore();
@@ -230,97 +234,217 @@ async function drawAvatar(ctx, avatarUrl, initial, cx, cy, radius) {
   ctx.stroke();
 }
 
-async function renderStreakCard(ctx, { name, avatarUrl, streak, level, longestStreak, interest }) {
+async function renderStreakCard(ctx, { name, username, avatarUrl, streak, level, longestStreak, interest, headline, location, tagline }) {
   drawBackground(ctx);
   drawWordmark(ctx, 118, 145);
 
-  ctx.textAlign = "center";
+  ctx.textAlign = "right";
+  ctx.font = "700 20px Inter, sans-serif";
+  ctx.fillStyle = "#667085";
+  ctx.fillText(tagline || "Your circle shapes your future.", 945, 142);
 
-  roundRect(ctx, 250, 225, 580, 78, 39);
-  ctx.fillStyle = "rgba(67,56,202,0.10)";
+  const heroGradient = ctx.createLinearGradient(110, 215, 970, 780);
+  heroGradient.addColorStop(0, "#111827");
+  heroGradient.addColorStop(0.55, INDIGO_DARK);
+  heroGradient.addColorStop(1, VIOLET);
+  roundRect(ctx, 105, 210, 870, 560, 54);
+  ctx.fillStyle = heroGradient;
   ctx.fill();
-  ctx.font = "900 26px Inter, sans-serif";
-  ctx.fillStyle = INDIGO;
-  ctx.fillText("BUILDER STREAK", CARD_WIDTH / 2, 275);
 
-  drawFlame(ctx, CARD_WIDTH / 2, 465, 1.2);
+  roundRect(ctx, 150, 250, 360, 58, 29);
+  ctx.fillStyle = "rgba(255,255,255,0.12)";
+  ctx.fill();
+  ctx.textAlign = "center";
+  ctx.font = "900 21px Inter, sans-serif";
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillText("CONSISTENCY IN MOTION", 330, 287);
 
-  const statGradient = ctx.createLinearGradient(300, 600, 780, 860);
-  statGradient.addColorStop(0, INDIGO);
-  statGradient.addColorStop(1, VIOLET);
-  ctx.font = "900 300px Inter, sans-serif";
-  ctx.fillStyle = statGradient;
-  ctx.fillText(String(streak), CARD_WIDTH / 2, 760);
+  drawFlame(ctx, 270, 470, 0.72);
 
-  ctx.font = "900 44px Inter, sans-serif";
-  ctx.fillStyle = MARIGOLD;
-  ctx.fillText(streak === 1 ? "DAY STREAK" : "DAYS STREAK", CARD_WIDTH / 2, 830);
+  ctx.textAlign = "left";
+  ctx.font = "900 250px Inter, sans-serif";
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillText(String(streak), 410, 565);
+  ctx.font = "900 35px Inter, sans-serif";
+  ctx.fillStyle = "#FBBF24";
+  ctx.fillText(streak === 1 ? "DAY STREAK" : "DAYS STREAK", 422, 625);
+  ctx.font = "700 23px Inter, sans-serif";
+  ctx.fillStyle = "rgba(255,255,255,0.74)";
+  ctx.fillText("Showing up is the real superpower.", 422, 670);
 
-  ctx.font = "800 30px Inter, sans-serif";
-  ctx.fillStyle = "#475467";
-  ctx.fillText(interest || level || "Building in public", CARD_WIDTH / 2, 890);
+  [[150, 355], [525, 400]].forEach(([x, width]) => {
+    roundRect(ctx, x, 700, width, 108, 28);
+    ctx.fillStyle = "rgba(255,255,255,0.10)";
+    ctx.fill();
+  });
+  ctx.textAlign = "center";
+  ctx.font = "900 35px Inter, sans-serif";
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillText(String(longestStreak || streak), 328, 747);
+  ctx.fillText(level || "Builder", 725, 747);
+  ctx.font = "800 17px Inter, sans-serif";
+  ctx.fillStyle = "rgba(255,255,255,0.64)";
+  ctx.fillText("PERSONAL BEST", 328, 782);
+  ctx.fillText("BUILDER LEVEL", 725, 782);
 
-  roundRect(ctx, 150, 990, 780, 210, 46);
-  ctx.fillStyle = CARD;
+  roundRect(ctx, 105, 825, 870, 390, 48);
+  ctx.fillStyle = "#FFFFFF";
   ctx.fill();
   ctx.strokeStyle = "rgba(67,56,202,0.10)";
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  const stripY = 1095;
-  await drawAvatar(ctx, avatarUrl, name?.charAt(0), 265, stripY, 64);
+  await drawAvatar(ctx, avatarUrl, "", 225, 945, 76);
 
   ctx.textAlign = "left";
   ctx.font = "900 42px Inter, sans-serif";
   ctx.fillStyle = INK;
-  ctx.fillText(name || "IMCircle Builder", 360, stripY - 8);
+  ctx.fillText((name || "IMCircle Builder").slice(0, 25), 330, 925);
 
   ctx.font = "800 25px Inter, sans-serif";
-  ctx.fillStyle = "#667085";
+  ctx.fillStyle = INDIGO;
   const sub = longestStreak && longestStreak > streak
     ? `${level || "Builder"} • Best streak ${longestStreak} days`
     : `${level || "Builder"} on IMCircle`;
-  ctx.fillText(sub, 360, stripY + 34);
+  ctx.fillText(username ? `@${username}` : "IMCircle member", 330, 965);
+  ctx.font = "700 21px Inter, sans-serif";
+  ctx.fillStyle = "#667085";
+  ctx.fillText((headline || sub || "Building in public").slice(0, 48), 330, 1002);
+
+  ctx.beginPath();
+  ctx.moveTo(155, 1055);
+  ctx.lineTo(925, 1055);
+  ctx.strokeStyle = "rgba(18,20,28,0.08)";
+  ctx.stroke();
+
+  [["FOCUS", interest || "Building in public", 165], ["LOCATION", location || "India", 555]].forEach(([label, value, x]) => {
+    ctx.textAlign = "left";
+    ctx.font = "900 17px Inter, sans-serif";
+    ctx.fillStyle = "#98A2B3";
+    ctx.fillText(label, x, 1100);
+    ctx.font = "800 23px Inter, sans-serif";
+    ctx.fillStyle = INK;
+    ctx.fillText(String(value).slice(0, 27), x, 1140);
+  });
 
   ctx.textAlign = "center";
-  ctx.font = "800 23px Inter, sans-serif";
+  ctx.font = "800 21px Inter, sans-serif";
+  ctx.fillStyle = INDIGO;
+  ctx.fillText("#BuildInPublic  •  IMCircle", CARD_WIDTH / 2, 1268);
+  ctx.font = "700 17px Inter, sans-serif";
   ctx.fillStyle = "#98A2B3";
-  ctx.fillText("Build in public on IMCircle", CARD_WIDTH / 2, CARD_HEIGHT - 92);
+  ctx.fillText("Share the work. Grow with your circle.", CARD_WIDTH / 2, 1305);
 }
 
-async function renderProfileCard(ctx, { name, headline, avatarUrl, streak, circleCount, interest }) {
+async function renderProfileCard(ctx, { name, username, headline, avatarUrl, interest, location, profileUrl, logoUrl = "/logo.png" }) {
   drawBackground(ctx);
-  drawWordmark(ctx, 118, 145);
+  const brandLogo = await loadImage(logoUrl);
+  if (brandLogo) {
+    const logoScale = Math.min(310 / brandLogo.width, 66 / brandLogo.height);
+    const logoWidth = brandLogo.width * logoScale;
+    const logoHeight = brandLogo.height * logoScale;
+    ctx.drawImage(brandLogo, 112, 98 + (66 - logoHeight) / 2, logoWidth, logoHeight);
+  } else {
+    drawWordmark(ctx, 118, 145);
+  }
 
-  roundRect(ctx, 165, 235, 750, 820, 58);
+  ctx.textAlign = "left";
+  ctx.font = "700 20px Inter, sans-serif";
+  ctx.fillStyle = "#667085";
+  ctx.fillText("Your circle shapes your future.", 112, 188);
+
+  roundRect(ctx, 125, 205, 830, 1040, 58);
   ctx.fillStyle = CARD;
   ctx.fill();
   ctx.strokeStyle = "rgba(67,56,202,0.10)";
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  await drawAvatar(ctx, avatarUrl, name?.charAt(0), CARD_WIDTH / 2, 430, 132);
+  await drawAvatar(ctx, avatarUrl, name?.charAt(0), CARD_WIDTH / 2, 350, 105);
 
   ctx.textAlign = "center";
-  ctx.font = "900 58px Inter, sans-serif";
+  ctx.font = "900 52px Inter, sans-serif";
   ctx.fillStyle = INK;
-  ctx.fillText(name || "IMCircle Builder", CARD_WIDTH / 2, 620);
+  ctx.fillText(name || "IMCircle Builder", CARD_WIDTH / 2, 505);
 
-  ctx.font = "800 28px Inter, sans-serif";
+  ctx.font = "800 25px Inter, sans-serif";
   ctx.fillStyle = INDIGO;
-  ctx.fillText(interest || "IMCircle builder", CARD_WIDTH / 2, 668);
+  ctx.fillText(username ? `@${username}` : "IMCircle member", CARD_WIDTH / 2, 550);
 
-  ctx.font = "700 30px Inter, sans-serif";
+  ctx.font = "800 25px Inter, sans-serif";
+  ctx.fillStyle = "#475467";
+  ctx.fillText(interest || "Building in public", CARD_WIDTH / 2, 600);
+
+  ctx.font = "700 22px Inter, sans-serif";
   ctx.fillStyle = "#667085";
-  wrapText(ctx, headline || "Building something new on IMCircle", CARD_WIDTH / 2, 725, 640, 42);
+  ctx.fillText(location || "India", CARD_WIDTH / 2, 640);
 
-  const pillY = 910;
-  drawStatPill(ctx, CARD_WIDTH / 2 - 210, pillY, String(streak || 0), "day streak");
-  drawStatPill(ctx, CARD_WIDTH / 2 + 210, pillY, String(circleCount || 0), "in circle");
+  if (headline) {
+    ctx.font = "800 22px Inter, sans-serif";
+    ctx.fillStyle = INDIGO_DARK;
+    wrapText(ctx, headline, CARD_WIDTH / 2, 682, 650, 32);
+  }
 
-  ctx.font = "800 23px Inter, sans-serif";
+  let qrImage = null;
+  if (profileUrl) {
+    try {
+      const qrDataUrl = await QRCode.toDataURL(profileUrl, {
+        width: 300,
+        margin: 1,
+        errorCorrectionLevel: "H",
+        color: { dark: INK, light: "#FFFFFF" },
+      });
+      qrImage = await loadImage(qrDataUrl);
+    } catch {
+      qrImage = null;
+    }
+  }
+
+  roundRect(ctx, 350, 750, 380, 380, 36);
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(67,56,202,0.18)";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  if (qrImage) {
+    ctx.drawImage(qrImage, 390, 790, 300, 300);
+
+    // A high-contrast brand island keeps the QR scannable while showing the
+    // complete IMCircle wordmark. Error correction is H.
+    roundRect(ctx, 474, 908, 132, 64, 17);
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fill();
+    if (brandLogo) {
+      const qrLogoScale = Math.min(108 / brandLogo.width, 42 / brandLogo.height);
+      const qrLogoWidth = brandLogo.width * qrLogoScale;
+      const qrLogoHeight = brandLogo.height * qrLogoScale;
+      ctx.drawImage(
+        brandLogo,
+        CARD_WIDTH / 2 - qrLogoWidth / 2,
+        940 - qrLogoHeight / 2,
+        qrLogoWidth,
+        qrLogoHeight
+      );
+    } else {
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = "900 21px Inter, sans-serif";
+      ctx.fillStyle = INDIGO;
+      ctx.fillText("IMCircle", CARD_WIDTH / 2, 940);
+    }
+  } else {
+    drawLogoMark(ctx, CARD_WIDTH / 2, 940, 85);
+  }
+
+  ctx.textAlign = "center";
+  ctx.font = "900 25px Inter, sans-serif";
+  ctx.fillStyle = INDIGO;
+  ctx.fillText("SCAN TO VIEW MY PROFILE", CARD_WIDTH / 2, 1182);
+
+  ctx.font = "800 21px Inter, sans-serif";
   ctx.fillStyle = "#98A2B3";
-  ctx.fillText("Connect with me on IMCircle", CARD_WIDTH / 2, CARD_HEIGHT - 92);
+  ctx.fillText("Connect with me on IMCircle", CARD_WIDTH / 2, CARD_HEIGHT - 58);
 }
 
 function drawStatPill(ctx, cx, cy, value, label) {
@@ -370,6 +494,7 @@ function wrapText(ctx, text, cx, y, maxWidth, lineHeight) {
  * @returns {Promise<Blob|null>}
  */
 export async function generateShareCard(kind, data) {
+  if (kind === "streak" && Number(data?.streak || 0) < 1) return null;
   await ensureFontsReady();
 
   const canvas = document.createElement("canvas");
@@ -394,23 +519,97 @@ export async function generateShareCard(kind, data) {
  * Share (native share sheet) or fall back to downloading a blob as a PNG.
  * Returns "shared" | "downloaded" | "failed".
  */
-export async function shareOrDownloadBlob(blob, filename, shareText) {
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function saveNativeBlob(blob, filename, directoryName = "Documents") {
+  const [{ Capacitor }, { Filesystem, Directory }] = await Promise.all([
+    import("@capacitor/core"),
+    import("@capacitor/filesystem"),
+  ]);
+
+  if (!Capacitor.isNativePlatform()) return null;
+
+  const directory = directoryName === "Cache" ? Directory.Cache : Directory.Documents;
+  await Filesystem.writeFile({
+    path: filename,
+    data: await blobToBase64(blob),
+    directory,
+    recursive: true,
+  });
+  const result = await Filesystem.getUri({ path: filename, directory });
+  return result.uri;
+}
+
+/** Share the generated file. Native apps use a real device file URI. */
+export async function shareBlob(blob, filename, shareText, shareUrl = "") {
   if (!blob) return "failed";
 
   try {
-    const file = new File([blob], filename, { type: "image/png" });
+    const nativeUri = await saveNativeBlob(blob, filename, "Cache");
+    if (nativeUri) {
+      const { Share } = await import("@capacitor/share");
+      const { value } = await Share.canShare();
+      if (value) {
+        await Share.share({
+          title: "IMCircle",
+          text: shareText || "Connect with me on IMCircle",
+          files: [nativeUri],
+          dialogTitle: "Share profile",
+        });
+        return "shared";
+      }
+    }
 
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    const file = new File([blob], filename, { type: blob.type || "image/png" });
+    if (navigator.canShare?.({ files: [file] })) {
       await navigator.share({
         files: [file],
         title: "IMCircle",
-        text: shareText || "Check out my IMCircle streak!",
+        text: shareText || "Connect with me on IMCircle",
+      });
+      return "shared";
+    }
+
+    if (navigator.share) {
+      await navigator.share({
+        title: "IMCircle",
+        text: shareText || "Connect with me on IMCircle",
+        ...(shareUrl ? { url: shareUrl } : {}),
       });
       return "shared";
     }
   } catch (error) {
     if (error?.name === "AbortError") return "cancelled";
-    // fall through to download
+  }
+
+  if (shareUrl && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      return "copied";
+    } catch {
+      // Continue to the explicit failure state.
+    }
+  }
+
+  return "failed";
+}
+
+/** Download/save a blob without accidentally opening the share sheet. */
+export async function downloadBlob(blob, filename) {
+  if (!blob) return "failed";
+
+  try {
+    const nativeUri = await saveNativeBlob(blob, filename, "Documents");
+    if (nativeUri) return "downloaded";
+  } catch {
+    // Web fallback also works in several WebView implementations.
   }
 
   try {
@@ -418,12 +617,49 @@ export async function shareOrDownloadBlob(blob, filename, shareText) {
     const link = document.createElement("a");
     link.href = url;
     link.download = filename;
+    link.rel = "noopener";
+    link.style.display = "none";
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
     return "downloaded";
   } catch {
     return "failed";
   }
+}
+
+function escapeVCard(value = "") {
+  return String(value)
+    .replace(/\\/g, "\\\\")
+    .replace(/\n/g, "\\n")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,");
+}
+
+export function createProfileVCard({ name, username, headline, interest, location, profileUrl, email, phone }) {
+  const note = [headline, interest ? `Interest: ${interest}` : "", username ? `IMCircle: @${username}` : ""]
+    .filter(Boolean)
+    .join(" | ");
+  const lines = [
+    "BEGIN:VCARD",
+    "VERSION:3.0",
+    `FN:${escapeVCard(name || "IMCircle Member")}`,
+    `N:${escapeVCard(name || "IMCircle Member")};;;;`,
+    "ORG:IMCircle",
+    ...(email ? [`EMAIL;TYPE=INTERNET:${escapeVCard(email)}`] : []),
+    ...(phone ? [`TEL;TYPE=CELL:${escapeVCard(phone)}`] : []),
+    ...(location ? [`ADR;TYPE=HOME:;;${escapeVCard(location)};;;;`] : []),
+    ...(profileUrl ? [`URL:${profileUrl}`] : []),
+    ...(note ? [`NOTE:${escapeVCard(note)}`] : []),
+    "END:VCARD",
+  ];
+  return new Blob([`${lines.join("\r\n")}\r\n`], { type: "text/vcard;charset=utf-8" });
+}
+
+// Backwards-compatible behavior for any older caller outside the modal.
+export async function shareOrDownloadBlob(blob, filename, shareText) {
+  const result = await shareBlob(blob, filename, shareText);
+  if (result === "failed") return downloadBlob(blob, filename);
+  return result;
 }

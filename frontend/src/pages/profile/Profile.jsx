@@ -12,7 +12,12 @@ import {
   Sparkles,
   TrendingUp,
   Users,
+  QrCode,
   X,
+  CalendarDays,
+  Flame,
+  MessageCircle,
+  Share,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -39,6 +44,10 @@ import { getMyBuilderScore } from "../../api/builderScoreApi";
 import { getMyCircles } from "../../api/circleApi";
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
+const PUBLIC_APP_URL = (
+  import.meta.env.VITE_PUBLIC_APP_URL ||
+  (window.location.hostname === "localhost" ? "https://imcircle.com" : window.location.origin)
+).replace(/\/$/, "");
 const TABS = ["All", "Posts", "Journey", "Reposts"];
 const JOURNEY_TABS = ["Active", "Achieved", "Missed", "All"];
 
@@ -336,6 +345,30 @@ function Profile() {
   const [completionOpen, setCompletionOpen] = useState(false);
   const [showCompletionBadgeInfo, setShowCompletionBadgeInfo] = useState(false);
 
+  const handleShareApp = async () => {
+    const shareData = {
+      title: "IMCircle",
+      text: "Join me on IMCircle and start building your journey in public.",
+      url: PUBLIC_APP_URL,
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(PUBLIC_APP_URL);
+      window.alert("IMCircle app link copied");
+    } catch {
+      window.prompt("Copy the IMCircle app link", PUBLIC_APP_URL);
+    }
+  };
+
   const loadProfile = async () => {
     try {
       setLoading(true);
@@ -477,6 +510,10 @@ function Profile() {
     user?.primaryInterest || user?.field || user?.role || "Building in public";
 
   const location = formatLocation(user?.location);
+  const profilePath = user?.username
+    ? `/profile/${encodeURIComponent(user.username)}`
+    : `/profile/user/${getId(user)}`;
+  const profileUrl = `${PUBLIC_APP_URL}${profilePath}`;
 
   const avatar = getImageUrl(
     user?.avatar ||
@@ -585,8 +622,8 @@ function Profile() {
             }
           `}
         </style>
-        <main className="px-5 pt-8">
-          <section>
+        <main className="px-5">
+          <section className="relative -mx-5 border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-5 pb-5 pt-[max(28px,env(safe-area-inset-top))]">
             <div className="flex items-start gap-4">
               <button
                 type="button"
@@ -622,6 +659,14 @@ function Profile() {
                     <ProfileCompleteBadge onClick={() => setShowCompletionBadgeInfo(true)} />
                   )}
                   <RankBadge tier={rankBadge} rank={signupRank} />
+                  <button
+                    type="button"
+                    onClick={handleShareApp}
+                    aria-label="Share IMCircle app"
+                    className="ml-auto grid h-9 w-9 shrink-0 place-items-center rounded-xl text-[var(--imc-text)] active:scale-95"
+                  >
+                    <Share size={20} strokeWidth={1.8} />
+                  </button>
                 </div>
 
                 {user?.username && (
@@ -691,8 +736,10 @@ function Profile() {
               <button
                 type="button"
                 onClick={() => setShareModal("profile")}
-                className="h-[44px] rounded-2xl border border-[var(--imc-border)] bg-[var(--imc-surface)] text-[13px] font-black text-[var(--imc-indigo-text)] active:scale-[0.98]"
+                className="flex h-[44px] items-center justify-center gap-2 rounded-2xl bg-[var(--imc-indigo-soft)] text-[13px] font-black text-[var(--imc-indigo-text)] active:scale-[0.98]"
+                style={{ border: "1px solid rgba(67,56,202,0.18)" }}
               >
+                <QrCode size={16} />
                 Share Profile
               </button>
             </div>
@@ -740,16 +787,16 @@ function Profile() {
             )}
           </section>
 
-          <section className="mt-6">
-            <div className="grid grid-cols-4 rounded-2xl border border-[var(--imc-border)] bg-[var(--imc-surface)] p-1">
+          <section className="mt-2">
+            <div className="sticky top-0 z-20 -mx-5 grid grid-cols-4 border-y border-[var(--imc-border)] bg-[color-mix(in_srgb,var(--imc-bg)_94%,transparent)] px-4 backdrop-blur-xl">
               {TABS.map((tab) => (
                 <button
                   type="button"
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`rounded-xl py-2 text-[10.5px] font-black transition ${
+                  className={`relative py-3 text-[10.5px] font-black transition ${
                     activeTab === tab
-                      ? "bg-[var(--imc-surface-strong)] text-[var(--imc-on-surface-strong)]"
+                      ? "text-[var(--imc-indigo-text)] after:absolute after:bottom-0 after:left-1/2 after:h-0.5 after:w-8 after:-translate-x-1/2 after:rounded-full after:bg-[var(--imc-indigo)]"
                       : "text-[var(--imc-text-muted)]"
                   }`}
                 >
@@ -917,8 +964,7 @@ function Profile() {
                           <button
                             type="button"
                             onClick={() => navigate(`/circles/${circleId}`)}
-                            className="mt-2 h-9 w-full rounded-[12px] text-[11px] font-black text-[var(--imc-ink)]"
-                            style={{ background: "var(--imc-marigold)" }}
+                            className="mt-2 h-8 w-full rounded-[11px] border border-[rgba(67,56,202,0.18)] bg-[rgba(67,56,202,0.08)] text-[10.5px] font-bold text-[var(--imc-indigo-text)] transition active:scale-[0.98] active:bg-[rgba(67,56,202,0.14)]"
                           >
                             Manage
                           </button>
@@ -1118,7 +1164,7 @@ function Profile() {
         )}
 
         {showCompletionBadgeInfo && (
-          <ProfileCompleteSheet onClose={() => setShowCompletionBadgeInfo(false)} />
+          <ProfileCompleteSheet name={fullName} onClose={() => setShowCompletionBadgeInfo(false)} />
         )}
 
         <BottomNav />
@@ -1131,7 +1177,7 @@ function Profile() {
           shareText={
             shareModal === "streak"
               ? `I'm on a ${builderScore?.currentStreak || 0}-day streak building on IMCircle 🔥`
-              : `Connect with me on IMCircle`
+              : `Connect with me on IMCircle: ${profileUrl}`
           }
           data={
             shareModal === "streak"
@@ -1145,9 +1191,15 @@ function Profile() {
                 }
               : {
                   name: fullName,
+                  username: user?.username || "",
                   headline: tagline,
                   avatarUrl: avatar,
                   interest,
+                  location,
+                  profileUrl,
+                  logoUrl: "/logo.png",
+                  email: user?.email || "",
+                  phone: user?.phone || user?.phoneNumber || "",
                   streak: builderScore?.currentStreak || 0,
                   circleCount: countOf(
                     user?.circle || user?.circles,
@@ -1219,7 +1271,7 @@ function ProfileCompleteBadge({ onClick }) {
   );
 }
 
-function ProfileCompleteSheet({ onClose }) {
+function ProfileCompleteSheet({ name, onClose }) {
   return (
     <div
       className="fixed inset-0 z-[80] flex items-end justify-center bg-black/45 px-4"
@@ -1234,7 +1286,7 @@ function ProfileCompleteSheet({ onClose }) {
           <Shield size={28} />
         </div>
         <h3 className="mt-4 text-center text-[18px] font-black text-[var(--imc-text)]">
-          Your profile is completed 100%
+          {name}'s profile is completed 100%
         </h3>
         <p className="mx-auto mt-2 max-w-[280px] text-center text-[12px] font-semibold leading-5 text-[var(--imc-text-muted)]">
           This badge appears after your basic details, education, experience, and skills are all complete.
@@ -1383,7 +1435,7 @@ function JourneyDashboard({ journeys = [], activeTab, setActiveTab, onView }) {
       <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {filtered.length > 0 ? (
           filtered.map((journey) => (
-            <div key={journey._id} className="w-[86%] shrink-0 snap-start">
+            <div key={journey._id} className="w-[92%] shrink-0 snap-start">
               <JourneyProfileCard
                 journey={journey}
                 onView={() => onView(journey._id)}
@@ -1406,6 +1458,72 @@ function JourneyDashboard({ journeys = [], activeTab, setActiveTab, onView }) {
 }
 
 function JourneyProfileCard({ journey, onView }) {
+  const status = getJourneyStatus(journey);
+  const likes = Number(journey?.totals?.likes || 0);
+  const comments = Number(journey?.totals?.comments || 0);
+  const updates = Number(journey?.updatesCount || 0);
+  const targetDays = Number(journey?.targetDays || journey?.totalDays || 100);
+  const currentDay = Number(journey?.currentDay || updates || 1);
+  const cover = getImageUrl(
+    journey?.coverImage || journey?.previewImage || journey?.images?.[0]
+  );
+  const displayDay = status === "Missed" ? Math.min(updates, targetDays) : Math.min(currentDay, targetDays);
+  const progress = status === "Achieved" ? 100 : Math.min(Math.round((displayDay / targetDays) * 100), 100);
+
+  return (
+    <article className="overflow-hidden rounded-[28px] bg-[var(--imc-surface)] ring-1 ring-[var(--imc-border)] shadow-[0_14px_36px_rgba(18,20,28,0.08)]">
+      <button type="button" onClick={onView} className="relative block h-40 w-full overflow-hidden text-left">
+        {cover ? (
+          <img src={cover} alt={journey.title} className="h-full w-full object-cover" />
+        ) : (
+          <div className="imc-lattice h-full w-full bg-gradient-to-br from-[#12141C] via-[#2E2A8F] to-[#4338CA]" />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+        <span className={`absolute left-3 top-3 rounded-full px-2.5 py-1 text-[9px] font-black ${status === "Missed" ? "bg-[#D92D20] text-white" : status === "Achieved" ? "bg-[#059669] text-white" : "bg-white/90 text-[#4338CA]"}`}>
+          {status === "Missed" ? "Missed journey" : status}
+        </span>
+        <div className="absolute bottom-3 left-3 right-3">
+          <p className="line-clamp-2 text-[19px] font-black leading-6 text-white">{journey.title}</p>
+          <div className="mt-1.5 flex items-center gap-3 text-[9.5px] font-bold text-white/80">
+            <span className="flex items-center gap-1"><Flame size={11} /> {updates} updates</span>
+            <span className="flex items-center gap-1"><CalendarDays size={11} /> {targetDays} day goal</span>
+          </div>
+        </div>
+      </button>
+
+      <div className="p-4">
+        <p className="line-clamp-2 min-h-10 text-[12px] font-semibold leading-5 text-[var(--imc-text-muted)]">
+          {journey.description || "Building progress in public, one honest update at a time."}
+        </p>
+        <div className="mt-3">
+          <div className="mb-1.5 flex items-center justify-between">
+            <p className="text-[10px] font-black text-[var(--imc-text-muted)]">Day {displayDay} of {targetDays}</p>
+            <p className={`text-[10px] font-black ${status === "Missed" ? "text-[#D92D20]" : "text-[var(--imc-indigo-text)]"}`}>{progress}%</p>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-[rgba(67,56,202,0.12)]">
+            <div className={`h-full rounded-full ${status === "Missed" ? "bg-[#D92D20]" : status === "Achieved" ? "bg-[#059669]" : "bg-gradient-to-r from-[#EC9A1E] to-[#4338CA]"}`} style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-3 divide-x divide-[var(--imc-border)] border-y border-[var(--imc-border)] py-3 text-center">
+          <div><Users size={14} className="mx-auto text-[var(--imc-text-muted)]" /><p className="mt-1 text-[12px] font-black text-[var(--imc-text)]">{journey.followersCount || 0}</p><p className="text-[8px] font-bold text-[var(--imc-text-muted)]">Followers</p></div>
+          <div><TrendingUp size={14} className="mx-auto text-[var(--imc-text-muted)]" /><p className="mt-1 text-[12px] font-black text-[var(--imc-text)]">{likes}</p><p className="text-[8px] font-bold text-[var(--imc-text-muted)]">Likes</p></div>
+          <div><MessageCircle size={14} className="mx-auto text-[var(--imc-text-muted)]" /><p className="mt-1 text-[12px] font-black text-[var(--imc-text)]">{comments}</p><p className="text-[8px] font-bold text-[var(--imc-text-muted)]">Replies</p></div>
+        </div>
+        {status === "Missed" && (
+          <div className="mt-3 rounded-2xl border border-[rgba(67,56,202,0.18)] bg-[var(--imc-indigo-soft)] px-3 py-2.5">
+            <p className="text-[9px] font-black uppercase tracking-[0.1em] text-[var(--imc-indigo-text)]">{journey.finalNote ? "Final note" : "Why it was missed"}</p>
+            <p className="mt-1 line-clamp-3 text-[11px] font-semibold leading-5 text-[var(--imc-text)]">{journey.finalNote || journey.uncompletedReason || "A daily update was missed."}</p>
+          </div>
+        )}
+        <button type="button" onClick={onView} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-[var(--imc-surface-strong)] py-3 text-[12px] font-black text-[var(--imc-on-surface-strong)] active:scale-[0.98]">
+          View full journey <span aria-hidden="true">→</span>
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function JourneyProfileCardLegacy({ journey, onView }) {
   const status = getJourneyStatus(journey);
 
   const likes = Number(journey?.totals?.likes || 0);
@@ -1660,14 +1778,14 @@ function SkillsCard({ skills, onRemove }) {
       {normalizedSkills.map((skill) => (
         <span
           key={skill}
-          className="inline-flex items-center gap-1.5 rounded-full bg-[rgba(67,56,202,0.12)] px-3 py-2 text-[11px] font-black text-[var(--imc-indigo-text)]"
+          className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(67,56,202,0.18)] bg-[var(--imc-surface)] px-3 py-1.5 text-[10.5px] font-bold text-[var(--imc-indigo-text)] shadow-[0_3px_10px_rgba(18,20,28,0.03)]"
         >
           {skill}
           {onRemove && (
             <button
               type="button"
               onClick={() => onRemove(skill)}
-              className="grid h-4 w-4 place-items-center rounded-full bg-white/70 text-[var(--imc-indigo-text)] active:scale-95 dark:bg-black/20"
+              className="grid h-4 w-4 place-items-center rounded-full bg-[var(--imc-indigo-soft)] text-[var(--imc-indigo-text)] active:scale-95"
               aria-label={`Remove ${skill}`}
             >
               <X size={11} strokeWidth={3} />

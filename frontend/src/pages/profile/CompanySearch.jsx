@@ -118,10 +118,6 @@ export default function CompanySearch({ open, value, onClose, onSelect }) {
           )}
         </div>
 
-        <p className="mt-2 px-1 text-[13px] font-bold text-[var(--imc-text-muted)]">
-          Search from IMCircle company hub or create a new company page.
-        </p>
-
         <div className="mt-5 space-y-3">
           {loading && (
             <div className="rounded-[20px] bg-[var(--imc-surface)] px-4 py-5 text-[14px] font-bold text-[var(--imc-text-muted)]">
@@ -190,9 +186,6 @@ export default function CompanySearch({ open, value, onClose, onSelect }) {
                   Create “{cleanQuery}”
                 </p>
 
-                <p className="mt-0.5 text-[12px] font-bold text-[var(--imc-text-muted)]">
-                  Add this as an IMCircle company page.
-                </p>
               </div>
             </button>
           )}

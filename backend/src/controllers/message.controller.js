@@ -6,6 +6,7 @@ import User from "../models/User.js";
 import {
   emitMessage,
   emitMessageSeen,
+  emitMessagesUnsent,
   emitNotification,
   isUserOnline,
 } from "../socket/socket.js";
@@ -684,6 +685,7 @@ export const deleteMessage = async (req, res) => {
 
 export const deleteMessages = async (req, res) => {
   try {
+    const scope = req.body.scope === "everyone" ? "everyone" : "me";
     const ids = Array.isArray(req.body.messageIds)
       ? req.body.messageIds.filter(Boolean)
       : [];
@@ -695,21 +697,33 @@ export const deleteMessages = async (req, res) => {
       });
     }
 
-    await Message.updateMany(
-      {
-        _id: { $in: ids },
-        isDeleted: false,
-      },
-      {
-        $addToSet: {
-          hiddenFor: req.user._id,
-        },
+    const messages = await Message.find({ _id: { $in: ids }, isDeleted: false }).select("sender conversation");
+    if (scope === "everyone") {
+      const notOwned = messages.some(
+        (message) => getPlainId(message.sender) !== getPlainId(req.user._id)
+      );
+
+      if (notOwned || messages.length !== ids.length) {
+        return res.status(403).json({ success: false, message: "You can only unsend messages that you sent." });
       }
-    );
+
+      await Message.updateMany(
+        { _id: { $in: ids }, sender: req.user._id, isDeleted: false },
+        { $set: { isDeleted: true } }
+      );
+
+      const conversationIds = [...new Set(messages.map((message) => getPlainId(message.conversation)).filter(Boolean))];
+      conversationIds.forEach((conversationId) => emitMessagesUnsent(conversationId, ids));
+    } else {
+      await Message.updateMany(
+        { _id: { $in: ids }, isDeleted: false },
+        { $addToSet: { hiddenFor: req.user._id } }
+      );
+    }
 
     return res.status(200).json({
       success: true,
-      message: "Messages deleted",
+      message: scope === "everyone" ? "Messages unsent" : "Messages deleted for you",
       deletedIds: ids,
     });
   } catch (error) {
@@ -725,9 +739,9 @@ export const deleteMessages = async (req, res) => {
 export const reactToMessage = async (req, res) => {
   try {
     const { reaction = "" } = req.body;
-    const allowedReactions = ["❤️", "😂", "😮", "😢", "👍"];
+    const cleanReaction = String(reaction || "").trim();
 
-    if (!allowedReactions.includes(reaction)) {
+    if (!cleanReaction || cleanReaction.length > 16) {
       return res.status(400).json({
         success: false,
         message: "Invalid reaction",
@@ -760,7 +774,7 @@ export const reactToMessage = async (req, res) => {
     );
     message.reactions.push({
       user: req.user._id,
-      reaction,
+      reaction: cleanReaction,
       reactedAt: new Date(),
     });
 

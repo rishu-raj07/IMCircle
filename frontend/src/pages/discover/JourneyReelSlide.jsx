@@ -174,6 +174,14 @@ function JourneyReelSlide({ milestone = {} }) {
   const slideRef = useRef(null);
   const videoRef = useRef(null);
   const [muted, setMuted] = useState(true);
+  // Portrait/near-square media fills the whole slide edge-to-edge (like an
+  // Instagram/TikTok story — that's what a phone screen naturally is).
+  // Genuinely landscape media does NOT get force-cropped to fill a portrait
+  // screen anymore — it's shown whole (object-contain, letterboxed) so nothing
+  // is cropped; seeing it large means turning the phone to landscape, same as
+  // Instagram does for widescreen photos/video instead of always cropping.
+  const [mediaRatio, setMediaRatio] = useState(null);
+  const isLandscapeMedia = Boolean(mediaRatio && mediaRatio > 1.05);
 
   // The discover feed renders every slide at once inside one scroll
   // container (snap-scroll, not virtualized), so without this every video
@@ -381,28 +389,36 @@ function JourneyReelSlide({ milestone = {} }) {
       className="relative h-full w-full shrink-0 snap-start overflow-hidden"
       style={{ background: "var(--imc-bg)" }}
     >
-      {/* Full-bleed like Instagram/TikTok stories — see PostReelSlide.jsx
-          for the identical reasoning (cropped edge-to-edge instead of
-          inset + letterboxed, so there's no dead canvas margin regardless
-          of the photo/video's own aspect ratio or the app's theme). */}
+      {/* Portrait fills the slide edge-to-edge; landscape is shown whole
+          (contain, letterboxed) instead of being force-cropped to fit a
+          portrait screen — see mediaRatio/isLandscapeMedia above. */}
       {bgImage ? (
         mediaType === "video" ? (
           <video
             ref={videoRef}
             src={bgImage}
-            className="absolute inset-0 z-0 h-full w-full object-cover"
+            className={`absolute inset-0 z-0 h-full w-full ${isLandscapeMedia ? "object-contain" : "object-cover"}`}
+            style={isLandscapeMedia ? { background: "#000" } : undefined}
             loop
             muted={muted}
             playsInline
             preload="metadata"
+            onLoadedMetadata={(event) => {
+              const { videoWidth, videoHeight } = event.target;
+              if (videoWidth && videoHeight) setMediaRatio(videoWidth / videoHeight);
+            }}
           />
         ) : (
-          <ImageLoader
+          <img
             src={bgImage}
             alt="Journey progress"
-            width={900}
-            wrapperClassName="absolute inset-0 z-0"
-            className="h-full w-full object-cover"
+            className={`absolute inset-0 z-0 h-full w-full ${isLandscapeMedia ? "object-contain" : "object-cover"}`}
+            style={isLandscapeMedia ? { background: "#000" } : undefined}
+            loading="eager"
+            onLoad={(event) => {
+              const { naturalWidth, naturalHeight } = event.target;
+              if (naturalWidth && naturalHeight) setMediaRatio(naturalWidth / naturalHeight);
+            }}
           />
         )
       ) : (

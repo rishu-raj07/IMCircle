@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Heart, Repeat2, Send, Bookmark } from "lucide-react";
 
 import CommentSheet from "../common/CommentSheet";
@@ -66,6 +66,29 @@ function PostActions({ post = {}, type = "post" }) {
 
   const [showReplies, setShowReplies] = useState(false);
   const [showRepost, setShowRepost] = useState(false);
+
+  useEffect(() => {
+    setLikes(post.likesCount || post.likes?.length || 0);
+    setReplies(post.repliesCount || post.commentsCount || post.comments?.length || 0);
+    setReposts(post.repostsCount || post.reposts?.length || 0);
+    setSaves(post.savesCount || post.saves?.length || 0);
+    setLiked(Boolean(post.likedByMe ?? post.viewerState?.liked));
+    setReposted(Boolean(post.repostedByMe ?? post.viewerState?.reposted));
+    setSaved(Boolean(post.savedByMe ?? post.viewerState?.saved));
+  }, [
+    itemId,
+    post.likesCount,
+    post.repliesCount,
+    post.commentsCount,
+    post.repostsCount,
+    post.savesCount,
+    post.likedByMe,
+    post.repostedByMe,
+    post.savedByMe,
+    post.viewerState?.liked,
+    post.viewerState?.reposted,
+    post.viewerState?.saved,
+  ]);
 
   const topComment = useMemo(() => {
     const list = Array.isArray(post.comments) ? post.comments : [];
@@ -175,9 +198,12 @@ function PostActions({ post = {}, type = "post" }) {
           ? await saveLearning(itemId)
           : await unsaveLearning(itemId);
         if (typeof data.savesCount === "number") setSaves(data.savesCount);
+        if (typeof data.savedByMe === "boolean") setSaved(data.savedByMe);
       } else {
         const data = await savePost(itemId);
         if (typeof data.savesCount === "number") setSaves(data.savesCount);
+        if (typeof data.savedByMe === "boolean") setSaved(data.savedByMe);
+        else if (typeof data.isSavedByMe === "boolean") setSaved(data.isSavedByMe);
       }
     } catch {
       setSaved(!nextSaved);
@@ -267,9 +293,11 @@ function PostActions({ post = {}, type = "post" }) {
 
     trackEvent("share", { entityType: type, entityId: itemId }).catch(() => {});
 
-    try {
-      if (type === "post") await sharePost(itemId);
+    // Recording a share must never block the actual system share sheet. If
+    // counting is temporarily unavailable, the user can still share.
+    if (type === "post") sharePost(itemId).catch(() => {});
 
+    try {
       // shareLink() tries the native Capacitor share sheet first (works
       // inside the Android/iOS app), then navigator.share (web/mobile
       // browsers), then falls back to a clipboard copy — navigator.share

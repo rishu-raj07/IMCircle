@@ -1,5 +1,6 @@
 import Company from "../models/Company.js";
 import CompanyDirectory from "../models/meta/CompanyDirectory.js";
+import { verifyPublicWebsite } from "../utils/websiteVerification.js";
 
 function makeSlug(value = "") {
   return value
@@ -231,5 +232,17 @@ export const getCompanyBySlug = async (req, res) => {
     res.status(200).json({ success: true, company });
   } catch (error) {
     res.status(500).json({ success: false, message: "Something went wrong. Please try again." });
+  }
+};
+
+export const verifyCompanyWebsite = async (req, res) => {
+  try {
+    const verification = await verifyPublicWebsite(req.body?.website);
+    res.status(200).json({ success: true, verification });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error?.message || "This website could not be verified.",
+    });
   }
 };

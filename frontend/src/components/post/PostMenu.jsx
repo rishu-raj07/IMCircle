@@ -68,10 +68,8 @@ function PostMenu({ post = {}, type = "post", isMine = false, onDeleted }) {
         setReportOpen(false);
         setOpen(false);
       }, 900);
-    } catch (err) {
-      const message =
-        err?.response?.data?.message || "Unable to submit report";
-      setError(message);
+    } catch {
+      setError("Couldn't submit the report. Please try again.");
     }
   };
 
@@ -91,10 +89,8 @@ function PostMenu({ post = {}, type = "post", isMine = false, onDeleted }) {
       setDeleteOpen(false);
       setOpen(false);
       onDeleted?.();
-    } catch (err) {
-      setDeleteError(
-        err?.response?.data?.message || "Unable to delete. Please try again."
-      );
+    } catch {
+      setDeleteError("Couldn't delete this post. Please try again.");
     } finally {
       setDeleting(false);
     }

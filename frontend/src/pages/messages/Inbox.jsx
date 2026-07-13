@@ -4,6 +4,7 @@ import {
   Search,
   Check,
   CheckCheck,
+  UserRound,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -23,10 +24,6 @@ function getUserId(user) {
 
 function getName(user) {
   return user?.fullName || user?.name || user?.username || "User";
-}
-
-function getAvatarText(user) {
-  return getName(user)?.charAt(0)?.toUpperCase() || "U";
 }
 
 function getAvatarUrl(user) {
@@ -376,8 +373,8 @@ function Inbox() {
                           width={96}
                         />
                       ) : (
-                        <div className="grid h-[52px] w-[52px] place-items-center rounded-2xl bg-[#12141C] text-[18px] font-black text-[#EC9A1E]">
-                          {getAvatarText(otherUser)}
+                        <div className="grid h-[52px] w-[52px] place-items-center rounded-2xl border text-[var(--imc-text-muted)]" style={{ background: "var(--imc-surface-2)", borderColor: "var(--imc-border)" }}>
+                          <UserRound size={24} strokeWidth={1.7} />
                         </div>
                       )}
 

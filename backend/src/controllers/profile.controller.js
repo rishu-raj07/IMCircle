@@ -1,5 +1,6 @@
 import User from "../models/User.js";
 import { getSignupRankBadge } from "../utils/badges.js";
+import { hideContentForDeletedAccount } from "../utils/accountDeletion.js";
 
 const USER_PUBLIC_FIELDS =
   "fullName name username headline bio avatar profileImage profilePicture picture photo location field role gender verification stats";
@@ -261,6 +262,21 @@ export const getProfile = async (req, res) => {
         success: false,
         message: "User not found",
       });
+    }
+
+    // Legacy accounts can already have a username without the timestamp
+    // introduced for the 30-day username cooldown. Using account creation
+    // time made old accounts appear immediately eligible, so the Change
+    // action showed before a real cooldown date existed. Seed the timestamp
+    // once and return it in this same response; subsequent requests use the
+    // normal persisted 30-day calculation.
+    if (user.username && !user.usernameLastChangedAt) {
+      const cooldownStartedAt = new Date();
+      await User.updateOne(
+        { _id: user._id, usernameLastChangedAt: null },
+        { $set: { usernameLastChangedAt: cooldownStartedAt } }
+      );
+      user.usernameLastChangedAt = cooldownStartedAt;
     }
 
     // Followers/following/circle are raw ObjectId refs, and some can go
@@ -700,13 +716,15 @@ export const updateOpenToHiring = async (req, res) => {
 
 export const deleteProfile = async (req, res) => {
   try {
+    await hideContentForDeletedAccount(req.user._id);
+
     await User.findByIdAndUpdate(req.user._id, {
       isDeleted: true,
     });
 
     return res.status(200).json({
       success: true,
-      message: "Account deleted successfully",
+      message: "Account and related content deleted successfully",
     });
   } catch (error) {
     console.error("DELETE PROFILE ERROR:", error);

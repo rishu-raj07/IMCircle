@@ -1,8 +1,14 @@
 import User from "../models/User.js";
 import Notification from "../models/Notification.js";
+import Post from "../models/Post.js";
+import LearningRepost from "../models/LearningRepost.js";
+import JourneyMilestoneRepost from "../models/JourneyMilestoneRepost.js";
 import { emitNotification } from "../socket/socket.js";
 import { getSignupRankBadge } from "../utils/badges.js";
 import { sendOtpSms, verifyOtpSms } from "../services/msg91.service.js";
+
+const activityAuthorFields =
+  "fullName username avatar profileImage profilePicture photo picture headline role field verification";
 
 const publicUserFields =
   "fullName username avatar coverImage headline bio field role skills location preferences stats followers following circle createdAt primaryInterest experience education";
@@ -212,7 +218,7 @@ export const matchContacts = async (req, res) => {
 export const getSuggestions = async (req, res) => {
   try {
     const currentUser = await User.findById(req.user._id).select(
-      "circle field role location"
+      "circle field role primaryInterest location"
     );
 
     if (!currentUser) {
@@ -236,18 +242,48 @@ export const getSuggestions = async (req, res) => {
       .sort({ "stats.followersCount": -1, createdAt: -1 })
       .limit(60);
 
+    const currentCircleSet = new Set((currentUser.circle || []).map(String));
+    const mutualIdsByUser = new Map();
+    const allMutualIds = new Set();
+
+    users.forEach((user) => {
+      const mutualIds = (user.circle || []).map(String).filter((id) => currentCircleSet.has(id));
+      mutualIdsByUser.set(String(user._id), mutualIds);
+      mutualIds.forEach((id) => allMutualIds.add(id));
+    });
+
+    const mutualUsers = allMutualIds.size
+      ? await User.find({ _id: { $in: [...allMutualIds] }, isDeleted: false })
+          .select("fullName username avatar profileImage profilePicture photo picture")
+          .lean()
+      : [];
+    const mutualUserMap = new Map(mutualUsers.map((user) => [String(user._id), user]));
+
     const scoredUsers = users
       .map((user) => {
         const value = compactPublicUser(user, req.user?._id);
         const score =
           (value.field && value.field === currentUser.field ? 3 : 0) +
           (value.role && value.role === currentUser.role ? 2 : 0) +
+          (value.primaryInterest && value.primaryInterest === currentUser.primaryInterest ? 3 : 0) +
           (value.location?.city &&
           value.location.city === currentUser.location?.city
             ? 2
             : 0);
 
-        return { ...value, suggestionScore: score };
+        const mutualIds = mutualIdsByUser.get(String(user._id)) || [];
+        const mutualCircles = mutualIds
+          .map((id) => mutualUserMap.get(id))
+          .filter(Boolean)
+          .slice(0, 4);
+
+        return {
+          ...value,
+          suggestionScore: score,
+          matchScore: Math.min(98, 62 + score * 4 + Math.min(mutualIds.length, 4) * 2),
+          mutualCirclesCount: mutualIds.length,
+          mutualCircles,
+        };
       })
       .sort((a, b) => b.suggestionScore - a.suggestionScore)
       .slice(0, 20);
@@ -655,6 +691,124 @@ export const getUserById = async (req, res) => {
     });
   }
 };
+
+// Posts genuinely AUTHORED by :userId — used by the profile "Posts" tab.
+// This intentionally does not exist on post.routes.js today; the profile
+// page previously reused the personalized /feed endpoint (scoped to the
+// LOGGED-IN VIEWER, not the profile being looked at) and filtered
+// client-side, which is the root cause of the "everything looks reposted"
+// bug — see getUserReposts below for the other half of that fix.
+export const getUserPosts = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const posts = await Post.find({ author: userId, isDeleted: false })
+      .populate("author", activityAuthorFields)
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      count: posts.length,
+      posts,
+    });
+  } catch (error) {
+    console.error("GET USER POSTS ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+// Everything :userId has genuinely REPOSTED — posts, learnings, and journey
+// milestones — each scoped by an explicit `reposts.user === userId` /
+// `LearningRepost.user === userId` / `JourneyMilestoneRepost.user === userId`
+// check, never by the viewer's own state and never by "a reposts array
+// exists on this document". This is the endpoint UserProfile.jsx and
+// ProfileActivity.jsx should call instead of re-filtering the personalized
+// /feed response (which is scored/flagged for whoever is logged in, not for
+// the profile being viewed — that mismatch is what made another user's own
+// reposts show up as if the PROFILE OWNER had reposted them).
+export const getUserReposts = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const [repostedPosts, learningReposts, milestoneReposts] = await Promise.all([
+      Post.find({ "reposts.user": userId, isDeleted: false })
+        .populate("author", activityAuthorFields)
+        .sort({ createdAt: -1 })
+        .limit(200)
+        .lean(),
+      LearningRepost.find({ user: userId })
+        .populate({
+          path: "learning",
+          populate: { path: "creator", select: activityAuthorFields },
+        })
+        .sort({ createdAt: -1 })
+        .limit(200)
+        .lean(),
+      JourneyMilestoneRepost.find({ user: userId })
+        .populate({
+          path: "milestone",
+          populate: [
+            { path: "creator", select: activityAuthorFields },
+            { path: "journey", select: "title targetDays totalDays" },
+          ],
+        })
+        .sort({ createdAt: -1 })
+        .limit(200)
+        .lean(),
+    ]);
+
+    const posts = repostedPosts.map((post) => {
+      const myRepost = (post.reposts || []).find(
+        (entry) => String(entry.user) === String(userId)
+      );
+
+      return {
+        ...post,
+        repostedBy: userId,
+        repostCaption: myRepost?.text || "",
+        repostedAt: myRepost?.createdAt || post.createdAt,
+      };
+    });
+
+    const learnings = learningReposts
+      .filter((entry) => entry.learning && !entry.learning.isDeleted)
+      .map((entry) => ({
+        ...entry.learning,
+        repostedBy: userId,
+        repostCaption: entry.caption || "",
+        repostedAt: entry.createdAt,
+      }));
+
+    const milestones = milestoneReposts
+      .filter((entry) => entry.milestone)
+      .map((entry) => ({
+        ...entry.milestone,
+        repostedBy: userId,
+        repostCaption: entry.caption || "",
+        repostedAt: entry.createdAt,
+      }));
+
+    return res.status(200).json({
+      success: true,
+      count: posts.length + learnings.length + milestones.length,
+      reposts: { posts, learnings, milestones },
+    });
+  } catch (error) {
+    console.error("GET USER REPOSTS ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
 export const removeFollower = async (req, res) => {
   try {
     const targetUserId = req.params.userId;

@@ -286,6 +286,8 @@ export const savePost = async (req, res) => {
       success: true,
       message: alreadySaved ? "Post unsaved" : "Post saved",
       savesCount: post.saves.length,
+      savedByMe: !alreadySaved,
+      isSavedByMe: !alreadySaved,
     });
   } catch (error) {
     return res.status(500).json({

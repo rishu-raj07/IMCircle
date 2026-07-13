@@ -10,6 +10,8 @@ import {
   Clock3,
   Trash2,
   Ban,
+  Plus,
+  UserRound,
 } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
@@ -43,10 +45,6 @@ function getUserId(user) {
 
 function getName(user) {
   return user?.fullName || user?.name || user?.username || "User";
-}
-
-function getAvatarText(user) {
-  return getName(user)?.charAt(0)?.toUpperCase() || "U";
 }
 
 function getAvatarUrl(user) {
@@ -159,7 +157,7 @@ function MessageStatus({ status }) {
 
 const MESSAGE_REACTIONS = ["❤️", "😂", "😮", "😢", "👍"];
 
-function SmallAvatar({ user, fallbackBg = "bg-[#12141C]", fallbackText = "text-[#EC9A1E]" }) {
+function SmallAvatar({ user }) {
   const avatar = getAvatarUrl(user);
 
   if (avatar) {
@@ -175,10 +173,8 @@ function SmallAvatar({ user, fallbackBg = "bg-[#12141C]", fallbackText = "text-[
   }
 
   return (
-    <div
-      className={`grid h-8 w-8 place-items-center rounded-full ${fallbackBg} text-[12px] font-black ${fallbackText} ring-2 ring-white`}
-    >
-      {getAvatarText(user)}
+    <div className="grid h-8 w-8 place-items-center rounded-full border text-[var(--imc-text-muted)] ring-2 ring-[var(--imc-surface)]" style={{ background: "var(--imc-surface-2)", borderColor: "var(--imc-border)" }}>
+      <UserRound size={17} strokeWidth={1.7} />
     </div>
   );
 }
@@ -191,6 +187,9 @@ function Chat() {
   const bottomRef = useRef(null);
   const loadedConversationRef = useRef("");
   const longPressTimerRef = useRef(null);
+  const longPressFiredRef = useRef(false);
+  const pressStartRef = useRef({ x: 0, y: 0 });
+  const emojiInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
@@ -207,6 +206,8 @@ function Chat() {
   const [blocked, setBlocked] = useState(false);
   const [selectedMessageIds, setSelectedMessageIds] = useState([]);
   const [reactionTarget, setReactionTarget] = useState(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [customReaction, setCustomReaction] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showChatDeleteConfirm, setShowChatDeleteConfirm] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -223,6 +224,10 @@ function Chat() {
   const otherUserId = getUserId(otherUser);
   const isOtherOnline = onlineUsers.includes(otherUserId);
   const isSelecting = selectedMessageIds.length > 0;
+  const canUnsendSelected = selectedMessageIds.length > 0 && selectedMessageIds.every((id) => {
+    const message = messages.find((item) => item._id === id);
+    return getUserId(message?.sender) === currentUserId;
+  });
   const blockedByMe = hasUser(conversation?.blockedBy || [], currentUserId);
 
   useEffect(() => {
@@ -368,6 +373,13 @@ function Chat() {
       }
     );
 
+    socket.on("messages_unsent", ({ conversationId: targetConversationId, messageIds = [] }) => {
+      if (targetConversationId !== conversationId) return;
+      setMessages((prev) => prev.filter((message) => !messageIds.includes(message._id)));
+      setSelectedMessageIds((prev) => prev.filter((id) => !messageIds.includes(id)));
+      setReactionTarget((prev) => (messageIds.includes(prev?._id) ? null : prev));
+    });
+
     socket.on("user_typing", (sender) => {
       if (getUserId(sender) !== currentUserId) {
         setTypingUser(sender);
@@ -384,6 +396,7 @@ function Chat() {
       socket.off("receive_message");
       socket.off("message_delivered_update");
       socket.off("message_seen_update");
+      socket.off("messages_unsent");
       socket.off("user_typing");
       socket.off("user_stop_typing");
     };
@@ -486,7 +499,27 @@ function Chat() {
 
     toggleMessageSelection(messageId);
     setReactionTarget(message);
+    setShowEmojiPicker(false);
+    navigator.vibrate?.(18);
   };
+
+  const beginMessagePress = (event, message) => {
+    longPressFiredRef.current = false;
+    pressStartRef.current = { x: event.clientX, y: event.clientY };
+    clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = setTimeout(() => {
+      longPressFiredRef.current = true;
+      handleMessagePress(message);
+    }, 360);
+  };
+
+  const moveMessagePress = (event) => {
+    const dx = Math.abs(event.clientX - pressStartRef.current.x);
+    const dy = Math.abs(event.clientY - pressStartRef.current.y);
+    if (dx > 10 || dy > 10) clearTimeout(longPressTimerRef.current);
+  };
+
+  const endMessagePress = () => clearTimeout(longPressTimerRef.current);
 
   const handleReact = async (reaction) => {
     const messageId = reactionTarget?._id;
@@ -508,6 +541,8 @@ function Chat() {
       )
     );
     setReactionTarget(null);
+    setShowEmojiPicker(false);
+    setCustomReaction("");
 
     try {
       await reactToMessage(messageId, reaction);
@@ -520,15 +555,15 @@ function Chat() {
     const ids = selectedMessageIds.filter(Boolean);
     if (ids.length === 0) return;
 
-    setMessages((prev) => prev.filter((message) => !ids.includes(message._id)));
-    setSelectedMessageIds([]);
-    setShowDeleteConfirm(false);
-    setReactionTarget(null);
-
     try {
-      await deleteMessages(ids);
+      await deleteMessages(ids, canUnsendSelected ? "everyone" : "me");
+      setMessages((prev) => prev.filter((message) => !ids.includes(message._id)));
+      setSelectedMessageIds([]);
+      setShowDeleteConfirm(false);
+      setReactionTarget(null);
     } catch (error) {
-      // best-effort — non-critical
+      setShowDeleteConfirm(false);
+      alert(error?.response?.data?.message || "Could not unsend these messages.");
     }
   };
 
@@ -699,9 +734,10 @@ function Chat() {
 
               <button
                 onClick={() => setShowDeleteConfirm(true)}
-                className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#FEF3F2] text-[#D92D20]"
+                className="h-10 shrink-0 rounded-full px-3 text-[12px] font-black"
+                style={{ background: "var(--imc-action-soft)", color: "var(--imc-indigo-text)", border: "1px solid var(--imc-action-border)" }}
               >
-                <Trash2 size={18} />
+                {canUnsendSelected ? "Unsend" : "Delete for me"}
               </button>
             </div>
           ) : (
@@ -724,8 +760,8 @@ function Chat() {
                     width={96}
                   />
                 ) : (
-                  <div className="grid h-10 w-10 place-items-center rounded-full bg-[#12141C] text-[15px] font-black text-[#EC9A1E]">
-                    {getAvatarText(otherUser)}
+                  <div className="grid h-10 w-10 place-items-center rounded-full border text-[var(--imc-text-muted)]" style={{ background: "var(--imc-surface-2)", borderColor: "var(--imc-border)" }}>
+                    <UserRound size={20} strokeWidth={1.7} />
                   </div>
                 )}
 
@@ -802,8 +838,8 @@ function Chat() {
           ) : messages.length === 0 ? (
             <div className="flex min-h-[55vh] items-center justify-center">
               <div className="w-full rounded-[28px] border border-dashed border-[var(--imc-border)] bg-[var(--imc-surface-2)] px-5 py-8 text-center">
-                <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[var(--imc-surface)] text-[20px] font-black text-[var(--imc-indigo-text)] shadow-sm">
-                  {getAvatarText(otherUser)}
+                <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border bg-[var(--imc-surface)] text-[var(--imc-text-muted)] shadow-sm" style={{ borderColor: "var(--imc-border)" }}>
+                  <UserRound size={27} strokeWidth={1.7} />
                 </div>
                 <h2 className="mt-4 text-[15px] font-black text-[var(--imc-text)]">
                   Fresh chat with {getName(otherUser)}
@@ -847,6 +883,10 @@ function Chat() {
                     <div
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (longPressFiredRef.current) {
+                          longPressFiredRef.current = false;
+                          return;
+                        }
                         if (isSelecting) toggleMessageSelection(message._id);
                       }}
                       onContextMenu={(e) => {
@@ -854,13 +894,11 @@ function Chat() {
                         e.stopPropagation();
                         handleMessagePress(message);
                       }}
-                      onPointerDown={() => {
-                        longPressTimerRef.current = setTimeout(() => {
-                          handleMessagePress(message);
-                        }, 520);
-                      }}
-                      onPointerUp={() => clearTimeout(longPressTimerRef.current)}
-                      onPointerLeave={() => clearTimeout(longPressTimerRef.current)}
+                      onPointerDown={(event) => beginMessagePress(event, message)}
+                      onPointerMove={moveMessagePress}
+                      onPointerUp={endMessagePress}
+                      onPointerCancel={endMessagePress}
+                      onPointerLeave={endMessagePress}
                       className={`relative max-w-[74%] px-4 py-2.5 ${
                         isSent
                           ? `bg-[#4338CA] text-white shadow-[0_8px_20px_rgba(67,56,202,0.18)] ${
@@ -877,7 +915,7 @@ function Chat() {
                                 ? "rounded-[20px] rounded-l-md"
                                 : "rounded-[20px] rounded-tl-md"
                             }`
-                      } ${selected ? "ring-2 ring-[#4338CA] ring-offset-2 ring-offset-[#F8FAFC] dark:ring-offset-[var(--imc-bg)]" : ""}`}
+                      } ${selected ? "ring-2 ring-[var(--imc-indigo-text)] ring-offset-2 ring-offset-[#F8FAFC] dark:ring-offset-[var(--imc-bg)] scale-[0.98]" : ""} transition-[transform,box-shadow] duration-150 touch-pan-y select-none`}
                     >
                       {message.text && (
                         <p className="whitespace-pre-wrap text-[13px] leading-6">
@@ -944,14 +982,57 @@ function Chat() {
                 {reaction}
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => {
+                setShowEmojiPicker(true);
+                window.setTimeout(() => emojiInputRef.current?.focus(), 40);
+              }}
+              aria-label="Choose another emoji"
+              className="grid h-10 w-10 place-items-center rounded-full border text-[var(--imc-indigo-text)] active:scale-90"
+              style={{ background: "var(--imc-action-soft)", borderColor: "var(--imc-action-border)" }}
+            >
+              <Plus size={17} strokeWidth={2.5} />
+            </button>
+          </div>
+        )}
+
+        {reactionTarget && showEmojiPicker && (
+          <div className="absolute left-1/2 top-[146px] z-50 w-[300px] max-w-[calc(100%-32px)] -translate-x-1/2 rounded-[18px] border p-3 shadow-2xl" style={{ background: "var(--imc-surface)", borderColor: "var(--imc-border)" }}>
+            <p className="mb-2 text-[10px] font-bold text-[var(--imc-text-muted)]">Open your emoji keyboard and choose any emoji</p>
+            <div className="flex gap-2">
+              <input
+                ref={emojiInputRef}
+                value={customReaction}
+                onChange={(event) => setCustomReaction(event.target.value.slice(0, 16))}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && customReaction.trim()) handleReact(customReaction.trim());
+                }}
+                inputMode="text"
+                enterKeyHint="done"
+                maxLength={16}
+                placeholder="😀"
+                className="h-11 min-w-0 flex-1 rounded-[14px] border bg-[var(--imc-surface-2)] px-3 text-center text-[22px] outline-none"
+                style={{ borderColor: "var(--imc-border)", color: "var(--imc-text)" }}
+              />
+              <button
+                type="button"
+                disabled={!customReaction.trim()}
+                onClick={() => handleReact(customReaction.trim())}
+                className="h-11 rounded-[14px] px-4 text-[11px] font-black disabled:opacity-40"
+                style={{ background: "var(--imc-action-soft)", color: "var(--imc-indigo-text)", border: "1px solid var(--imc-action-border)" }}
+              >
+                React
+              </button>
+            </div>
           </div>
         )}
 
         {showDeleteConfirm && (
           <ConfirmSheet
-            title="Delete selected messages?"
-            message="These messages will be removed from your chat."
-            actionLabel="Delete"
+            title={canUnsendSelected ? "Unsend selected messages?" : "Delete selected messages for you?"}
+            message={canUnsendSelected ? "These messages will be removed for everyone in this conversation." : "These messages will disappear only from your chat."}
+            actionLabel={canUnsendSelected ? "Unsend" : "Delete for me"}
             onCancel={() => setShowDeleteConfirm(false)}
             onConfirm={handleDeleteSelected}
           />

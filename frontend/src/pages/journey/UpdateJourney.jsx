@@ -149,6 +149,34 @@ function UpdateJourney() {
 
   if (!journey) return null;
 
+  if (journey.status !== "active" || journey.isActive === false) {
+    const missed = journey.status === "uncompleted";
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[var(--imc-bg)] px-5">
+        <div className="w-full max-w-[430px] rounded-[28px] border border-[var(--imc-border)] bg-[var(--imc-surface)] p-6 text-center shadow-[0_18px_50px_rgba(18,20,28,0.08)]">
+          <div className={`mx-auto grid h-14 w-14 place-items-center rounded-full ${missed ? "bg-[#FEF3F2] text-[#D92D20]" : "bg-[rgba(5,150,105,0.12)] text-[#059669]"}`}>
+            {missed ? <X size={26} /> : <Trophy size={26} />}
+          </div>
+          <h1 className="mt-4 text-[20px] font-black text-[var(--imc-text)]">
+            {missed ? "This journey was missed" : "This journey is complete"}
+          </h1>
+          <p className="mt-2 text-[12px] font-semibold leading-5 text-[var(--imc-text-muted)]">
+            {missed
+              ? journey.uncompletedReason || "A required daily update was missed, so new updates are closed."
+              : "This journey has reached its target and no longer accepts daily updates."}
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate(`/journey/${journeyId}`)}
+            className="mt-5 h-12 w-full rounded-2xl bg-[var(--imc-surface-strong)] text-[13px] font-black text-[var(--imc-on-surface-strong)] active:scale-[0.98]"
+          >
+            View journey
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[var(--imc-surface)] pb-28">
       <header className="sticky top-0 z-20 border-b border-[rgba(18,20,28,0.08)] bg-white/95 px-4 py-3 backdrop-blur-xl">

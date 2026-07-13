@@ -62,6 +62,22 @@ export const getUserCircleById = async (userId) => {
   return res.data;
 };
 
+// Profile "Posts" tab — posts genuinely AUTHORED by :userId, scoped
+// server-side (not the personalized /feed endpoint, which is scoped to
+// whoever is logged in).
+export const getUserPostsById = async (userId) => {
+  const res = await api.get(`/users/${userId}/posts`);
+  return res.data;
+};
+
+// Profile "Reposts" tab — posts/learnings/journey milestones genuinely
+// REPOSTED by :userId (real `reposts.user === userId` / repost-collection
+// records), never inferred from the viewer's own repost state.
+export const getUserRepostsById = async (userId) => {
+  const res = await api.get(`/users/${userId}/reposts`);
+  return res.data;
+};
+
 export const followUserById = async (userId) => {
   const res = await api.patch(`/users/${userId}/follow`);
   return res.data;

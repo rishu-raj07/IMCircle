@@ -46,6 +46,11 @@ export const updateJourneyValidator = [
   body("deadline").optional().isISO8601(),
   body("isPublic").optional().isBoolean(),
   body("isActive").optional().isBoolean(),
+  body("finalNote")
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 1000 })
+    .withMessage("Final note must be between 1 and 1000 characters"),
 ];
 
 export const journeyIdValidator = [

@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-import BottomNav from "../../components/navigation/BottomNav";
 import {
   getFreshNotifications,
   deleteNotification,
@@ -395,7 +394,7 @@ function Notifications() {
 
   return (
     <div className="flex min-h-screen justify-center" style={{ background: "#DED8CC" }}>
-      <div className="min-h-screen w-full max-w-[430px] pb-24" style={{ background: PAPER }}>
+      <div className="min-h-screen w-full max-w-[430px]" style={{ background: PAPER }}>
         <header className="sticky top-0 z-20 border-b bg-white/95 px-4 py-4 backdrop-blur-xl" style={{ borderColor: LINE }}>
           <div className="flex items-center gap-3">
             <button
@@ -474,7 +473,6 @@ function Notifications() {
           )}
         </main>
 
-        <BottomNav />
       </div>
     </div>
   );

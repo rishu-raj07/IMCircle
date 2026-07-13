@@ -32,13 +32,13 @@ const ACTION_COPY = {
   },
   delete: {
     title: "Delete this user?",
-    description: "This soft-deletes the account. Their content stays but the profile is marked deleted.",
+    description: "This hides the account and all content authored by this user until the account is restored.",
     confirmLabel: "Delete",
     danger: true,
   },
   restore: {
     title: "Restore this user?",
-    description: "This un-deletes the account and gives them back access to their existing data.",
+    description: "This restores the account and the content hidden with its deletion.",
     confirmLabel: "Restore",
     danger: false,
   },

@@ -44,14 +44,68 @@ function StreakCard({
           ? `Start a new journey to keep your ${streak}-day streak alive`
           : "Start a journey to begin your streak"
         : streak > 0
-        ? "Post today's update to keep it alive"
+        ? "Post daily to grow your journey"
         : "Start a journey to begin your streak"
       : `${level} · Best ${longestStreak} days`;
+
+    const promptTitle = isPrompt && hasActiveJourney && streak > 0 ? "Keep your streak alive!" : title;
+
+    if (isPrompt) {
+      return (
+        <button
+          type="button"
+          onClick={onPrimaryAction}
+          className="flex min-h-[58px] w-full items-center gap-3 rounded-[14px] px-3 py-2.5 text-left shadow-[0_7px_20px_rgba(91,55,238,0.08)] active:scale-[0.99]"
+          style={{
+            background: "linear-gradient(90deg, rgba(255,255,255,0.98), rgba(246,242,255,0.98))",
+            border: "1px solid rgba(109,74,255,0.08)",
+          }}
+        >
+          <div
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full"
+            style={{
+              background: streak > 0 ? "rgba(245,158,11,0.16)" : "rgba(148,163,184,0.14)",
+              border: streak > 0 ? "1px solid rgba(245,158,11,0.28)" : "1px solid rgba(148,163,184,0.2)",
+            }}
+          >
+            <Flame
+              size={18}
+              fill={streak > 0 ? "#D97706" : "none"}
+              style={{ color: streak > 0 ? "#D97706" : "var(--imc-text-muted)" }}
+            />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-black" style={{ color: "var(--imc-text)" }}>{promptTitle}</p>
+            <p className="mt-0.5 truncate text-[10.5px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>
+              {subtitle}
+            </p>
+          </div>
+
+          {hasActiveJourney && streak > 0 ? (
+            <div className="flex shrink-0 items-center gap-3 border-l pl-4" style={{ borderColor: "rgba(91,55,238,0.18)" }}>
+              <div className="min-w-[42px] text-center">
+                <p className="text-[21px] font-black leading-5" style={{ color: "#5b35e9" }}>{streak}</p>
+                <p className="mt-0.5 text-[8px] font-black" style={{ color: "var(--imc-text)" }}>Day Streak</p>
+              </div>
+              <ArrowRight size={15} style={{ color: "#6d4aff" }} />
+            </div>
+          ) : (
+            <span
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full"
+              style={{ background: "rgba(245,158,11,0.16)", color: "#D97706" }}
+            >
+              <ArrowRight size={15} />
+            </span>
+          )}
+        </button>
+      );
+    }
 
     return (
       <button
         type="button"
-        onClick={isPrompt ? onPrimaryAction : onShare}
+        onClick={onShare}
         className="flex w-full items-center gap-3 rounded-[20px] px-4 py-3 text-left shadow-[0_10px_28px_rgba(15,23,42,0.08)] active:scale-[0.99]"
         style={{
           background: "var(--imc-surface)",
@@ -81,12 +135,9 @@ function StreakCard({
 
         <span
           className="grid h-9 w-9 shrink-0 place-items-center rounded-full"
-          style={{
-            background: isPrompt ? "rgba(245,158,11,0.16)" : "rgba(37,99,235,0.12)",
-            color: isPrompt ? "#D97706" : "#2563EB",
-          }}
+          style={{ background: "rgba(37,99,235,0.12)", color: "#2563EB" }}
         >
-          {isPrompt ? <ArrowRight size={15} /> : <Share2 size={15} />}
+          <Share2 size={15} />
         </span>
       </button>
     );

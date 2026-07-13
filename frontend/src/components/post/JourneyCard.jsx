@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import {
   Eye,
   Heart,
@@ -10,7 +10,6 @@ import {
   UserPlus,
   Check,
   Flame,
-  BadgeCheck,
   CalendarDays,
   Target,
 } from "lucide-react";
@@ -21,9 +20,12 @@ import SocialProofBanner from "./SocialProofBanner";
 import ReplyPreview from "./ReplyPreview";
 import ViewInfoSheet from "../common/ViewInfoSheet";
 import ImageLoader from "../common/ImageLoader";
+import ResponsivePostMedia from "../common/ResponsivePostMedia";
+import CircleAction from "../common/CircleAction";
+import ProfileCompleteBadge from "../badges/ProfileCompleteBadge";
 import JourneyMenu from "./JourneyMenu";
-import FullScreenReel from "./FullScreenReel";
-import JourneyReelSlide from "../../pages/discover/JourneyReelSlide";
+import JourneyMilestoneDetail from "./JourneyMilestoneDetail";
+import { shareLink } from "../../utils/shareLink";
 
 import {
   likeMilestone,
@@ -38,10 +40,9 @@ import {
   unfollowJourney,
 } from "../../api/journeyApi";
 // Following the journey (its update feed) is a different action from
-// following the creator's account, so this card shows two distinct
-// buttons: one near the title for the journey, one near the creator's
-// name for the person.
-import { followUserById, unfollowUserById } from "../../api/userApi";
+// requesting the creator's Circle, so this card shows two distinct
+// actions: one near the title for the journey, one near the creator's
+// name for the person (via the shared CircleAction component).
 import { trackEvent } from "../../utils/analyticsTracker";
 import { useNavigate } from "react-router-dom";
 
@@ -77,12 +78,6 @@ function formatRelativeTime(value) {
   } catch {
     return "";
   }
-}
-
-function hasAnyVerification(user) {
-  const v = user?.verification;
-  if (!v || typeof v !== "object") return false;
-  return Object.values(v).some(Boolean);
 }
 
 function formatCount(num = 0) {
@@ -185,9 +180,14 @@ function JourneyCard({ milestone = {} }) {
     journey.status === "uncompleted" ||
     journey.status === "completed" ||
     journey.isActive === false;
+  const isMissed = journey.status === "uncompleted";
+  const missedNote = (journey.finalNote || journey.uncompletedReason || "").trim();
 
   const finalName = getName(creator);
   const avatar = getAvatar(creator);
+  const isMe = Boolean(loggedInUserId && creatorId && loggedInUserId === creatorId);
+  const isProfileComplete =
+    creator?.isProfileCompleted === true || Number(creator?.profileCompletionPercent || 0) >= 100;
 
   const finalTitle = journey.title || milestone.title || "Journey";
   const finalDay = milestone.day || milestone.milestoneDay || 1;
@@ -213,7 +213,7 @@ function JourneyCard({ milestone = {} }) {
     100
   );
 
-  const firstImage = getImageUrl(milestone.images?.[0]);
+  const firstImage = getImageUrl(milestone.images?.[0]) || getImageUrl(journey.coverImage);
 
   const impressions =
     milestone.impressionsCount ||
@@ -243,15 +243,14 @@ function JourneyCard({ milestone = {} }) {
   const [saved, setSaved] = useState(Boolean(milestone.savedByMe));
   const [following, setFollowing] = useState(Boolean(journey.followedByMe));
   // The real combined feed (feed.controller.js's getUniversalFeed, used by
-  // Home.jsx) reports creator-follow state via addAuthorState as
-  // milestone.isFollowing / milestone.followedByMe / creator.isFollowing —
-  // there is no "creatorFollowedByMe" field from that endpoint.
-  const [userFollowing, setUserFollowing] = useState(
-    Boolean(
-      milestone.isFollowing ||
-        milestone.followedByMe ||
-        creator?.isFollowing
-    )
+  // Home.jsx) reports circle state via viewerState.inCircle / creator.inCircle.
+  const inCreatorCircle = Boolean(
+    milestone.inCircle || creator?.inCircle || milestone.viewerState?.inCircle
+  );
+  const creatorCircleRequested = Boolean(
+    milestone.circleRequested ||
+      creator?.circleRequested ||
+      milestone.viewerState?.circleRequested
   );
   const [avatarBroken, setAvatarBroken] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
@@ -261,6 +260,31 @@ function JourneyCard({ milestone = {} }) {
   const [showViews, setShowViews] = useState(false);
   const [showReel, setShowReel] = useState(false);
 
+  useEffect(() => {
+    setLikes(milestone.likesCount || milestone.likes?.length || 0);
+    setReplies(milestone.repliesCount || milestone.commentsCount || milestone.comments?.length || 0);
+    setReposts(milestone.repostsCount || milestone.reposts?.length || 0);
+    setSaves(milestone.savesCount || milestone.saves?.length || 0);
+    setLiked(Boolean(milestone.likedByMe ?? milestone.viewerState?.liked));
+    setReposted(Boolean(milestone.repostedByMe ?? milestone.viewerState?.reposted));
+    setSaved(Boolean(milestone.savedByMe ?? milestone.viewerState?.saved));
+    setFollowing(Boolean(journey.followedByMe ?? milestone.viewerState?.followingJourney));
+  }, [
+    milestoneId,
+    milestone.likesCount,
+    milestone.repliesCount,
+    milestone.commentsCount,
+    milestone.repostsCount,
+    milestone.savesCount,
+    milestone.likedByMe,
+    milestone.repostedByMe,
+    milestone.savedByMe,
+    milestone.viewerState?.liked,
+    milestone.viewerState?.saved,
+    milestone.viewerState?.followingJourney,
+    journey.followedByMe,
+  ]);
+
   const handleLike = async () => {
     if (!milestoneId) return;
 
@@ -269,12 +293,16 @@ function JourneyCard({ milestone = {} }) {
     setLikes((prev) => Math.max(nextLiked ? prev + 1 : prev - 1, 0));
 
     try {
+      let data;
       if (nextLiked) {
-        await likeMilestone(milestoneId);
+        data = await likeMilestone(milestoneId);
         trackEvent("like", { entityType: "journey_milestone", entityId: milestoneId }).catch(() => {});
       } else {
-        await unlikeMilestone(milestoneId);
+        data = await unlikeMilestone(milestoneId);
       }
+
+      if (typeof data?.likesCount === "number") setLikes(data.likesCount);
+      if (typeof data?.likedByMe === "boolean") setLiked(data.likedByMe);
     } catch {
       setLiked(!nextLiked);
       setLikes((prev) => Math.max(nextLiked ? prev - 1 : prev + 1, 0));
@@ -295,29 +323,10 @@ function JourneyCard({ milestone = {} }) {
       } else {
         await unfollowJourney(journeyId);
       }
-    } catch (error) {
+    } catch {
       setFollowing(!nextFollowing);
       setFollowers((prev) => Math.max(nextFollowing ? prev - 1 : prev + 1, 0));
-      alert(error?.response?.data?.message || "Failed to update follow");
-    }
-  };
-
-  const handleFollowUser = async () => {
-    if (!creatorId || isOwnJourney) return;
-
-    const nextFollowing = !userFollowing;
-    setUserFollowing(nextFollowing);
-
-    try {
-      if (nextFollowing) {
-        await followUserById(creatorId);
-        trackEvent("follow", { entityType: "user", entityId: creatorId }).catch(() => {});
-      } else {
-        await unfollowUserById(creatorId);
-      }
-    } catch (error) {
-      setUserFollowing(!nextFollowing);
-      alert(error?.response?.data?.message || "Failed to update follow");
+      alert("Couldn't update this journey. Please try again.");
     }
   };
 
@@ -329,12 +338,16 @@ function JourneyCard({ milestone = {} }) {
     setSaves((prev) => Math.max(nextSaved ? prev + 1 : prev - 1, 0));
 
     try {
+      let data;
       if (nextSaved) {
-        await saveMilestone(milestoneId);
+        data = await saveMilestone(milestoneId);
         trackEvent("save", { entityType: "journey_milestone", entityId: milestoneId }).catch(() => {});
       } else {
-        await unsaveMilestone(milestoneId);
+        data = await unsaveMilestone(milestoneId);
       }
+
+      if (typeof data?.savesCount === "number") setSaves(data.savesCount);
+      if (typeof data?.savedByMe === "boolean") setSaved(data.savedByMe);
     } catch {
       setSaved(!nextSaved);
       setSaves((prev) => Math.max(nextSaved ? prev - 1 : prev + 1, 0));
@@ -377,17 +390,15 @@ function JourneyCard({ milestone = {} }) {
     if (!milestoneId) return;
 
     trackEvent("share", { entityType: "journey_milestone", entityId: milestoneId }).catch(() => {});
+    shareMilestone(milestoneId).catch(() => {});
 
     try {
-      await shareMilestone(milestoneId);
-
-      if (navigator.share) {
-        await navigator.share({
-          title: finalTitle,
-          text: finalText,
-          url: window.location.href,
-        });
-      }
+      await shareLink({
+        kind: "journey",
+        id: journeyId || milestoneId,
+        title: finalTitle,
+        text: finalText,
+      });
     } catch {
       // silent
     }
@@ -467,28 +478,25 @@ function JourneyCard({ milestone = {} }) {
                       <p className="truncate text-[13px] font-black" style={{ color: "var(--imc-text)" }}>
                         {finalName}
                       </p>
-                      {hasAnyVerification(creator) && (
-                        <BadgeCheck size={12} className="shrink-0" style={{ color: INDIGO }} />
+                      {isMe && (
+                        <span className="shrink-0 text-[11px] font-bold" style={{ color: "var(--imc-text-muted)" }}>
+                          · You
+                        </span>
+                      )}
+                      {isProfileComplete && (
+                        <ProfileCompleteBadge name={finalName} size="sm" />
                       )}
                     </button>
 
-                    {/* Follows the CREATOR's account — distinct from the
-                        "Follow Journey" button next to the title below. */}
-                    {!isOwnJourney && (
-                      <button
-                        onClick={handleFollowUser}
-                        className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black active:scale-95"
-                        style={
-                          userFollowing
-                            ? { background: "var(--imc-surface-2)", color: "var(--imc-text-muted)" }
-                            : { background: "#12141C", color: "#ffffff" }
-                        }
-                      >
-                        <span className="flex items-center gap-1">
-                          {userFollowing ? <Check size={9} /> : <UserPlus size={9} />}
-                          {userFollowing ? "Following" : "Follow"}
-                        </span>
-                      </button>
+                    {/* Circle-requests the CREATOR's account — distinct from
+                        the "Follow Journey" button next to the title below. */}
+                    {!isOwnJourney && creatorId && (
+                      <CircleAction
+                        userId={creatorId}
+                        isCircleMember={inCreatorCircle}
+                        isRequested={creatorCircleRequested}
+                        size="xs"
+                      />
                     )}
                   </div>
                   {creator?.username && (
@@ -523,11 +531,19 @@ function JourneyCard({ milestone = {} }) {
                 <button
                   type="button"
                   onClick={handleFollow}
-                  className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black active:scale-95"
+                  className="shrink-0 rounded-full border px-2 py-1 text-[9px] font-bold transition active:scale-95"
                   style={
                     following
-                      ? { background: "var(--imc-surface-2)", color: "var(--imc-text-muted)" }
-                      : { background: INDIGO, color: "#ffffff" }
+                      ? {
+                          background: "var(--imc-surface-2)",
+                          borderColor: "var(--imc-border)",
+                          color: "var(--imc-text-muted)",
+                        }
+                      : {
+                          background: "var(--imc-action-soft)",
+                          borderColor: "var(--imc-action-border)",
+                          color: "var(--imc-indigo-text)",
+                        }
                   }
                 >
                   <span className="flex items-center gap-1">
@@ -539,7 +555,7 @@ function JourneyCard({ milestone = {} }) {
 
               {isJourneyInactive && (
                 <span className="shrink-0 rounded-full bg-[#FEF3F2] px-2 py-0.5 text-[9px] font-black text-[#D92D20]">
-                  Incompleted
+                  {isMissed ? "Missed this journey" : "Completed"}
                 </span>
               )}
             </div>
@@ -563,23 +579,26 @@ function JourneyCard({ milestone = {} }) {
                 )}
               </div>
             )}
+
+            {isMissed && (
+              <div className="mt-2 rounded-2xl border border-[rgba(67,56,202,0.18)] bg-[var(--imc-indigo-soft)] px-3 py-2.5">
+                <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[var(--imc-indigo-text)]">
+                  {journey.finalNote ? "Creator's final note" : "Why it was missed"}
+                </p>
+                <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-[11.5px] font-semibold leading-5 text-[var(--imc-text)]">
+                  {missedNote || "The creator has not added a final reflection yet."}
+                </p>
+              </div>
+            )}
           </div>
 
           {firstImage ? (
-            <button
-              type="button"
+            <ResponsivePostMedia
+              src={firstImage}
+              alt="Journey progress"
               onClick={() => setShowReel(true)}
-              className="relative block w-full text-left active:opacity-95"
-              style={{ background: "var(--imc-surface)" }}
+              rounded="rounded-none"
             >
-              <ImageLoader
-                src={firstImage}
-                alt="Journey progress"
-                className="h-full w-full object-cover"
-                wrapperClassName="aspect-[16/9] w-full"
-                width={800}
-              />
-
               <div
                 className="absolute left-2.5 top-2.5 flex items-center gap-1 rounded-full px-2.5 py-1 text-[9px] font-black text-white"
                 style={{ background: "rgba(18,20,28,0.62)", backdropFilter: "blur(6px)" }}
@@ -614,7 +633,7 @@ function JourneyCard({ milestone = {} }) {
                   <span className="truncate">{milestone.achievement}</span>
                 </div>
               )}
-            </button>
+            </ResponsivePostMedia>
           ) : (
             <div
               className="imc-lattice flex h-14 items-center justify-center"
@@ -768,9 +787,11 @@ function JourneyCard({ milestone = {} }) {
       />
 
       {showReel && (
-        <FullScreenReel onClose={() => setShowReel(false)}>
-          <JourneyReelSlide milestone={milestone} />
-        </FullScreenReel>
+        <JourneyMilestoneDetail
+          milestone={milestone}
+          onClose={() => setShowReel(false)}
+          onDeleted={() => setJourneyDeleted(true)}
+        />
       )}
     </>
   );

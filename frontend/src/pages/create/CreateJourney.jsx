@@ -1,22 +1,22 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Camera,
   X,
   Flame,
   Trophy,
-  Lock,
   CalendarDays,
-  CheckCircle2,
   ImagePlus,
   AlertCircle,
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-import BottomNav from "../../components/navigation/BottomNav";
 import {
   createJourney,
   createJourneyMilestone,
+  getMyJourneys,
   updateJourneyCover,
 } from "../../api/journeyApi";
 import { trackEvent } from "../../utils/analyticsTracker";
@@ -27,20 +27,27 @@ const MAX_UPDATE = 500;
 
 function CreateJourney() {
   const navigate = useNavigate();
-  const fileRef = useRef(null);
   const coverRef = useRef(null);
+  const calendarRef = useRef(null);
+  const videoRef = useRef(null);
+  const cameraStreamRef = useRef(null);
 
   const [journeyTitle, setJourneyTitle] = useState("");
   const [about, setAbout] = useState("");
   const [update, setUpdate] = useState("");
   const [milestone, setMilestone] = useState("");
   const [targetDays, setTargetDays] = useState(100);
+  const [calendarDate, setCalendarDate] = useState("");
   const [coverFile, setCoverFile] = useState(null);
   const [coverPreview, setCoverPreview] = useState("");
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraStarting, setCameraStarting] = useState(false);
+  const [cameraFacingMode, setCameraFacingMode] = useState("environment");
+  const [activeJourneyCount, setActiveJourneyCount] = useState(0);
 
   const todayDay = 1;
   const progress = Math.min(Math.round((todayDay / targetDays) * 100), 100);
@@ -53,6 +60,56 @@ function CreateJourney() {
     month: "short",
     year: "numeric",
   });
+
+  const toDateInputValue = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const minimumCalendarDate = toDateInputValue(new Date());
+  const maximumCalendarDate = (() => {
+    const date = new Date();
+    date.setDate(date.getDate() + 364);
+    return toDateInputValue(date);
+  })();
+
+  const handleCalendarDate = (value) => {
+    if (!value) {
+      setCalendarDate("");
+      return;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selected = new Date(`${value}T00:00:00`);
+    const days = Math.max(1, Math.round((selected.getTime() - today.getTime()) / 86400000) + 1);
+
+    if (days > 365) {
+      setError("A new journey can be a maximum of 365 days. You can extend it after completing it.");
+      return;
+    }
+
+    setError("");
+    setCalendarDate(value);
+    setTargetDays(days);
+  };
+
+  const openCalendar = () => {
+    const input = calendarRef.current;
+    if (!input) return;
+    if (typeof input.showPicker === "function") input.showPicker();
+    else input.click();
+  };
+
+  const selectedCalendarLabel = calendarDate
+    ? new Date(`${calendarDate}T00:00:00`).toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : "Select date";
 
   const handleCoverChange = (e) => {
     const file = e.target.files?.[0];
@@ -69,25 +126,106 @@ function CreateJourney() {
     if (coverRef.current) coverRef.current.value = "";
   };
 
-  const handleImageChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const removeProgressImage = () => {
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImageFile(null);
+    setImagePreview("");
+  };
 
-    if (!file.type.startsWith("image/")) {
-      setError("Please capture an image file.");
+  const closeLiveCamera = () => {
+    cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+    cameraStreamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setCameraOpen(false);
+    setCameraStarting(false);
+  };
+
+  const startCameraStream = async (facingMode) => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("Live camera capture is not supported on this device.");
       return;
     }
 
-    setError("");
-    setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
-    if (fileRef.current) fileRef.current.value = "";
+    try {
+      setError("");
+      setCameraStarting(true);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: facingMode } },
+        audio: false,
+      });
+
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+      cameraStreamRef.current = stream;
+      setCameraFacingMode(facingMode);
+      setCameraOpen(true);
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => {});
+        setCameraStarting(false);
+      }
+    } catch (cameraError) {
+      setError("Camera permission is required. Gallery uploads are not accepted for journey proof.");
+      setCameraStarting(false);
+    }
   };
 
-  const removeProgressImage = () => {
-    setImageFile(null);
-    setImagePreview("");
-    if (fileRef.current) fileRef.current.value = "";
+  const openLiveCamera = () => startCameraStream(cameraFacingMode);
+
+  const switchLiveCamera = () => {
+    const nextMode = cameraFacingMode === "environment" ? "user" : "environment";
+    startCameraStream(nextMode);
+  };
+
+  useEffect(() => {
+    if (cameraOpen && videoRef.current && cameraStreamRef.current) {
+      videoRef.current.srcObject = cameraStreamRef.current;
+      videoRef.current.play().catch(() => {});
+      setCameraStarting(false);
+    }
+  }, [cameraOpen]);
+
+  useEffect(() => {
+    let mounted = true;
+    getMyJourneys()
+      .then((res) => {
+        const raw = res?.journeys || res?.data?.journeys || res?.data?.items || res?.items || res?.data || res || [];
+        const list = Array.isArray(raw) ? raw : [];
+        const count = list.filter(
+          (journey) => journey?.status !== "completed" && journey?.status !== "uncompleted" && journey?.isActive !== false
+        ).length;
+        if (mounted) setActiveJourneyCount(count);
+      })
+      .catch(() => {});
+    return () => { mounted = false; };
+  }, []);
+
+  useEffect(() => () => {
+    cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
+
+  const captureLivePhoto = () => {
+    const video = videoRef.current;
+    if (!video?.videoWidth || !video?.videoHeight) return;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        setError("Could not capture the photo. Please try again.");
+        return;
+      }
+
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
+      const file = new File([blob], `journey-live-${Date.now()}.jpg`, { type: "image/jpeg" });
+      setImageFile(file);
+      setImagePreview(URL.createObjectURL(blob));
+      setError("");
+      closeLiveCamera();
+    }, "image/jpeg", 0.9);
   };
 
   const removeCoverImage = () => {
@@ -98,6 +236,16 @@ function CreateJourney() {
 
   const handleSubmit = async () => {
     if (loading) return;
+
+    if (activeJourneyCount >= 3) {
+      setError("You can have a maximum of 3 active journeys. Complete or close one before starting another.");
+      return;
+    }
+
+    if (targetDays < 1 || targetDays > 365) {
+      setError("Choose a journey length between 1 and 365 days.");
+      return;
+    }
 
     if (!journeyTitle.trim()) {
       setError("Add your journey name.");
@@ -189,32 +337,43 @@ function CreateJourney() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--imc-bg)] pb-24 text-[var(--imc-text)]">
-      <div className="sticky top-0 z-20 border-b border-[var(--imc-border)] bg-[var(--imc-surface)]/95 px-4 py-4 backdrop-blur-xl">
-        <div className="flex items-center justify-between">
+    <div className="min-h-screen bg-[var(--imc-bg)] text-[var(--imc-text)]">
+      <div className="mx-auto min-h-screen w-full max-w-[430px] bg-[var(--imc-bg)] pb-[max(28px,env(safe-area-inset-bottom))]">
+      <header className="sticky top-0 z-20 border-b border-[var(--imc-border)] bg-[var(--imc-bg)]/95 px-4 pb-3 pt-[max(14px,env(safe-area-inset-top))] backdrop-blur-xl">
+        <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={() => navigate(-1)}
-            className="grid h-10 w-10 place-items-center rounded-full bg-[var(--imc-surface-2)] text-[var(--imc-text)] active:scale-95"
+            aria-label="Go back"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[var(--imc-surface)] text-[var(--imc-text)] active:scale-95"
+            style={{ border: "1px solid var(--imc-border)" }}
           >
-            <ArrowLeft size={20} />
+            <ArrowLeft size={19} />
           </button>
 
-          <h1 className="text-[17px] font-black text-[var(--imc-text)]">
-            Start Journey
-          </h1>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-[18px] font-black text-[var(--imc-text)]">Start Journey</h1>
+            <p className="text-[10.5px] font-semibold text-[var(--imc-text-muted)]">Turn daily progress into a story</p>
+          </div>
 
           <button
             type="button"
-            disabled={loading}
+            disabled={loading || activeJourneyCount >= 3}
             onClick={handleSubmit}
-            className="text-[13px] font-black text-[var(--imc-marigold-dark)] disabled:opacity-50"
+            className="flex h-10 min-w-[68px] items-center justify-center rounded-full bg-[#4338CA] px-4 text-[12px] font-black text-white active:scale-95 disabled:opacity-50"
           >
-            {loading ? "Posting" : "Post"}
+            {loading ? <Loader2 size={16} className="animate-spin" /> : "Start"}
           </button>
         </div>
-      </div>
+      </header>
 
-      <main className="px-4 pt-4">
+      <main className="px-4 py-5">
+        {activeJourneyCount >= 3 && (
+          <div className="mb-4 rounded-[18px] border px-4 py-3" style={{ background: "var(--imc-action-soft)", borderColor: "var(--imc-action-border)" }}>
+            <p className="text-[12px] font-black text-[var(--imc-text)]">Three active journeys already</p>
+            <p className="mt-0.5 text-[10px] font-semibold text-[var(--imc-text-muted)]">Complete or close one journey before starting another.</p>
+          </div>
+        )}
         {error && (
           <div className="mb-4 flex items-start gap-2 rounded-2xl bg-red-50 px-4 py-3 text-[12.5px] font-bold text-red-600">
             <AlertCircle size={16} className="mt-0.5 shrink-0" />
@@ -222,8 +381,8 @@ function CreateJourney() {
           </div>
         )}
 
-        <div className="rounded-[30px] border border-[var(--imc-border)] bg-[var(--imc-surface)] shadow-sm">
-          <div className="relative h-32 overflow-hidden rounded-t-[30px] bg-[var(--imc-surface-2)]">
+        <div>
+          <div className="relative h-36 overflow-hidden rounded-[24px] bg-[var(--imc-surface)]" style={{ border: "1px solid var(--imc-border)" }}>
             {coverPreview ? (
               <img
                 src={coverPreview}
@@ -233,9 +392,11 @@ function CreateJourney() {
             ) : (
               <div className="flex h-full items-center justify-center">
                 <div className="text-center">
-                  <Flame className="mx-auto text-[var(--imc-indigo-text)]" size={26} />
-                  <p className="mt-1.5 text-[10.5px] font-black uppercase tracking-[0.18em] text-[var(--imc-indigo-text)]">
-                    ImCircle Journey
+                  <div className="mx-auto grid h-11 w-11 place-items-center rounded-2xl bg-[var(--imc-indigo-soft)] text-[var(--imc-indigo-text)]">
+                    <Flame size={21} />
+                  </div>
+                  <p className="mt-2 text-[11px] font-black text-[var(--imc-text)]">
+                    Add a journey cover
                   </p>
                 </div>
               </div>
@@ -244,7 +405,7 @@ function CreateJourney() {
             <button
               type="button"
               onClick={() => coverRef.current?.click()}
-              className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-full bg-black/75 px-3 py-2 text-[11px] font-black text-white active:scale-95"
+              className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-full bg-[#171923] px-3 py-2 text-[10px] font-black text-white active:scale-95"
             >
               <ImagePlus size={14} />
               {coverPreview ? "Change" : "Cover"}
@@ -270,8 +431,8 @@ function CreateJourney() {
             />
           </div>
 
-          <div className="p-4">
-            <div className="flex items-center justify-between gap-3 rounded-2xl bg-[var(--imc-surface-2)] p-3">
+          <div className="mt-4 rounded-[24px] bg-[var(--imc-surface)] p-4" style={{ border: "1px solid var(--imc-border)" }}>
+            <div className="flex items-center justify-between gap-3 rounded-[16px] bg-[var(--imc-indigo-soft)] p-3">
               <div className="min-w-0">
                 <p className="text-[11px] font-black text-[var(--imc-text)]">
                   Day {todayDay} of {targetDays} &middot; {progress}%
@@ -293,49 +454,31 @@ function CreateJourney() {
               </div>
             </div>
 
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--imc-surface-2)] px-2.5 py-1.5 text-[10.5px] font-black text-[var(--imc-text)]">
-                <Lock size={12} />
-                Auto day count
-              </span>
-
-              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--imc-surface-2)] px-2.5 py-1.5 text-[10.5px] font-black text-[var(--imc-text)]">
-                <Camera size={12} />
-                Live capture
-              </span>
-
-              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--imc-surface-2)] px-2.5 py-1.5 text-[10.5px] font-black text-[var(--imc-text)]">
-                <CheckCircle2 size={12} />
-                Streak proof
-              </span>
-            </div>
-
-            <div className="mt-4 border-t border-[var(--imc-border)] pt-4">
+            <div className="mt-5">
+              <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.08em] text-[var(--imc-text-muted)]">Journey name</label>
               <input
                 value={journeyTitle}
                 onChange={(e) => setJourneyTitle(e.target.value)}
-                placeholder="Name your journey"
-                className="w-full bg-transparent text-[18px] font-black text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)]"
+                placeholder="e.g. 100 Days of Fitness"
+                className="h-12 w-full rounded-[14px] bg-[var(--imc-surface-2)] px-3.5 text-[14px] font-bold text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)]"
               />
-              <p className="mt-1 text-[11px] font-semibold text-[var(--imc-text-muted)]">
-                Example: 100 Days Fitness, Learning Coding, Building Grera
-              </p>
             </div>
 
-            <div className="mt-4 border-t border-[var(--imc-border)] pt-4">
+            <div className="mt-4">
+              <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.08em] text-[var(--imc-text-muted)]">About this journey</label>
               <textarea
                 value={about}
                 onChange={(e) => setAbout(e.target.value.slice(0, MAX_ABOUT))}
                 maxLength={MAX_ABOUT}
-                placeholder="What is this journey about?"
-                className="min-h-[70px] w-full resize-none bg-transparent text-[14px] font-semibold leading-6 text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)]"
+                placeholder="What do you want to achieve?"
+                className="min-h-[88px] w-full resize-none rounded-[14px] bg-[var(--imc-surface-2)] p-3.5 text-[13px] font-semibold leading-5 text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)]"
               />
               <p className="text-right text-[10px] font-bold text-[var(--imc-text-faint)]">
                 {about.length}/{MAX_ABOUT}
               </p>
             </div>
 
-            <div className="mt-2 border-t border-[var(--imc-border)] pt-4">
+            <div className="mt-5 border-t border-[var(--imc-border)] pt-4">
               <div className="mb-2.5 flex items-center gap-2">
                 <CalendarDays size={16} className="text-[var(--imc-indigo-text)]" />
                 <p className="text-[12.5px] font-black text-[var(--imc-text)]">
@@ -343,12 +486,15 @@ function CreateJourney() {
                 </p>
               </div>
 
-              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
                 {dayOptions.map((days) => (
                   <button
                     key={days}
                     type="button"
-                    onClick={() => setTargetDays(days)}
+                    onClick={() => {
+                      setTargetDays(days);
+                      setCalendarDate("");
+                    }}
                     className={`shrink-0 rounded-full px-3.5 py-2 text-[12px] font-black active:scale-95 ${
                       targetDays === days
                         ? "bg-[#4338CA] text-white"
@@ -359,19 +505,63 @@ function CreateJourney() {
                   </button>
                 ))}
               </div>
+
+              <div className="relative mt-3 flex items-center gap-3 rounded-[15px] bg-[var(--imc-surface-2)] px-3.5 py-3">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[11px] bg-[var(--imc-indigo-soft)] text-[var(--imc-indigo-text)]">
+                  <CalendarDays size={16} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[10.5px] font-black text-[var(--imc-text)]">Choose an end date</span>
+                  <span className="block text-[8.5px] font-semibold text-[var(--imc-text-muted)]">Perfect for exams, launches, or fixed goals</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={openCalendar}
+                  className="shrink-0 rounded-full bg-[var(--imc-surface)] px-3 py-2 text-[9.5px] font-black text-[var(--imc-indigo-text)] active:scale-95"
+                  style={{ border: "1px solid var(--imc-border)" }}
+                >
+                  {selectedCalendarLabel}
+                </button>
+                <input
+                  ref={calendarRef}
+                  type="date"
+                  value={calendarDate}
+                  min={minimumCalendarDate}
+                  max={maximumCalendarDate}
+                  onChange={(event) => handleCalendarDate(event.target.value)}
+                  aria-label="Journey end date"
+                  tabIndex={-1}
+                  className="pointer-events-none absolute h-px w-px opacity-0"
+                />
+              </div>
+
+              {calendarDate && (
+                <p className="mt-2 text-[9.5px] font-bold text-[var(--imc-indigo-text)]">
+                  Calendar plan selected: {targetDays} days, ending {deadlineText}
+                </p>
+              )}
+
+              {targetDays === 365 && (
+                <div className="mt-3 rounded-[15px] bg-[rgba(236,154,30,0.12)] px-3.5 py-3 text-[10.5px] font-bold leading-4 text-[#8A5700]">
+                  Great—you’re going big! Complete this 365-day journey first, and then you can update or extend your journey.
+                </div>
+              )}
             </div>
 
-            <div className="mt-4 border-t border-[var(--imc-border)] pt-4">
-              <p className="mb-2 text-[12.5px] font-black text-[var(--imc-text)]">
-                What progress did you make today?
-              </p>
+          </div>
+
+          <div className="mt-4 rounded-[24px] bg-[var(--imc-surface)] p-4" style={{ border: "1px solid var(--imc-border)" }}>
+              <div className="mb-3">
+                <p className="text-[14px] font-black text-[var(--imc-text)]">Day 1 update</p>
+                <p className="mt-0.5 text-[10px] font-semibold text-[var(--imc-text-muted)]">Add your first real progress entry</p>
+              </div>
 
               <textarea
                 value={update}
                 onChange={(e) => setUpdate(e.target.value.slice(0, MAX_UPDATE))}
                 maxLength={MAX_UPDATE}
-                placeholder="Share day 1 of your journey..."
-                className="min-h-[100px] w-full resize-none bg-transparent text-[15px] font-semibold leading-7 text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)]"
+                placeholder="What progress did you make today?"
+                className="min-h-[130px] w-full resize-none rounded-[16px] bg-[var(--imc-surface-2)] p-3.5 text-[14px] font-semibold leading-6 text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)]"
               />
               <p className="text-right text-[10px] font-bold text-[var(--imc-text-faint)]">
                 {update.length}/{MAX_UPDATE}
@@ -396,23 +586,14 @@ function CreateJourney() {
               ) : (
                 <button
                   type="button"
-                  onClick={() => fileRef.current?.click()}
-                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[var(--imc-border)] bg-[var(--imc-surface-2)] px-4 py-3.5 text-[12.5px] font-black text-[var(--imc-text)] active:scale-[0.98]"
+                  onClick={openLiveCamera}
+                  disabled={cameraStarting}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-[15px] border border-dashed border-[#4338CA]/30 bg-[var(--imc-indigo-soft)] px-4 py-3.5 text-[11px] font-black text-[var(--imc-indigo-text)] active:scale-[0.98]"
                 >
-                  <Camera size={17} />
-                  Capture Live Progress Photo
+                  {cameraStarting ? <Loader2 size={17} className="animate-spin" /> : <Camera size={17} />}
+                  {cameraStarting ? "Opening camera..." : "Capture Live Progress Photo"}
                 </button>
               )}
-
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                hidden
-                onChange={handleImageChange}
-              />
-            </div>
 
             <div className="mt-4 border-t border-[var(--imc-border)] pt-4">
               <div className="mb-2 flex items-center gap-2 text-[12.5px] font-black text-[var(--imc-text)]">
@@ -435,7 +616,54 @@ function CreateJourney() {
         </p>
       </main>
 
-      <BottomNav />
+      {cameraOpen && (
+        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/80">
+          <div className="w-full max-w-[430px] overflow-hidden rounded-t-[28px] bg-[#11131A] pb-[max(20px,env(safe-area-inset-bottom))]">
+            <div className="flex items-center justify-between px-4 py-3 text-white">
+              <div>
+                <h2 className="text-[14px] font-black">Live progress camera</h2>
+                <p className="text-[9.5px] font-semibold text-white/60">Take a photo now—gallery uploads are disabled</p>
+              </div>
+              <button type="button" onClick={closeLiveCamera} aria-label="Close camera" className="grid h-10 w-10 place-items-center rounded-full bg-white/10 active:scale-95">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="relative aspect-[3/4] max-h-[68vh] w-full overflow-hidden bg-black">
+              <video
+                ref={videoRef}
+                autoPlay
+                muted
+                playsInline
+                className={`h-full w-full object-cover ${cameraFacingMode === "user" ? "scale-x-[-1]" : ""}`}
+              />
+              <button
+                type="button"
+                onClick={switchLiveCamera}
+                disabled={cameraStarting}
+                aria-label={`Switch to ${cameraFacingMode === "environment" ? "front" : "back"} camera`}
+                className="absolute right-3 top-3 flex h-11 items-center gap-2 rounded-full bg-black/55 px-3 text-[10px] font-black text-white backdrop-blur-md active:scale-95 disabled:opacity-60"
+              >
+                {cameraStarting ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                {cameraFacingMode === "environment" ? "Front" : "Back"}
+              </button>
+            </div>
+
+            <div className="flex items-center justify-center px-5 py-5">
+              <button
+                type="button"
+                onClick={captureLivePhoto}
+                aria-label="Capture live photo"
+                className="grid h-16 w-16 place-items-center rounded-full border-4 border-white bg-[#4338CA] text-white shadow-[0_0_0_4px_rgba(255,255,255,0.18)] active:scale-95"
+              >
+                <Camera size={25} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      </div>
     </div>
   );
 }

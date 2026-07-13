@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, GraduationCap, Mic, Plus, Check } from "lucide-react";
+import { Eye, GraduationCap, Mic } from "lucide-react";
 
 import PostActions from "./PostActions";
 import PostMenu from "./PostMenu";
@@ -8,12 +8,10 @@ import SocialProofBanner from "./SocialProofBanner";
 import ViewInfoSheet from "../common/ViewInfoSheet";
 import ImageLoader from "../common/ImageLoader";
 import LazyVideo from "../common/LazyVideo";
-import FullScreenReel from "./FullScreenReel";
-import PostReelSlide from "./PostReelSlide";
-// The old networkApi.followUser hit POST /users/follow/:id and DELETE
-// /users/unfollow/:id — neither route exists on the backend (only PATCH
-// /users/:id/follow does), so this button silently failed on every click.
-import { followUserById } from "../../api/userApi";
+import ResponsivePostMedia from "../common/ResponsivePostMedia";
+import PostDetailOverlay from "../common/PostDetailOverlay";
+import CircleAction from "../common/CircleAction";
+import ProfileCompleteBadge from "../badges/ProfileCompleteBadge";
 import { trackEvent } from "../../utils/analyticsTracker";
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
@@ -42,7 +40,12 @@ function getInitial(name) {
 function getId(value) {
   if (!value) return "";
   if (typeof value === "string") return value;
-  return value?._id || value?.id || "";
+  // `userId` fallback matters: some API payloads (lean/aggregated
+  // responses, localStorage-cached user objects) key the id as `userId`
+  // instead of `_id`/`id`. Missing it here silently broke the "own post"
+  // check — isMe fell through to false, which let the Circle button render
+  // on the viewer's own content instead of being hidden.
+  return value?._id || value?.id || value?.userId || "";
 }
 
 function safeJsonParse(value) {
@@ -134,7 +137,6 @@ function PostCard({ post = {}, type = "post", currentUser = null }) {
   const [showViews, setShowViews] = useState(false);
   const [activeMediaIndex, setActiveMediaIndex] = useState(null);
   const [expanded, setExpanded] = useState(false);
-  const [followLoading, setFollowLoading] = useState(false);
   const [avatarBroken, setAvatarBroken] = useState(false);
   // No parent-list plumbing needed — the backend soft-deletes and future
   // feed loads already exclude it, so this just hides the card from the
@@ -163,24 +165,22 @@ function PostCard({ post = {}, type = "post", currentUser = null }) {
     author?.isMe === true ||
     (authorId && currentUserId && String(authorId) === String(currentUserId));
 
-  const getInitialFollowing = () =>
-    Boolean(
-      author?.isFollowing === true ||
-        post?.isFollowing === true ||
-        post?.followedByMe === true
-    );
-
-  const [following, setFollowing] = useState(getInitialFollowing);
-
-  useEffect(() => {
-    setFollowing(getInitialFollowing());
-  }, [post?._id, post?.isFollowing, post?.followedByMe, author?.isFollowing]);
+  const inCircle = Boolean(
+    author?.inCircle === true ||
+      post?.viewerState?.inCircle === true ||
+      post?.inCircle === true
+  );
+  const circleRequested = Boolean(
+    author?.circleRequested === true ||
+      post?.circleRequested === true ||
+      post?.viewerState?.circleRequested === true
+  );
+  const isProfileComplete =
+    author?.isProfileCompleted === true || Number(author?.profileCompletionPercent || 0) >= 100;
 
   useEffect(() => {
     setAvatarBroken(false);
   }, [authorId, author?.avatar, author?.profileImage, author?.profilePicture]);
-
-  const showFollowButton = Boolean(authorId) && !isMe && !following;
 
   const avatarUrl = getImageUrl(
     author?.avatar ||
@@ -253,24 +253,6 @@ function PostCard({ post = {}, type = "post", currentUser = null }) {
     }
   };
 
-  const handleFollow = async (e) => {
-    e.stopPropagation();
-
-    if (!authorId || isMe || followLoading) return;
-
-    setFollowLoading(true);
-    setFollowing(true);
-
-    try {
-      await followUserById(authorId);
-      trackEvent("follow", { entityType: "user", entityId: authorId }).catch(() => {});
-    } catch (error) {
-      setFollowing(false);
-    } finally {
-      setFollowLoading(false);
-    }
-  };
-
   if (deleted) return null;
 
   return (
@@ -325,33 +307,30 @@ function PostCard({ post = {}, type = "post", currentUser = null }) {
                     </h2>
                   </button>
 
+                  {isProfileComplete && (
+                    <ProfileCompleteBadge name={name} size="sm" />
+                  )}
+
                   {isMe && (
                     <span className="text-[12px] font-bold" style={{ color: "var(--imc-text-muted)" }}>
                       · You
                     </span>
                   )}
 
-                  {showFollowButton && (
-                    <button
-                      type="button"
-                      onClick={handleFollow}
-                      disabled={followLoading}
-                      className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black text-white active:scale-95 disabled:opacity-60"
-                      style={{ background: "#12141C" }}
-                    >
-                      <Plus size={11} strokeWidth={3} />
-                      {followLoading ? "..." : "Follow"}
-                    </button>
-                  )}
-
-                  {following && !isMe && (
-                    <span
-                      className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black"
-                      style={{ background: "var(--imc-surface-2)", border: "1px solid var(--imc-border)", color: "#12141C" }}
-                    >
-                      <Check size={11} />
-                      Following
-                    </span>
+                  {!isMe && authorId && (
+                    <CircleAction
+                      userId={authorId}
+                      isCircleMember={inCircle}
+                      isRequested={circleRequested}
+                      onStatusChange={(next) => {
+                        if (next === "pending") {
+                          trackEvent("circle_request_sent", {
+                            entityType: "user",
+                            entityId: authorId,
+                          }).catch(() => {});
+                        }
+                      }}
+                    />
                   )}
 
                   {type === "learning" && (
@@ -464,9 +443,14 @@ function PostCard({ post = {}, type = "post", currentUser = null }) {
       </article>
 
       {activeMedia && (
-        <FullScreenReel onClose={() => setActiveMediaIndex(null)}>
-          <PostReelSlide post={post} type={type} initialMediaIndex={activeMediaIndex} />
-        </FullScreenReel>
+        <PostDetailOverlay
+          post={post}
+          type={type}
+          currentUser={currentUser}
+          initialMediaIndex={activeMediaIndex}
+          onClose={() => setActiveMediaIndex(null)}
+          onDeleted={() => setDeleted(true)}
+        />
       )}
 
       <ViewInfoSheet
@@ -499,24 +483,12 @@ function VisualMediaGrid({ media, onOpen }) {
 
   if (media.length === 1) {
     return (
-      <button
-        type="button"
+      <ResponsivePostMedia
+        src={media[0].url}
+        type={media[0].type}
+        alt="Post media"
         onClick={() => onOpen(0)}
-        className="block max-h-[260px] w-full overflow-hidden rounded-[14px]"
-        style={{ background: "var(--imc-surface-2)" }}
-      >
-        {media[0].type === "video" ? (
-          <LazyVideo src={media[0].url} controls className="w-full object-cover" />
-        ) : (
-          <ImageLoader
-            src={media[0].url}
-            alt="Post media"
-            className="h-full w-full object-cover"
-            wrapperClassName="aspect-[4/3] w-full"
-            width={700}
-          />
-        )}
-      </button>
+      />
     );
   }
 

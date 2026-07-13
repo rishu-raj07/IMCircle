@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  ArrowRight,
   Check,
+  Flame,
   Loader2,
+  PenSquare,
   Plus,
-  Search,
-  SlidersHorizontal,
+  UserRound,
   UserPlus,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import BottomNav from "../../components/navigation/BottomNav";
 import TopHeader from "../../components/navigation/TopHeader";
@@ -36,9 +38,24 @@ import { useSEO } from "../../hooks/useSEO";
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
 const HOME_FEED_CACHE_PREFIX = "home_feed_cache_v2";
+const HOME_TAB_STORAGE_KEY = "imcircle_home_tab";
 const FEED_LIMIT = 10;
 const MARIGOLD = "#EC9A1E";
 const INDIGO = "#4338CA";
+
+// Home only ever shows these two — Circles/Learning/Opportunities tabs some
+// designs sketch out aren't wired to a finished experience yet, and
+// Discover already has its own destination in the bottom nav, so it isn't
+// duplicated here as a third tab.
+const HOME_TABS = [
+  { value: "for-you", label: "For You" },
+  { value: "following", label: "Following" },
+];
+
+function getStoredHomeTab() {
+  const stored = sessionStorage.getItem(HOME_TAB_STORAGE_KEY);
+  return HOME_TABS.some((tab) => tab.value === stored) ? stored : "for-you";
+}
 
 const SEARCH_FILTERS = [
   { value: "all", label: "All" },
@@ -141,6 +158,14 @@ function getUserInterest(user) {
     user?.headline ||
     "Building in public"
   );
+}
+
+function getUserLocation(user) {
+  const location = user?.location;
+  if (typeof location === "string" && location.trim()) return location.trim();
+  return [location?.city || user?.city, location?.state || user?.state, location?.country || user?.country]
+    .filter(Boolean)
+    .join(", ");
 }
 
 function getGreeting() {
@@ -273,19 +298,20 @@ function cacheHomeFeed(tab, state) {
 
 function Home() {
   const navigate = useNavigate();
+  const location = useLocation();
   useSEO({
     title: "Home Feed",
     description: "Your IMCircle home feed — journeys, posts, and updates from your circle.",
     path: "/home",
   });
 
-  const initialFeedCache = getCachedHomeFeed("for-you");
+  const [activeTab, setActiveTab] = useState(getStoredHomeTab);
+  const initialFeedCache = getCachedHomeFeed(activeTab);
 
   const [me, setMe] = useState(null);
   const [circleUsers, setCircleUsers] = useState([]);
   const [suggestedUsers, setSuggestedUsers] = useState([]);
   const [requestedUserIds, setRequestedUserIds] = useState([]);
-  const activeTab = "for-you";
   const [items, setItems] = useState(() => initialFeedCache?.items || []);
   const [page, setPage] = useState(() => initialFeedCache?.page || 1);
   const [cursor, setCursor] = useState(() => initialFeedCache?.nextCursor || null);
@@ -296,8 +322,7 @@ function Home() {
   const [error, setError] = useState("");
   const [builderScore, setBuilderScore] = useState(null);
   const [showStreakShare, setShowStreakShare] = useState(false);
-  const [activeJourneyId, setActiveJourneyId] = useState(null);
-  const [activeJourneyUpdatedToday, setActiveJourneyUpdatedToday] = useState(false);
+  const [activeJourneys, setActiveJourneys] = useState([]);
   const [showFilterSheet, setShowFilterSheet] = useState(false);
   const [searchFilter, setSearchFilter] = useState("all");
   const [watchedLearningIds, setWatchedLearningIds] = useState(() => {
@@ -305,6 +330,7 @@ function Home() {
   });
   const [myLearning, setMyLearning] = useState(null);
 
+  const composeNavigatingRef = useRef(false);
   const pullStartYRef = useRef(null);
   const seenInSessionRef = useRef(new Set());
   const visibleTimersRef = useRef(new Map());
@@ -319,8 +345,17 @@ function Home() {
 
   const learningItems = items.filter((item) => item?.type === "learning");
   const feedItems = items.filter((item) => item?.type !== "learning");
-  const streakPromptDoneToday =
-    activeJourneyUpdatedToday || isSameLocalDay(builderScore?.lastActiveDate);
+  const journeysNeedingUpdate = activeJourneys.filter(
+    (journey) =>
+      !Boolean(journey?.todayUpdateDone) &&
+      !isSameLocalDay(journey?.lastMilestoneAt)
+  );
+
+  useEffect(() => {
+    if (!location.state?.openStreakCard || (builderScore?.currentStreak || 0) < 1) return;
+    setShowStreakShare(true);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [builderScore?.currentStreak, location.pathname, location.state, navigate]);
 
   useEffect(() => {
     sessionStorage.setItem("imcircle_feed_session_id", sessionIdRef.current);
@@ -412,17 +447,13 @@ function Home() {
           res ||
           [];
         const journeys = Array.isArray(rawJourneys) ? rawJourneys : [];
-        const active = journeys.find(
+        const active = journeys.filter(
           (journey) => journey?.status !== "completed" && journey?.status !== "uncompleted"
         );
 
-        setActiveJourneyId(active?._id || null);
-        setActiveJourneyUpdatedToday(
-          Boolean(active?.todayUpdateDone) || isSameLocalDay(active?.lastMilestoneAt)
-        );
+        setActiveJourneys(active);
       } catch {
-        setActiveJourneyId(null);
-        setActiveJourneyUpdatedToday(false);
+        setActiveJourneys([]);
       }
     };
 
@@ -464,6 +495,7 @@ function Home() {
         page: nextPage,
         limit: FEED_LIMIT,
         cursor: isMore ? cursor : undefined,
+        sessionId: sessionIdRef.current,
         refresh: isRefresh ? "true" : undefined,
       });
 
@@ -499,8 +531,8 @@ function Home() {
 
       if (isRefresh) trackEvent("feed_refresh", { metadata: { tab } }).catch(() => {});
       if (isMore) trackEvent("feed_scroll", { metadata: { tab, page: nextPage } }).catch(() => {});
-    } catch (err) {
-      setError(err?.response?.data?.message || "Failed to load feed");
+    } catch {
+      setError("feed-unavailable");
       if (isInitial) setItems([]);
     } finally {
       if (isInitial) setIsLoading(false);
@@ -616,6 +648,12 @@ function Home() {
     };
   }, [feedItems, activeTab]);
 
+  const changeTab = (tab) => {
+    if (tab === activeTab) return;
+    sessionStorage.setItem(HOME_TAB_STORAGE_KEY, tab);
+    setActiveTab(tab);
+  };
+
   const handleRefresh = () => {
     if (isLoading) return;
     setCursor(null);
@@ -693,22 +731,10 @@ function Home() {
 
     return (
       <section className="mt-3">
-        <div className="mb-2 px-1">
-          <h2 className="font-serif text-[15px] font-semibold" style={{ color: "var(--imc-text)" }}>
-            What did you learn today?
-          </h2>
-        </div>
-
         <div className="no-scrollbar -mx-3 flex gap-3 overflow-x-auto px-3 pb-2">
           <button
             type="button"
-            onClick={() => {
-              if (myLearning?._id) {
-                openLearning(myLearning, storyAuthorIds);
-              } else {
-                navigate("/create-learning");
-              }
-            }}
+            onClick={() => navigate("/profile")}
             className="group flex min-w-[64px] flex-col items-center active:scale-95"
           >
             <div
@@ -733,10 +759,10 @@ function Home() {
                   />
                 ) : (
                   <div
-                    className="grid h-[46px] w-[46px] place-items-center rounded-full font-serif text-[15px] font-semibold"
-                    style={{ background: "var(--imc-surface-strong)", color: MARIGOLD }}
+                    className="grid h-[46px] w-[46px] place-items-center rounded-full"
+                    style={{ background: "var(--imc-surface-2)", color: "var(--imc-text-muted)" }}
                   >
-                    {getInitial(me)}
+                    <UserRound size={23} strokeWidth={1.8} />
                   </div>
                 )}
               </div>
@@ -744,18 +770,20 @@ function Home() {
               <span
                 role="button"
                 tabIndex={0}
-                onClick={(e) => {
-                  e.stopPropagation();
+                aria-label="Add today's learning"
+                onClick={(event) => {
+                  event.stopPropagation();
                   navigate("/create-learning");
                 }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.stopPropagation();
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    event.stopPropagation();
                     navigate("/create-learning");
                   }
                 }}
-                className="absolute -bottom-1 -right-1 grid h-5 w-5 place-items-center rounded-full ring-2"
-                style={{ background: MARIGOLD, color: "var(--imc-text)", "--tw-ring-color": "var(--imc-surface)" }}
+                className="absolute -bottom-1 -right-1 grid h-5 w-5 place-items-center rounded-full text-white shadow-[0_3px_8px_rgba(67,56,202,0.3)] ring-2 active:scale-95"
+                style={{ background: "var(--imc-indigo)", "--tw-ring-color": "var(--imc-surface)" }}
               >
                 <Plus size={12} strokeWidth={3} />
               </span>
@@ -775,7 +803,7 @@ function Home() {
               <button
                 type="button"
                 key={userId || index}
-                onClick={() => openLearning(learning, storyAuthorIds)}
+                onClick={() => navigate(`/profile/user/${userId}`)}
                 className="group flex min-w-[64px] flex-col items-center active:scale-95"
               >
                 <div
@@ -796,10 +824,10 @@ function Home() {
                       />
                     ) : (
                       <div
-                        className="grid h-[46px] w-[46px] place-items-center rounded-full font-serif text-[14px] font-semibold"
-                        style={{ background: "var(--imc-surface-strong)", color: MARIGOLD }}
+                        className="grid h-[46px] w-[46px] place-items-center rounded-full"
+                        style={{ background: "var(--imc-surface-2)", color: "var(--imc-text-muted)" }}
                       >
-                        {getInitial(user)}
+                        <UserRound size={23} strokeWidth={1.8} />
                       </div>
                     )}
                   </div>
@@ -820,7 +848,13 @@ function Home() {
             return (
               <div key={userId} className="flex min-w-[64px] flex-col items-center">
                 <div className="relative grid h-[56px] w-[56px] place-items-center rounded-full p-[2.5px]" style={{ background: "var(--imc-border)" }}>
-                  <div className="grid h-full w-full place-items-center rounded-full" style={{ background: "var(--imc-surface)" }}>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/profile/user/${userId}`)}
+                    className="grid h-full w-full place-items-center rounded-full active:scale-95"
+                    style={{ background: "var(--imc-surface)" }}
+                    aria-label={`Open ${getUserName(user)}'s profile`}
+                  >
                     {avatarUrl ? (
                       <ImageLoader
                         src={avatarUrl}
@@ -832,20 +866,25 @@ function Home() {
                       />
                     ) : (
                       <div
-                        className="grid h-[46px] w-[46px] place-items-center rounded-full font-serif text-[14px] font-semibold"
-                        style={{ background: "var(--imc-surface-strong)", color: MARIGOLD }}
+                        className="grid h-[46px] w-[46px] place-items-center rounded-full"
+                        style={{ background: "var(--imc-surface-2)", color: "var(--imc-text-muted)" }}
                       >
-                        {getInitial(user)}
+                        <UserRound size={23} strokeWidth={1.8} />
                       </div>
                     )}
-                  </div>
+                  </button>
 
                   <button
                     type="button"
                     onClick={() => handleCircleRequest(userId)}
                     disabled={requested}
                     className="absolute -bottom-1 -right-1 grid h-5 w-5 place-items-center rounded-full ring-2 disabled:opacity-80"
-                    style={{ background: requested ? "var(--imc-indigo)" : MARIGOLD, color: "white", "--tw-ring-color": "var(--imc-surface)" }}
+                    style={{
+                      background: "var(--imc-action-soft)",
+                      color: "var(--imc-indigo-text)",
+                      border: "1px solid var(--imc-action-border)",
+                      "--tw-ring-color": "var(--imc-surface)",
+                    }}
                   >
                     {requested ? <Check size={11} strokeWidth={3} /> : <UserPlus size={11} strokeWidth={3} />}
                   </button>
@@ -904,17 +943,11 @@ function Home() {
       >
         <BrandStyles />
 
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <svg className="absolute -right-24 -top-28 h-[420px] w-[420px] opacity-[0.35]" viewBox="0 0 420 420" fill="none">
-            <circle cx="210" cy="210" r="209" stroke={INDIGO} strokeOpacity="0.14" />
-            <circle cx="210" cy="210" r="160" stroke={INDIGO} strokeOpacity="0.18" />
-            <circle cx="210" cy="210" r="112" stroke={MARIGOLD} strokeOpacity="0.16" />
-          </svg>
-        </div>
-
         <div className="relative">
           <div className="px-3 pt-2">
-            <TopHeader />
+            <TopHeader
+              onStreakClick={() => setShowStreakShare(true)}
+            />
           </div>
 
           {(isRefreshing || isFetchingMore) && (
@@ -924,63 +957,55 @@ function Home() {
           )}
 
           <div className="px-4">
-            <h1 className="font-serif text-[22px] font-semibold leading-tight" style={{ color: "var(--imc-text)" }}>
-              {getGreeting()}, {getUserName(me).split(" ")[0]}
-            </h1>
-
-            <div className="mt-3 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => navigate(`/search?type=${searchFilter}`)}
-                className="flex h-[48px] flex-1 items-center gap-3 rounded-[18px] px-4 text-left shadow-[0_10px_24px_rgba(15,23,42,0.05)]"
-                style={{ background: "var(--imc-surface)", border: "1px solid var(--imc-border)" }}
-              >
-                <Search size={18} style={{ color: "var(--imc-text)" }} strokeWidth={2.25} />
-                <span className="text-[12px] font-bold" style={{ color: "var(--imc-text-muted)" }}>
-                  Search people, posts, journeys
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowFilterSheet(true)}
-                className="grid h-[48px] w-[48px] place-items-center rounded-[18px] shadow-[0_10px_24px_rgba(15,23,42,0.05)]"
-                style={{ background: "var(--imc-surface)", border: "1px solid var(--imc-border)" }}
-              >
-                <SlidersHorizontal size={18} style={{ color: "var(--imc-text)" }} strokeWidth={2.25} />
-              </button>
-            </div>
-
             <InstallPromptCard />
 
-            {builderScore && !streakPromptDoneToday && (
-              <div className="mt-3">
+            {builderScore && activeJourneys.length === 0 && (
+              <div className="mt-1">
                 <StreakCard
                   builderScore={builderScore}
                   compact
                   variant="prompt"
-                  hasActiveJourney={Boolean(activeJourneyId)}
-                  onPrimaryAction={() =>
-                    navigate(activeJourneyId ? `/journey/${activeJourneyId}/update` : "/create-journey")
-                  }
+                  hasActiveJourney={false}
+                  onPrimaryAction={() => navigate("/create-journey")}
                 />
               </div>
             )}
 
+            {builderScore && journeysNeedingUpdate.length > 0 && (
+              <JourneyUpdatePrompt
+                journeys={journeysNeedingUpdate}
+                onUpdate={(journeyId) => navigate(`/journey/${journeyId}/update`)}
+              />
+            )}
+
             {renderLearningCircles()}
+
+            <div className="-mx-4 mt-3 flex items-center gap-8 border-b px-4" style={{ borderColor: "var(--imc-border)" }}>
+              {[
+                { label: "For You", action: () => changeTab("for-you"), active: activeTab === "for-you" },
+                { label: "Following", action: () => changeTab("following"), active: activeTab === "following" },
+              ].map((tab) => (
+                <button key={tab.label} type="button" onClick={tab.action} className="relative min-w-[64px] pb-3 text-[10px] font-semibold" style={{ color: tab.active ? "var(--imc-indigo)" : "var(--imc-text-muted)" }}>
+                  {tab.label}
+                  {tab.active && <span className="absolute inset-x-0 -bottom-px h-[2px] rounded-full" style={{ background: "var(--imc-indigo)" }} />}
+                </button>
+              ))}
+            </div>
 
           </div>
 
-          <div className="mt-4 space-y-3 px-4">
+          <div className="mt-2 space-y-3 px-3">
             {isLoading && items.length === 0 && <HomePageSkeleton />}
 
             {!isLoading && error && items.length === 0 && (
               <div className="rounded-[22px] p-4 text-center" style={{ background: "rgba(217,45,32,0.08)", border: "1px solid rgba(217,45,32,0.25)" }}>
-                <p className="text-[13px] font-black text-red-600">{error}</p>
+                <p className="text-[14px] font-black" style={{ color: "var(--imc-text)" }}>Feed is taking a moment</p>
+                <p className="mt-1 text-[12px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>Check your connection and try again.</p>
                 <button
                   type="button"
                   onClick={() => fetchFeed({ mode: "initial" })}
-                  className="mt-3 rounded-full bg-red-600 px-4 py-2 text-[12px] font-black text-white"
+                  className="mt-3 rounded-full border px-4 py-2 text-[12px] font-black"
+                  style={{ borderColor: "var(--imc-border)", color: "var(--imc-indigo-text)", background: "var(--imc-surface)" }}
                 >
                   Try Again
                 </button>
@@ -988,14 +1013,56 @@ function Home() {
             )}
 
             {!isLoading && !error && feedItems.length === 0 && (
-              <div className="rounded-[22px] p-5 text-center" style={{ background: "var(--imc-surface)", border: "1px solid var(--imc-border)" }}>
-                <p className="text-[15px] font-black" style={{ color: "var(--imc-text)" }}>
-                  No feed yet
-                </p>
-                <p className="mt-1 text-[12px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>
-                  Follow builders or share your first update.
-                </p>
-              </div>
+              activeTab === "following" ? (
+                <section className="rounded-[22px] p-5" style={{ background: "var(--imc-surface)", border: "1px solid var(--imc-border)" }}>
+                  <div className="text-center">
+                    <p className="text-[15px] font-black" style={{ color: "var(--imc-text)" }}>
+                      Add more people to your Circle
+                    </p>
+                    <p className="mx-auto mt-1 max-w-[280px] text-[12px] font-semibold leading-5" style={{ color: "var(--imc-text-muted)" }}>
+                      Posts from people you follow will appear here. Explore these builders to get started.
+                    </p>
+                  </div>
+
+                  <div className="mt-4 space-y-2.5">
+                    {suggestedUsers.slice(0, 4).map((user) => {
+                      const userId = String(getId(user));
+                      const avatarUrl = getUserAvatar(user);
+                      const requested = requestedUserIds.includes(userId);
+
+                      return (
+                        <div key={userId} className="flex min-h-[64px] items-center gap-3 rounded-2xl px-3 py-2.5" style={{ background: "var(--imc-surface-2)" }}>
+                          <button type="button" onClick={() => navigate(`/profile/user/${userId}`)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                            {avatarUrl ? (
+                              <ImageLoader src={avatarUrl} alt={getUserName(user)} className="h-10 w-10 rounded-full object-cover" wrapperClassName="h-10 w-10 rounded-full" width={80} />
+                            ) : (
+                              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full" style={{ background: "var(--imc-surface)", color: "var(--imc-text-muted)" }}>
+                                <UserRound size={20} />
+                              </span>
+                            )}
+                            <span className="min-w-0">
+                              <span className="block truncate text-[12px] font-black" style={{ color: "var(--imc-text)" }}>{getUserName(user)}</span>
+                              <span className="block truncate text-[10px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>{user?.headline || user?.role || "IMCircle builder"}</span>
+                            </span>
+                          </button>
+                          <button type="button" disabled={requested} onClick={() => handleCircleRequest(userId)} className="h-8 rounded-full px-3 text-[10px] font-black text-white disabled:opacity-70" style={{ background: "var(--imc-indigo)" }}>
+                            {requested ? "Requested" : "Add to Circle"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <button type="button" onClick={() => navigate("/network")} className="mt-4 h-11 w-full rounded-2xl text-[12px] font-black" style={{ background: "var(--imc-indigo-tint)", color: "var(--imc-indigo-text)" }}>
+                    Explore more people
+                  </button>
+                </section>
+              ) : (
+                <div className="rounded-[22px] p-5 text-center" style={{ background: "var(--imc-surface)", border: "1px solid var(--imc-border)" }}>
+                  <p className="text-[15px] font-black" style={{ color: "var(--imc-text)" }}>No feed yet</p>
+                  <p className="mt-1 text-[12px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>Follow builders or share your first update.</p>
+                </div>
+              )
             )}
 
             {feedItems.map(renderFeedItem)}
@@ -1022,6 +1089,34 @@ function Home() {
           </div>
         </div>
 
+        {/* Floating compose button — opens the SAME /create-post route the
+            bottom-nav Create sheet's "Progress Update" option uses (see
+            BottomNav.jsx's CreateOption), so there's only one post composer
+            in the app. It intentionally does NOT open the Journey composer;
+            that only happens if the person picks Journey from inside the
+            create flow. `composeNavigatingRef` blocks a second navigate()
+            firing from a rapid double-tap before the route change lands. */}
+        <button
+          type="button"
+          onClick={() => {
+            if (composeNavigatingRef.current) return;
+            composeNavigatingRef.current = true;
+            navigate("/create-post");
+            window.setTimeout(() => {
+              composeNavigatingRef.current = false;
+            }, 800);
+          }}
+          aria-label="Create post"
+          className="fixed z-40 grid h-[52px] w-[52px] place-items-center rounded-full text-white shadow-[0_12px_26px_rgba(91,55,238,0.42)] active:scale-95"
+          style={{
+            background: "linear-gradient(145deg, #6d4aff, #4338ca)",
+            right: "max(16px, calc((100vw - 430px) / 2 + 16px))",
+            bottom: "calc(84px + env(safe-area-inset-bottom))",
+          }}
+        >
+          <PenSquare size={21} strokeWidth={2.2} />
+        </button>
+
         <BottomNav />
 
         <ShareCardModal
@@ -1032,11 +1127,15 @@ function Home() {
           shareText={`I'm on a ${builderScore?.currentStreak || 0}-day streak building on IMCircle`}
           data={{
             name: getUserName(me),
+            username: me?.username || "",
             avatarUrl: getUserAvatar(me),
             streak: builderScore?.currentStreak || 0,
             longestStreak: builderScore?.longestStreak || 0,
             level: builderScore?.level || "Explorer",
             interest: getUserInterest(me),
+            headline: me?.headline || me?.role || me?.occupation || "",
+            location: getUserLocation(me),
+            tagline: "Your circle shapes your future.",
           }}
         />
 
@@ -1090,6 +1189,64 @@ function Home() {
         )}
       </div>
     </div>
+  );
+}
+
+function JourneyUpdatePrompt({ journeys, onUpdate }) {
+  return (
+    <section className="px-3 pb-2">
+      <div className="mb-2 flex items-end justify-between px-1">
+        <div>
+          <p className="text-[12px] font-black" style={{ color: "var(--imc-text)" }}>
+            Continue your journeys
+          </p>
+          <p className="text-[9.5px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>
+            Share today&apos;s progress for each active journey
+          </p>
+        </div>
+        <span className="rounded-full px-2 py-1 text-[9px] font-black" style={{ background: "var(--imc-action-soft)", color: "var(--imc-indigo-text)" }}>
+          {journeys.length} due
+        </span>
+      </div>
+
+      <div className="no-scrollbar flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1">
+        {journeys.map((journey) => {
+          const id = journey?._id || journey?.id;
+          const cover = getImageUrl(journey?.coverImage || journey?.previewImage);
+          const day = Math.max(1, Number(journey?.currentDay || journey?.day || 1));
+          const total = Math.max(1, Number(journey?.targetDays || journey?.totalDays || 100));
+
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onUpdate(id)}
+              className="relative flex min-h-[82px] w-[88%] shrink-0 snap-start items-center gap-3 overflow-hidden rounded-[18px] border p-3 text-left active:scale-[0.99]"
+              style={{ background: "var(--imc-surface)", borderColor: "var(--imc-border)" }}
+            >
+              <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-[14px]" style={{ background: "var(--imc-action-soft)", color: "var(--imc-indigo-text)" }}>
+                {cover ? (
+                  <ImageLoader src={cover} alt="" className="h-full w-full object-cover" wrapperClassName="h-full w-full" width={120} />
+                ) : (
+                  <Flame size={20} />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[12px] font-black" style={{ color: "var(--imc-text)" }}>
+                  {journey?.title || "Your journey"}
+                </p>
+                <p className="mt-0.5 text-[9.5px] font-bold" style={{ color: "var(--imc-text-muted)" }}>
+                  Day {day} of {total} · Add today&apos;s proof
+                </p>
+                <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-black" style={{ color: "var(--imc-indigo-text)" }}>
+                  Share update <ArrowRight size={12} />
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

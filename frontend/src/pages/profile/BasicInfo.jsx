@@ -30,6 +30,8 @@ const INTEREST_OPTIONS = [
   "Finance",
   "Design",
   "Content & Creator",
+  "Fitness & Wellness",
+  "Education",
 ];
 
 function formatDobDisplay(value) {
@@ -130,10 +132,15 @@ function UsernameField({
       try {
         setSuggestionsLoading(true);
         const data = await getUsernameSuggestions(fullName.trim());
-        setSuggestions(data?.suggestions || []);
+        const recommended = data?.recommended || "";
+        setSuggestions(
+          (data?.suggestions || [])
+            .filter((item) => item !== recommended)
+            .slice(0, 4)
+        );
 
-        if (data?.recommended && !manuallyEditedRef.current) {
-          setUsername(data.recommended);
+        if (recommended && !manuallyEditedRef.current) {
+          setUsername(recommended);
         }
       } catch {
         // silent — user can still type a username manually
@@ -183,7 +190,13 @@ function UsernameField({
     try {
       setSuggestionsLoading(true);
       const data = await getUsernameSuggestions(fullName || username || "builder");
-      setSuggestions(data?.suggestions || []);
+      const recommended = data?.recommended || "";
+      setSuggestions(
+        (data?.suggestions || [])
+          .filter((item) => item !== username)
+          .filter((item) => item !== recommended)
+          .slice(0, 4)
+      );
     } catch {
       // silent
     } finally {
@@ -206,7 +219,7 @@ function UsernameField({
   if (locked) {
     return (
       <div>
-        <label className="mb-2 block text-[13px] font-black text-[var(--imc-text-muted)]">
+        <label className="mb-2 block text-[12px] font-bold text-[var(--imc-text-muted)]">
           Username <span className="text-red-500">*</span>
         </label>
 
@@ -219,7 +232,7 @@ function UsernameField({
           <input
             value={username}
             disabled
-            className="h-[58px] w-full rounded-[20px] border border-[var(--imc-border)] bg-[var(--imc-surface-2)] pl-11 pr-4 text-[16px] font-black text-[var(--imc-text-muted)] outline-none"
+            className="h-[54px] w-full rounded-[16px] border border-[var(--imc-border)] bg-[var(--imc-surface-2)] pl-11 pr-4 text-[15px] font-bold text-[var(--imc-text-muted)] outline-none"
           />
         </div>
 
@@ -241,7 +254,7 @@ function UsernameField({
     return (
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <label className="text-[13px] font-black text-[var(--imc-text-muted)]">
+          <label className="text-[12px] font-bold text-[var(--imc-text-muted)]">
             Username <span className="text-red-500">*</span>
           </label>
 
@@ -267,7 +280,7 @@ function UsernameField({
           <input
             value={username}
             disabled
-            className="h-[58px] w-full rounded-[20px] border border-[var(--imc-border)] bg-[var(--imc-surface-2)] pl-11 pr-4 text-[16px] font-black text-[var(--imc-text-muted)] outline-none"
+            className="h-[54px] w-full rounded-[16px] border border-[var(--imc-border)] bg-[var(--imc-surface-2)] pl-11 pr-4 text-[15px] font-bold text-[var(--imc-text-muted)] outline-none"
           />
         </div>
 
@@ -281,7 +294,7 @@ function UsernameField({
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
-        <label className="text-[13px] font-black text-[var(--imc-text-muted)]">
+        <label className="text-[12px] font-bold text-[var(--imc-text-muted)]">
           Username <span className="text-red-500">*</span>
         </label>
 
@@ -315,7 +328,7 @@ function UsernameField({
           }}
           disabled={!canEditUsername}
           placeholder="choose-a-username"
-          className="h-[58px] w-full rounded-[20px] border border-[var(--imc-border)] bg-[var(--imc-surface)] pl-11 pr-4 text-[16px] font-black text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)] focus:border-[var(--imc-indigo-text)]"
+          className="h-[54px] w-full rounded-[16px] border border-[var(--imc-border)] bg-[var(--imc-surface)] pl-11 pr-4 text-[15px] font-bold text-[var(--imc-text)] outline-none transition placeholder:font-medium placeholder:text-[var(--imc-text-faint)] focus:border-[var(--imc-indigo-text)] focus:ring-2 focus:ring-[rgba(67,56,202,0.08)]"
         />
       </div>
 
@@ -344,8 +357,8 @@ function UsernameField({
               onClick={() => pickSuggestion(item)}
               className={`rounded-full px-3 py-1.5 text-[11px] font-black ${
                 item === username
-                  ? "bg-[#4338CA] text-white"
-                  : "bg-[rgba(67,56,202,0.12)] text-[var(--imc-indigo-text)]"
+                  ? "border border-[rgba(67,56,202,0.30)] bg-[rgba(67,56,202,0.12)] text-[var(--imc-indigo-text)]"
+                  : "border border-transparent bg-[var(--imc-surface-2)] text-[var(--imc-text-muted)]"
               }`}
             >
               @{item}
@@ -358,6 +371,7 @@ function UsernameField({
 }
 
 function BasicInfo({
+  step = 1,
   fullName,
   setFullName,
   username,
@@ -383,6 +397,23 @@ function BasicInfo({
   const isCustomInterest = Boolean(primaryInterest) && !INTEREST_OPTIONS.includes(primaryInterest);
   const [otherMode, setOtherMode] = useState(isCustomInterest);
   const [customInterest, setCustomInterest] = useState(isCustomInterest ? primaryInterest : "");
+  const stepCopy = {
+    1: {
+      eyebrow: "Introduce yourself",
+      title: "Your profile identity",
+      text: "Add the name and short introduction people will see first.",
+    },
+    2: {
+      eyebrow: "Account details",
+      title: "Choose your identity",
+      text: "Pick a unique username and add your personal basics.",
+    },
+    3: {
+      eyebrow: "Personalize your feed",
+      title: "Your place and interests",
+      text: "Help us show you more relevant people, journeys, and circles.",
+    },
+  }[step];
 
   const openDobPicker = () => {
     const input = dobInputRef.current;
@@ -401,18 +432,21 @@ function BasicInfo({
   };
 
   return (
-    <section className="mt-1">
-      <div className="mb-5">
-        <h2 className="text-[24px] font-black text-[var(--imc-text)]">Basic Info</h2>
-        <p className="mt-1 text-[13px] font-bold text-[var(--imc-text-muted)]">
-          Required details to personalize your IMCircle profile.
+    <section className="mt-6">
+      <div className="mb-5 border-b border-[var(--imc-border)] pb-4">
+        <span className="mb-2 inline-flex rounded-full bg-[rgba(67,56,202,0.09)] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--imc-indigo-text)]">
+          Step {step} of 3 · {stepCopy.eyebrow}
+        </span>
+        <h2 className="text-[22px] font-extrabold tracking-[-0.02em] text-[var(--imc-text)]">{stepCopy.title}</h2>
+        <p className="mt-1 text-[12px] font-medium leading-5 text-[var(--imc-text-muted)]">
+          {stepCopy.text}
         </p>
       </div>
 
       <div className="space-y-5">
-        <div>
+        <div className={step === 1 ? "" : "hidden"}>
           <div className="mb-2 flex items-center justify-between">
-            <label className="text-[13px] font-black text-[var(--imc-text-muted)]">
+            <label className="text-[12px] font-bold text-[var(--imc-text-muted)]">
               Name <span className="text-red-500">*</span>
             </label>
             <span className="text-[11px] font-bold text-[var(--imc-text-faint)]">
@@ -424,22 +458,24 @@ function BasicInfo({
             value={fullName}
             onChange={(e) => setFullName(e.target.value.slice(0, 60))}
             placeholder="Your full name"
-            className="h-[58px] w-full rounded-[20px] border border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 text-[17px] font-black text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)] focus:border-[var(--imc-indigo-text)]"
+            className="h-[54px] w-full rounded-[16px] border border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 text-[15px] font-bold text-[var(--imc-text)] outline-none transition placeholder:font-medium placeholder:text-[var(--imc-text-faint)] focus:border-[var(--imc-indigo-text)] focus:ring-2 focus:ring-[rgba(67,56,202,0.08)]"
           />
         </div>
 
-        <UsernameField
-          username={username}
-          setUsername={setUsername}
-          originalUsername={originalUsername}
-          usernameEditUnlocked={usernameEditUnlocked}
-          setUsernameEditUnlocked={setUsernameEditUnlocked}
-          fullName={fullName}
-          usernameLastChangedAt={usernameLastChangedAt}
-        />
+        <div className={step === 2 ? "" : "hidden"}>
+          <UsernameField
+            username={username}
+            setUsername={setUsername}
+            originalUsername={originalUsername}
+            usernameEditUnlocked={usernameEditUnlocked}
+            setUsernameEditUnlocked={setUsernameEditUnlocked}
+            fullName={fullName}
+            usernameLastChangedAt={usernameLastChangedAt}
+          />
+        </div>
 
-        <div>
-          <label className="mb-2 block text-[13px] font-black text-[var(--imc-text-muted)]">
+        <div className={step === 2 ? "" : "hidden"}>
+          <label className="mb-2 block text-[12px] font-bold text-[var(--imc-text-muted)]">
             Date of Birth <span className="text-red-500">*</span>
           </label>
 
@@ -449,7 +485,7 @@ function BasicInfo({
               className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 z-10 text-[var(--imc-indigo-text)]"
             />
 
-            <div className="flex h-[58px] w-full items-center rounded-[20px] border border-[var(--imc-border)] bg-[var(--imc-surface)] pl-11 pr-4 text-[16px] font-black">
+            <div className="flex h-[54px] w-full items-center rounded-[16px] border border-[var(--imc-border)] bg-[var(--imc-surface)] pl-11 pr-4 text-[15px] font-bold transition hover:border-[rgba(67,56,202,0.35)]">
               <span
                 className={dob ? "text-[var(--imc-text)]" : "text-[var(--imc-text-faint)]"}
               >
@@ -469,7 +505,7 @@ function BasicInfo({
               max={dobBounds.max}
               min={dobBounds.min}
               onChange={(e) => setDob(e.target.value)}
-              className="absolute inset-0 h-[58px] w-full cursor-pointer opacity-0"
+              className="absolute inset-0 h-[54px] w-full cursor-pointer opacity-0"
             />
           </div>
 
@@ -478,8 +514,8 @@ function BasicInfo({
           </p>
         </div>
 
-        <div>
-          <label className="mb-2 block text-[13px] font-black text-[var(--imc-text-muted)]">
+        <div className={step === 2 ? "" : "hidden"}>
+          <label className="mb-2 block text-[12px] font-bold text-[var(--imc-text-muted)]">
             Gender <span className="text-red-500">*</span>
           </label>
 
@@ -489,9 +525,9 @@ function BasicInfo({
                 key={item}
                 type="button"
                 onClick={() => setGender(item)}
-                className={`flex min-h-[52px] items-center gap-2 rounded-[18px] border px-3 text-left text-[14px] font-black ${
+                className={`flex min-h-[48px] items-center gap-2 rounded-[15px] border px-3 text-left text-[13px] font-bold transition ${
                   gender === item
-                    ? "border-[var(--imc-indigo-text)] bg-[rgba(67,56,202,0.12)] text-[var(--imc-indigo-text)]"
+                    ? "border-[rgba(67,56,202,0.35)] bg-[rgba(67,56,202,0.10)] text-[var(--imc-indigo-text)] shadow-[0_4px_12px_rgba(67,56,202,0.06)]"
                     : "border-[var(--imc-border)] bg-[var(--imc-surface)] text-[var(--imc-text)]"
                 }`}
               >
@@ -502,9 +538,9 @@ function BasicInfo({
           </div>
         </div>
 
-        <div>
+        <div className={step === 1 ? "" : "hidden"}>
           <div className="mb-2 flex items-center justify-between">
-            <label className="text-[13px] font-black text-[var(--imc-text-muted)]">
+            <label className="text-[12px] font-bold text-[var(--imc-text-muted)]">
               Tagline <span className="text-[11px] font-bold text-[var(--imc-text-faint)]">(optional)</span>
             </label>
             <span className="text-[11px] font-bold text-[var(--imc-text-faint)]">
@@ -516,7 +552,7 @@ function BasicInfo({
             value={tagline}
             onChange={(e) => setTagline(e.target.value.slice(0, 320))}
             placeholder="Tell people what you do, what you're building, or what you're learning right now."
-            className="min-h-[150px] w-full resize-none rounded-[20px] border border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 py-3 text-[16px] font-bold leading-6 text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)] focus:border-[var(--imc-indigo-text)]"
+            className="min-h-[130px] w-full resize-none rounded-[16px] border border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 py-3 text-[14px] font-medium leading-6 text-[var(--imc-text)] outline-none transition placeholder:text-[var(--imc-text-faint)] focus:border-[var(--imc-indigo-text)] focus:ring-2 focus:ring-[rgba(67,56,202,0.08)]"
           />
 
           <p className="mt-1.5 text-[11px] font-bold text-[var(--imc-text-faint)]">
@@ -524,10 +560,12 @@ function BasicInfo({
           </p>
         </div>
 
-        <LocationField value={location} onChange={setLocation} />
+        <div className={step === 3 ? "" : "hidden"}>
+          <LocationField value={location} onChange={setLocation} />
+        </div>
 
-        <div>
-          <label className="mb-2 block text-[13px] font-black text-[var(--imc-text-muted)]">
+        <div className={step === 3 ? "" : "hidden"}>
+          <label className="mb-2 block text-[12px] font-bold text-[var(--imc-text-muted)]">
             What are you here to explore? <span className="text-red-500">*</span>
           </label>
 
@@ -546,8 +584,8 @@ function BasicInfo({
                 }}
                 className={`rounded-full px-3.5 py-2 text-[12px] font-black ${
                   !otherMode && primaryInterest === item
-                    ? "bg-[#4338CA] text-white"
-                    : "bg-[rgba(67,56,202,0.12)] text-[var(--imc-indigo-text)]"
+                    ? "border border-[rgba(67,56,202,0.30)] bg-[rgba(67,56,202,0.12)] text-[var(--imc-indigo-text)]"
+                    : "border border-transparent bg-[var(--imc-surface-2)] text-[var(--imc-text-muted)]"
                 }`}
               >
                 {item}
@@ -562,8 +600,8 @@ function BasicInfo({
               }}
               className={`rounded-full px-3.5 py-2 text-[12px] font-black ${
                 otherMode
-                  ? "bg-[#4338CA] text-white"
-                  : "bg-[rgba(67,56,202,0.12)] text-[var(--imc-indigo-text)]"
+                  ? "border border-[rgba(67,56,202,0.30)] bg-[rgba(67,56,202,0.12)] text-[var(--imc-indigo-text)]"
+                  : "border border-transparent bg-[var(--imc-surface-2)] text-[var(--imc-text-muted)]"
               }`}
             >
               Other

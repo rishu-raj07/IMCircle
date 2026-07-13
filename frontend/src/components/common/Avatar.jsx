@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { UserRound } from "lucide-react";
 
-import { getAvatarUrl, getDisplayName, getInitial } from "../../utils/avatar";
+import { getAvatarUrl, getDisplayName } from "../../utils/avatar";
 
 // The ONE consistent default avatar shown everywhere in IMCircle when a
 // person has no profile photo (profile photo is optional at setup — see
@@ -16,7 +16,6 @@ export default function Avatar({ user, src, name, size = 40, className = "" }) {
 
   const resolvedSrc = src ?? getAvatarUrl(user);
   const displayName = name || getDisplayName(user);
-  const initial = getInitial(displayName);
 
   useEffect(() => {
     setFailed(false);
@@ -39,16 +38,10 @@ export default function Avatar({ user, src, name, size = 40, className = "" }) {
 
   return (
     <div
-      style={style}
-      className={`flex shrink-0 items-center justify-center rounded-full bg-[#12141C] font-black text-[#EC9A1E] ${className}`}
+      className={`flex shrink-0 items-center justify-center rounded-full border text-[var(--imc-text-muted)] ${className}`}
+      style={{ ...style, background: "var(--imc-surface-2)", borderColor: "var(--imc-border)" }}
     >
-      {initial ? (
-        <span style={{ fontSize: Math.max(Math.round(size * 0.38), 11) }}>
-          {initial}
-        </span>
-      ) : (
-        <UserRound size={Math.max(Math.round(size * 0.5), 14)} />
-      )}
+      <UserRound size={Math.max(Math.round(size * 0.5), 14)} strokeWidth={1.7} />
     </div>
   );
 }

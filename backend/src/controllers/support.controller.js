@@ -1,7 +1,7 @@
 import ProblemReport from "../models/ProblemReport.js";
 import { sendMail } from "../utils/mailer.js";
 
-const DEVELOPER_EMAIL = process.env.DEV_NOTIFY_EMAIL || "rishurajmld@gmail.com";
+const DEVELOPER_EMAIL = process.env.DEV_NOTIFY_EMAIL || "rishu@imcircle.com";
 
 export const reportProblem = async (req, res) => {
   try {

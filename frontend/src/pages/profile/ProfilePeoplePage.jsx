@@ -10,6 +10,7 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 
 import BottomNav from "../../components/navigation/BottomNav";
+import Avatar from "../../components/common/Avatar";
 import { getMyProfile } from "../../api/profileApi";
 import {
   unfollowUserById,
@@ -453,23 +454,9 @@ export default function ProfilePeoplePage() {
                             state: { source: "network" },
                           })
                     }
-                    className="h-14 w-14 shrink-0 overflow-hidden rounded-full bg-[#12141C]"
+                    className="h-14 w-14 shrink-0 overflow-hidden rounded-full"
                   >
-                    {avatar ? (
-                      <img
-                        src={avatar}
-                        alt={name}
-                        referrerPolicy="no-referrer"
-                        className="h-full w-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.style.display = "none";
-                        }}
-                      />
-                    ) : (
-                      <div className="grid h-full w-full place-items-center text-[20px] font-black text-[#EC9A1E]">
-                        {name.charAt(0).toUpperCase()}
-                      </div>
-                    )}
+                    <Avatar src={avatar} name={name} size={56} />
                   </button>
 
                   <button

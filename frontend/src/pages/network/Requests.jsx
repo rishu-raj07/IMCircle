@@ -1,121 +1,211 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
-  Check,
-  Search,
-  UserPlus,
-  X,
-  MapPin,
   Briefcase,
+  Check,
+  Clock3,
+  Loader2,
+  MapPin,
+  Search,
   Sparkles,
+  UserRound,
+  Users,
+  X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-import BottomNav from "../../components/navigation/BottomNav";
 import {
-  getReceivedCircleRequests,
   acceptCircleRequest,
+  getReceivedCircleRequests,
+  getSentCircleRequests,
   rejectCircleRequest,
 } from "../../api/circleRequestApi";
+import {
+  getBrowseCircles,
+  getMyCircles,
+  getMySentCircleJoinRequests,
+  joinCircle,
+  requestToJoinCircle,
+} from "../../api/circleApi";
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
+const LINE = "var(--imc-border)";
+const INK = "var(--imc-text)";
+const MUTED = "var(--imc-text-muted)";
+const INDIGO = "#4338CA";
+const MARIGOLD = "#EC9A1E";
 
-function getImageUrl(user) {
-  if (!user) return "";
+const CIRCLE_FILTERS = [
+  { value: "all", label: "All", keywords: [] },
+  { value: "exploring", label: "Exploring", keywords: ["explore", "exploring", "discovery", "general"] },
+  { value: "students", label: "Students", keywords: ["student", "college", "campus", "learning", "education"] },
+  { value: "startups", label: "Startups", keywords: ["startup", "founder", "entrepreneur", "business"] },
+  { value: "creators", label: "Creators", keywords: ["creator", "content", "design", "art", "media"] },
+  { value: "developers", label: "Developers", keywords: ["developer", "coding", "programming", "tech", "software"] },
+];
 
-  const url =
-    user?.avatar?.secure_url ||
-    user?.avatar?.url ||
-    user?.avatar ||
-    user?.profileImage?.secure_url ||
-    user?.profileImage?.url ||
-    user?.profileImage ||
-    user?.picture ||
-    "";
-
-  if (!url || typeof url !== "string") return "";
-  if (url.startsWith("http")) return url;
-  if (url.startsWith("/uploads")) return `${API_URL}${url}`;
-
-  return url;
+function getId(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  return value?._id || value?.id || value?.userId || "";
 }
 
 function getName(user) {
   return user?.fullName || user?.name || user?.username || "User";
 }
 
-function getId(value) {
-  if (!value) return "";
-  return value?._id || value?.id || value;
+function getLocation(user) {
+  if (typeof user?.location === "string") return user.location;
+  return [user?.location?.city, user?.location?.state].filter(Boolean).join(", ") || user?.city || "India";
 }
 
-function Requests() {
-  const navigate = useNavigate();
+function getImageUrl(image) {
+  if (!image) return "";
+  const url =
+    image?.secure_url ||
+    image?.url ||
+    image?.path ||
+    image?.avatar?.secure_url ||
+    image?.avatar?.url ||
+    image?.profileImage?.secure_url ||
+    image?.profileImage?.url ||
+    image?.profileImage ||
+    image?.picture ||
+    image;
 
-  const [requests, setRequests] = useState([]);
+  if (typeof url !== "string") return "";
+  if (url.startsWith("/uploads")) return `${API_URL}${url}`;
+  return url;
+}
+
+function normalizeList(response, key) {
+  const list = response?.[key] || response?.data?.[key] || response?.data || response;
+  return Array.isArray(list) ? list : [];
+}
+
+export default function Requests() {
+  const navigate = useNavigate();
+  const [received, setReceived] = useState([]);
+  const [sent, setSent] = useState([]);
+  const [circles, setCircles] = useState([]);
+  const [joinedCircleIds, setJoinedCircleIds] = useState([]);
+  const [requestedCircleIds, setRequestedCircleIds] = useState([]);
   const [search, setSearch] = useState("");
+  const [activeFilter, setActiveFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState("");
 
-  const loadRequests = async () => {
-    try {
-      setLoading(true);
-
-      const data = await getReceivedCircleRequests();
-      setRequests(data?.requests || data?.data?.requests || []);
-    } catch (error) {
-      setRequests([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    loadRequests();
+    let active = true;
+
+    (async () => {
+      setLoading(true);
+      const [receivedRes, sentRes, circlesRes, myCirclesRes, joinsRes] = await Promise.allSettled([
+        getReceivedCircleRequests(),
+        getSentCircleRequests(),
+        getBrowseCircles({ page: 1, limit: 50 }),
+        getMyCircles(),
+        getMySentCircleJoinRequests(),
+      ]);
+
+      if (!active) return;
+
+      if (receivedRes.status === "fulfilled") setReceived(normalizeList(receivedRes.value, "requests"));
+      if (sentRes.status === "fulfilled") setSent(normalizeList(sentRes.value, "requests"));
+      if (circlesRes.status === "fulfilled") {
+        setCircles(
+          normalizeList(circlesRes.value, "circles").filter((circle) => circle?.visibility !== "private")
+        );
+        setRequestedCircleIds(
+          (circlesRes.value?.requestedCircleIds || circlesRes.value?.data?.requestedCircleIds || []).map(String)
+        );
+      }
+      if (myCirclesRes.status === "fulfilled") {
+        setJoinedCircleIds(
+          normalizeList(myCirclesRes.value, "circles")
+            .map((item) => String(getId(item?.circle || item)))
+            .filter(Boolean)
+        );
+      }
+      if (joinsRes.status === "fulfilled") {
+        const ids = joinsRes.value?.circleIds || joinsRes.value?.data?.circleIds || [];
+        setRequestedCircleIds((previous) => [...new Set([...previous, ...ids.map(String)])]);
+      }
+
+      setLoading(false);
+    })();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const filteredRequests = useMemo(() => {
-    const q = search.toLowerCase();
+  const query = search.trim().toLowerCase();
 
-    return requests.filter((request) => {
+  const filteredSent = useMemo(
+    () => sent.filter((request) => {
+      const receiver = request?.receiver || {};
+      return !query || `${getName(receiver)} ${receiver?.headline || ""} ${getLocation(receiver)}`.toLowerCase().includes(query);
+    }),
+    [sent, query]
+  );
+
+  const filteredReceived = useMemo(
+    () => received.filter((request) => {
       const sender = request?.sender || {};
-      const name = getName(sender).toLowerCase();
-      const headline = (sender?.headline || sender?.role || "").toLowerCase();
-      const city = (sender?.location?.city || "").toLowerCase();
+      return !query || `${getName(sender)} ${sender?.headline || ""} ${getLocation(sender)}`.toLowerCase().includes(query);
+    }),
+    [received, query]
+  );
 
-      return name.includes(q) || headline.includes(q) || city.includes(q);
+  const filteredCircles = useMemo(() => {
+    const filter = CIRCLE_FILTERS.find((item) => item.value === activeFilter);
+    return circles.filter((circle) => {
+      const haystack = `${circle?.name || ""} ${circle?.description || ""} ${(circle?.tags || []).join(" ")}`.toLowerCase();
+      const matchesSearch = !query || haystack.includes(query);
+      const matchesFilter = activeFilter === "all" || filter?.keywords?.some((keyword) => haystack.includes(keyword));
+      return matchesSearch && matchesFilter;
     });
-  }, [requests, search]);
+  }, [circles, activeFilter, query]);
 
-  const removeLocal = (requestId) => {
-    setRequests((prev) =>
-      prev.filter((request) => String(getId(request)) !== String(requestId))
-    );
+  const removeReceived = (requestId) => {
+    setReceived((current) => current.filter((request) => String(getId(request)) !== String(requestId)));
   };
 
-  const handleAccept = async (requestId) => {
+  const handleReceivedAction = async (requestId, action) => {
     if (!requestId || actionId) return;
-
     try {
       setActionId(requestId);
-      await acceptCircleRequest(requestId);
-      removeLocal(requestId);
-    } catch (error) {
-      // best-effort — non-critical
+      if (action === "accept") await acceptCircleRequest(requestId);
+      else await rejectCircleRequest(requestId);
+      removeReceived(requestId);
     } finally {
       setActionId("");
     }
   };
 
-  const handleReject = async (requestId) => {
-    if (!requestId || actionId) return;
+  const handleCircleAction = async (circle) => {
+    const circleId = String(getId(circle));
+    if (!circleId || actionId) return;
+    if (joinedCircleIds.includes(circleId)) {
+      navigate(`/circles/${circleId}`);
+      return;
+    }
+
+    const inviteOnly = circle?.visibility === "invite-only";
+    if (inviteOnly && requestedCircleIds.includes(circleId)) return;
 
     try {
-      setActionId(requestId);
-      await rejectCircleRequest(requestId);
-      removeLocal(requestId);
+      setActionId(circleId);
+      if (inviteOnly) {
+        setRequestedCircleIds((current) => [...new Set([...current, circleId])]);
+        await requestToJoinCircle(circleId);
+      } else {
+        await joinCircle(circleId);
+        setJoinedCircleIds((current) => [...new Set([...current, circleId])]);
+      }
     } catch (error) {
-      // best-effort — non-critical
+      if (inviteOnly) setRequestedCircleIds((current) => current.filter((id) => id !== circleId));
     } finally {
       setActionId("");
     }
@@ -123,155 +213,202 @@ function Requests() {
 
   return (
     <div className="min-h-screen bg-[var(--imc-bg)]">
-      <div className="mx-auto min-h-screen max-w-[430px] bg-[var(--imc-bg)] pb-28">
-        <div className="sticky top-0 z-30 border-b border-[var(--imc-border)] bg-[var(--imc-surface-2)]/95 px-5 py-4 backdrop-blur-xl">
-          <div className="flex items-center justify-between">
+      <div className="mx-auto min-h-screen w-full max-w-[430px] bg-[var(--imc-bg)] pb-[max(28px,env(safe-area-inset-bottom))]">
+        <header className="sticky top-0 z-30 border-b border-[var(--imc-border)] bg-[var(--imc-bg)]/95 px-4 pb-3 pt-[max(14px,env(safe-area-inset-top))] backdrop-blur-xl">
+          <div className="flex items-center gap-3">
             <button
+              type="button"
               onClick={() => navigate(-1)}
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--imc-surface)] shadow-sm"
+              aria-label="Go back"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[var(--imc-surface)] active:scale-95"
+              style={{ border: `1px solid ${LINE}` }}
             >
-              <ArrowLeft size={21} />
+              <ArrowLeft size={19} style={{ color: INK }} />
             </button>
-
-            <div className="text-center">
-              <h1 className="text-[19px] font-black text-[var(--imc-text)]">
-                Circle Requests
-              </h1>
-              <p className="text-[11px] font-bold text-[var(--imc-text-faint)]">
-                Accept to allow direct messages
-              </p>
-            </div>
-
-            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--imc-surface)] text-[var(--imc-indigo-text)] shadow-sm">
-              <UserPlus size={21} />
+            <div className="min-w-0">
+              <h1 className="text-[18px] font-black" style={{ color: INK }}>Requests & Circles</h1>
+              <p className="text-[10.5px] font-semibold" style={{ color: MUTED }}>Manage requests and find your next circle</p>
             </div>
           </div>
 
-          <div className="mt-4 flex h-12 items-center gap-3 rounded-2xl bg-[var(--imc-surface)] px-4 shadow-sm">
-            <Search size={18} className="text-[var(--imc-text-muted)]" />
+          <label className="mt-3 flex h-11 items-center gap-2.5 rounded-[15px] bg-[var(--imc-surface)] px-3.5" style={{ border: `1px solid ${LINE}` }}>
+            <Search size={17} style={{ color: MUTED }} />
             <input
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search requests..."
-              className="w-full bg-transparent text-[14px] font-semibold outline-none placeholder:text-[var(--imc-text-faint)]"
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search people or circles"
+              className="min-w-0 flex-1 bg-transparent text-[12.5px] font-semibold outline-none placeholder:text-[var(--imc-text-faint)]"
             />
-          </div>
-        </div>
+          </label>
+        </header>
 
-        <main className="px-5 py-5">
-          <div className="rounded-[30px] bg-gradient-to-br from-[#4338CA] to-[#2E2A8F] p-5 text-white shadow-xl shadow-purple-200">
-            <div className="flex gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15">
-                <Sparkles size={24} />
+        <main className="space-y-7 px-4 py-5">
+          <PageSection title="Requests you sent" count={filteredSent.length}>
+            {loading ? <LoadingRow /> : filteredSent.length ? (
+              <div className="no-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4 pb-1">
+                {filteredSent.map((request) => (
+                  <SentRequestCard
+                    key={getId(request)}
+                    user={request?.receiver}
+                    onOpen={() => navigate(request?.receiver?.username ? `/profile/${request.receiver.username}` : `/profile/user/${request?.receiverId || getId(request?.receiver)}`)}
+                  />
+                ))}
               </div>
+            ) : <EmptyLine text="You have no pending sent requests." />}
+          </PageSection>
 
-              <div>
-                <h2 className="text-[21px] font-black">
-                  {filteredRequests.length} New Requests
-                </h2>
-                <p className="mt-1 text-[12px] font-semibold leading-5 text-white/75">
-                  Accepting adds both users to circle, followers and following.
-                </p>
+          <PageSection title="New circle requests" count={filteredReceived.length}>
+            {loading ? <LoadingRow /> : filteredReceived.length ? (
+              <div className="space-y-2.5">
+                {filteredReceived.map((request) => (
+                  <ReceivedRequestCard
+                    key={getId(request)}
+                    user={request?.sender}
+                    loading={actionId === String(getId(request))}
+                    onOpen={() => navigate(request?.sender?.username ? `/profile/${request.sender.username}` : `/profile/user/${getId(request?.sender)}`)}
+                    onAccept={() => handleReceivedAction(String(getId(request)), "accept")}
+                    onIgnore={() => handleReceivedAction(String(getId(request)), "ignore")}
+                  />
+                ))}
               </div>
-            </div>
-          </div>
+            ) : <EmptyLine text="New circle requests will appear here." />}
+          </PageSection>
 
-          {loading ? (
-            <div className="mt-20 text-center text-[13px] font-black text-[var(--imc-indigo-text)]">
-              Loading requests...
-            </div>
-          ) : filteredRequests.length > 0 ? (
-            <div className="mt-5 space-y-4">
-              {filteredRequests.map((request) => {
-                const sender = request?.sender || {};
-                const requestId = getId(request);
-                const name = getName(sender);
-                const avatar = getImageUrl(sender);
-                const isLoading = actionId === requestId;
-
+          <PageSection title="Explore new circles" count={filteredCircles.length}>
+            <div className="no-scrollbar -mx-4 mb-4 flex gap-2 overflow-x-auto px-4 pb-1">
+              {CIRCLE_FILTERS.map((filter) => {
+                const active = activeFilter === filter.value;
                 return (
-                  <div
-                    key={requestId}
-                    className="rounded-[28px] border border-[var(--imc-border)] bg-[var(--imc-surface)] p-4 shadow-sm"
+                  <button
+                    type="button"
+                    key={filter.value}
+                    onClick={() => setActiveFilter(filter.value)}
+                    className="h-9 shrink-0 rounded-full px-4 text-[11px] font-black active:scale-95"
+                    style={{
+                      background: active ? INDIGO : "var(--imc-surface)",
+                      border: `1px solid ${active ? INDIGO : LINE}`,
+                      color: active ? "white" : MUTED,
+                    }}
                   >
-                    <div className="flex gap-3">
-                      <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#12141C] text-[20px] font-black text-[#EC9A1E]">
-                        {avatar ? (
-                          <img
-                            src={avatar}
-                            alt={name}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          name.charAt(0).toUpperCase()
-                        )}
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <h3 className="truncate text-[15px] font-black text-[var(--imc-text)]">
-                          {name}
-                        </h3>
-
-                        <p className="mt-1 flex items-center gap-1 text-[12px] font-bold text-[var(--imc-text-muted)]">
-                          <Briefcase size={13} />
-                          {sender?.headline || sender?.role || "IMCircle user"}
-                        </p>
-
-                        <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-[var(--imc-text-faint)]">
-                          <MapPin size={13} />
-                          {[sender?.location?.city, sender?.location?.state]
-                            .filter(Boolean)
-                            .join(", ") || "India"}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 rounded-2xl bg-[var(--imc-surface-2)] p-3">
-                      <p className="text-[12px] font-semibold leading-5 text-[var(--imc-text-muted)]">
-                        Wants to add you to circle. Accept only if you want to
-                        allow direct messaging.
-                      </p>
-                    </div>
-
-                    <div className="mt-4 flex gap-3">
-                      <button
-                        disabled={isLoading}
-                        onClick={() => handleAccept(requestId)}
-                        className="flex h-11 flex-1 items-center justify-center gap-2 rounded-2xl bg-[#4338CA] text-[13px] font-black text-white disabled:opacity-60"
-                      >
-                        <Check size={16} />
-                        {isLoading ? "..." : "Accept"}
-                      </button>
-
-                      <button
-                        disabled={isLoading}
-                        onClick={() => handleReject(requestId)}
-                        className="flex h-11 flex-1 items-center justify-center gap-2 rounded-2xl bg-[var(--imc-surface-2)] text-[13px] font-black text-[var(--imc-text-muted)] disabled:opacity-60"
-                      >
-                        <X size={16} />
-                        Ignore
-                      </button>
-                    </div>
-                  </div>
+                    {filter.label}
+                  </button>
                 );
               })}
             </div>
-          ) : (
-            <div className="mt-24 text-center">
-              <p className="text-[16px] font-black text-[var(--imc-text)]">
-                No circle requests
-              </p>
-              <p className="mt-1 text-[12px] font-bold text-[var(--imc-text-muted)]">
-                New circle requests will appear here.
-              </p>
-            </div>
-          )}
-        </main>
 
-        <BottomNav />
+            {loading ? (
+              <div className="grid grid-cols-2 gap-3"><CircleSkeleton /><CircleSkeleton /></div>
+            ) : filteredCircles.length ? (
+              <div className="grid grid-cols-2 gap-3">
+                {filteredCircles.map((circle) => {
+                  const id = String(getId(circle));
+                  return (
+                    <CircleCard
+                      key={id}
+                      circle={circle}
+                      joined={joinedCircleIds.includes(id)}
+                      requested={requestedCircleIds.includes(id)}
+                      loading={actionId === id}
+                      onOpen={() => navigate(`/circles/${id}`)}
+                      onAction={() => handleCircleAction(circle)}
+                    />
+                  );
+                })}
+              </div>
+            ) : <EmptyLine text="No circles match this filter yet. Try another category." />}
+          </PageSection>
+        </main>
       </div>
     </div>
   );
 }
 
-export default Requests;
+function PageSection({ title, count, children }) {
+  return (
+    <section>
+      <div className="mb-3 flex items-center gap-2">
+        <h2 className="text-[15px] font-black" style={{ color: INK }}>{title}</h2>
+        <span className="grid min-w-5 place-items-center rounded-full bg-[var(--imc-indigo-soft)] px-1.5 py-0.5 text-[9px] font-black text-[var(--imc-indigo-text)]">{count}</span>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Avatar({ user, size = 44 }) {
+  const image = getImageUrl(user);
+  return (
+    <div className="grid shrink-0 place-items-center overflow-hidden rounded-full bg-[var(--imc-indigo-soft)] text-[var(--imc-indigo-text)]" style={{ width: size, height: size }}>
+      {image ? <img src={image} alt={getName(user)} className="h-full w-full object-cover" /> : <UserRound size={Math.round(size * 0.48)} />}
+    </div>
+  );
+}
+
+function SentRequestCard({ user, onOpen }) {
+  return (
+    <button type="button" onClick={onOpen} className="w-[148px] min-w-[148px] rounded-[18px] bg-[var(--imc-surface)] p-3 text-left active:scale-[0.98]" style={{ border: `1px solid ${LINE}` }}>
+      <Avatar user={user} size={46} />
+      <p className="mt-2 truncate text-[12px] font-black" style={{ color: INK }}>{getName(user)}</p>
+      <p className="mt-0.5 truncate text-[9.5px] font-semibold" style={{ color: MUTED }}>{user?.primaryInterest || user?.role || "IMCircle member"}</p>
+      <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-[rgba(236,154,30,0.12)] px-2.5 py-1.5 text-[9px] font-black" style={{ color: "#A86400" }}>
+        <Clock3 size={11} /> Pending
+      </span>
+    </button>
+  );
+}
+
+function ReceivedRequestCard({ user, loading, onOpen, onAccept, onIgnore }) {
+  return (
+    <div className="rounded-[18px] bg-[var(--imc-surface)] p-3.5" style={{ border: `1px solid ${LINE}` }}>
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={onOpen} aria-label={`Open ${getName(user)} profile`}><Avatar user={user} size={48} /></button>
+        <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
+          <p className="truncate text-[12.5px] font-black" style={{ color: INK }}>{getName(user)}</p>
+          <p className="mt-0.5 flex items-center gap-1 truncate text-[9.5px] font-semibold" style={{ color: MUTED }}><Briefcase size={10} />{user?.primaryInterest || user?.role || "IMCircle member"}</p>
+          <p className="mt-0.5 flex items-center gap-1 truncate text-[9px] font-semibold text-[var(--imc-text-faint)]"><MapPin size={10} />{getLocation(user)}</p>
+        </button>
+        <button type="button" disabled={loading} onClick={onIgnore} aria-label="Ignore request" className="grid h-9 w-9 place-items-center rounded-full bg-[var(--imc-surface-2)] disabled:opacity-50"><X size={15} style={{ color: MUTED }} /></button>
+        <button type="button" disabled={loading} onClick={onAccept} className="flex h-9 items-center gap-1.5 rounded-full bg-[#4338CA] px-3 text-[10px] font-black text-white disabled:opacity-50">
+          {loading ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Accept
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CircleCard({ circle, joined, requested, loading, onOpen, onAction }) {
+  const cover = getImageUrl(circle?.coverImage);
+  const inviteOnly = circle?.visibility === "invite-only";
+  const label = joined ? "Open" : requested ? "Requested" : inviteOnly ? "Request" : "Join";
+  return (
+    <article className="overflow-hidden rounded-[19px] bg-[var(--imc-surface)]" style={{ border: `1px solid ${LINE}` }}>
+      <button type="button" onClick={onOpen} className="block w-full text-left">
+        <div className="relative h-[82px] bg-[linear-gradient(135deg,rgba(67,56,202,0.14),rgba(236,154,30,0.18))]">
+          {cover ? <img src={cover} alt={circle?.name || "Circle"} className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center"><Sparkles size={22} style={{ color: MARIGOLD }} /></div>}
+          {inviteOnly && <span className="absolute left-2 top-2 rounded-full bg-white/90 px-2 py-1 text-[8px] font-black" style={{ color: INDIGO }}>Invite only</span>}
+        </div>
+        <div className="px-3 pt-2.5">
+          <h3 className="truncate text-[12px] font-black" style={{ color: INK }}>{circle?.name || "Circle"}</h3>
+          <p className="mt-1 flex items-center gap-1 text-[9px] font-semibold" style={{ color: MUTED }}><Users size={10} />{circle?.membersCount || 0} members</p>
+        </div>
+      </button>
+      <div className="p-3 pt-2.5">
+        <button type="button" disabled={loading || requested} onClick={onAction} className="h-9 w-full rounded-[11px] text-[10px] font-black disabled:opacity-65" style={{ background: joined ? "var(--imc-surface-2)" : requested ? "var(--imc-indigo-soft)" : INDIGO, color: joined ? INK : requested ? "var(--imc-indigo-text)" : "white" }}>
+          {loading ? "..." : label}
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function EmptyLine({ text }) {
+  return <div className="rounded-[16px] bg-[var(--imc-surface)] px-4 py-4 text-[10.5px] font-semibold" style={{ border: `1px solid ${LINE}`, color: MUTED }}>{text}</div>;
+}
+
+function LoadingRow() {
+  return <div className="flex h-20 items-center justify-center rounded-[16px] bg-[var(--imc-surface)]" style={{ border: `1px solid ${LINE}` }}><Loader2 size={18} className="animate-spin" style={{ color: INDIGO }} /></div>;
+}
+
+function CircleSkeleton() {
+  return <div className="grid h-[168px] place-items-center rounded-[19px] bg-[var(--imc-surface)]" style={{ border: `1px solid ${LINE}` }}><Loader2 size={17} className="animate-spin" style={{ color: INDIGO }} /></div>;
+}

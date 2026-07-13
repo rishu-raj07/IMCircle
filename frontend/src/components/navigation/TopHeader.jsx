@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, MessageSquare, Menu, Flame } from "lucide-react";
+import { Bell, Flame, MessageSquare, Menu, Search } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import SideDrawer from "./SideDrawer";
 import { getConversations } from "../../api/messageApi";
@@ -33,7 +33,7 @@ function formatBadgeCount(count) {
   return count;
 }
 
-function TopHeader() {
+function TopHeader({ onStreakClick }) {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -132,48 +132,57 @@ function TopHeader() {
 
   return (
     <>
-      <header className="flex h-[72px] items-center justify-between px-1">
+      <header className="flex h-[80px] items-center justify-between px-1 pt-2">
         <button
           onClick={() => setDrawerOpen(true)}
-          className="grid h-11 w-11 place-items-center rounded-full active:scale-95"
-          style={{
-            background: "var(--imc-surface)",
-            border: "1px solid var(--imc-border)",
-            color: "var(--imc-text)",
-          }}
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-full active:scale-95"
+          style={{ color: "var(--imc-text-muted)" }}
+          aria-label="Open menu"
         >
           <Menu size={22} strokeWidth={2.5} />
         </button>
 
         <button
           onClick={() => navigate("/home")}
-          className="flex items-center justify-center active:scale-95"
+          className="ml-2 mr-auto flex min-h-11 flex-col items-start justify-center active:scale-95"
         >
-          <img
-            src="/logo.png"
-            alt="IMCircle"
-            className="h-[38px] w-auto object-contain"
-            draggable="false"
-          />
+          <span className="text-[22px] font-black leading-none tracking-[-1.1px]" style={{ color: "var(--imc-text)" }}>
+            <span style={{ color: "var(--imc-indigo-text)" }}>IM</span>Circle
+          </span>
+          <span className="mt-1 text-[8.5px] font-medium leading-none" style={{ color: "var(--imc-text-muted)" }}>
+            Your circle shapes your future.
+          </span>
         </button>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <button
-            onClick={() => navigate("/profile")}
-            className="flex h-11 items-center gap-1.5 rounded-full px-3 active:scale-95"
-            style={{
-              background: "var(--imc-surface-strong)",
-              border: "1px solid var(--imc-surface-strong-border)",
-              color: "var(--imc-on-surface-strong)",
+            onClick={() => {
+              if (streak < 1) return;
+              if (onStreakClick) onStreakClick();
+              else navigate("/home", { state: { openStreakCard: true } });
             }}
-            aria-label="Your streak"
+            className="relative grid h-11 w-11 place-items-center rounded-full active:scale-95"
+            style={{ color: MARIGOLD }}
+            aria-label={streak > 0 ? `Open your ${streak}-day streak card` : "Build a one-day streak to unlock your streak card"}
           >
-            <Flame
-              size={16}
-              fill={streak > 0 ? MARIGOLD : "none"}
-              style={{ color: streak > 0 ? MARIGOLD : "var(--imc-text-faint)" }}
-            />
-            <span className="text-[13px] font-black">{streak}</span>
+            <Flame size={21} fill={streak > 0 ? MARIGOLD : "none"} strokeWidth={2.1} />
+            {streak > 0 && (
+              <span
+                className="absolute bottom-0.5 right-0.5 grid h-[17px] min-w-[17px] place-items-center rounded-full px-1 text-[8px] font-black text-white ring-2"
+                style={{ background: INDIGO, "--tw-ring-color": "var(--imc-surface)" }}
+              >
+                {streak > 99 ? "99+" : streak}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => navigate("/search")}
+            className="grid h-11 w-11 place-items-center rounded-full active:scale-95"
+            style={{ color: "var(--imc-text)" }}
+            aria-label="Search"
+          >
+            <Search size={20} strokeWidth={2} />
           </button>
 
           <button
@@ -184,8 +193,6 @@ function TopHeader() {
             }}
             className="relative grid h-11 w-11 place-items-center rounded-full active:scale-95"
             style={{
-              background: "var(--imc-surface)",
-              border: "1px solid var(--imc-border)",
               color: "var(--imc-text)",
             }}
           >
@@ -205,8 +212,6 @@ function TopHeader() {
             onClick={() => navigate("/notifications")}
             className="relative grid h-11 w-11 place-items-center rounded-full active:scale-95"
             style={{
-              background: "var(--imc-surface)",
-              border: "1px solid var(--imc-border)",
               color: "var(--imc-text)",
             }}
           >
@@ -216,6 +221,7 @@ function TopHeader() {
               style={{ background: MARIGOLD, "--tw-ring-color": "var(--imc-surface)" }}
             />
           </button>
+
         </div>
       </header>
 

@@ -116,7 +116,7 @@ function getCurrentJourneyDay(createdAt) {
 
 function getJourneyStatusLabel(journey = {}) {
   if (journey.status === "completed") return "Completed";
-  if (journey.status === "uncompleted") return "Incompleted";
+  if (journey.status === "uncompleted") return "Missed";
   return "Pursuing";
 }
 
@@ -199,7 +199,42 @@ async function getJourneyTotals(journeyId) {
 
 export const createJourney = async (req, res) => {
   try {
+    const possibleActiveJourneys = await Journey.find({
+      creator: req.user._id,
+      isDeleted: false,
+      status: "active",
+      isActive: true,
+    });
+
+    await Promise.all(possibleActiveJourneys.map((journey) => syncJourneyStatus(journey)));
+    const activeJourneyCount = possibleActiveJourneys.filter(
+      (journey) => journey.status === "active" && journey.isActive === true
+    ).length;
+
+    if (activeJourneyCount >= 3) {
+      return res.status(409).json({
+        success: false,
+        code: "ACTIVE_JOURNEY_LIMIT",
+        message: "You can have a maximum of 3 active journeys. Complete or close one before starting another.",
+      });
+    }
+
     const targetDays = Number(req.body.targetDays) || 100;
+    const totalDays = Number(req.body.totalDays) || targetDays;
+
+    if (
+      !Number.isInteger(targetDays) ||
+      !Number.isInteger(totalDays) ||
+      targetDays < 1 ||
+      targetDays > 365 ||
+      totalDays < 1 ||
+      totalDays > 365
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "A new journey must be between 1 and 365 days. You can update it after completion.",
+      });
+    }
 
     const deadline = new Date();
     deadline.setHours(23, 59, 59, 999);
@@ -211,7 +246,7 @@ export const createJourney = async (req, res) => {
       coverImage: req.body.coverImage || "",
       tags: Array.isArray(req.body.tags) ? req.body.tags : [],
       targetDays,
-      totalDays: Number(req.body.totalDays) || targetDays,
+      totalDays,
       deadline,
       status: "active",
       isActive: true,
@@ -585,7 +620,16 @@ export const getMyJourneys = async (req, res) => {
     for (const journey of journeys) {
       await syncJourneyStatus(journey);
 
-      const totals = await getJourneyTotals(journey._id);
+      const [totals, previewMilestone] = await Promise.all([
+        getJourneyTotals(journey._id),
+        JourneyMilestone.findOne({
+          journey: journey._id,
+          isDeleted: false,
+          "images.0": { $exists: true },
+        })
+          .sort({ day: 1 })
+          .select("images"),
+      ]);
       const obj = journey.toObject();
 
       const isInactive =
@@ -593,6 +637,8 @@ export const getMyJourneys = async (req, res) => {
 
       finalJourneys.push({
         ...obj,
+        previewImage:
+          obj.coverImage || previewMilestone?.images?.[0]?.url || "",
         totals,
         currentDay: getCurrentJourneyDay(journey.createdAt),
         statusLabel: getJourneyStatusLabel(journey),
@@ -631,7 +677,16 @@ export const getUserJourneys = async (req, res) => {
     for (const journey of journeys) {
       await syncJourneyStatus(journey);
 
-      const totals = await getJourneyTotals(journey._id);
+      const [totals, previewMilestone] = await Promise.all([
+        getJourneyTotals(journey._id),
+        JourneyMilestone.findOne({
+          journey: journey._id,
+          isDeleted: false,
+          "images.0": { $exists: true },
+        })
+          .sort({ day: 1 })
+          .select("images"),
+      ]);
       const obj = journey.toObject();
 
       const isInactive =
@@ -639,6 +694,8 @@ export const getUserJourneys = async (req, res) => {
 
       finalJourneys.push({
         ...obj,
+        previewImage:
+          obj.coverImage || previewMilestone?.images?.[0]?.url || "",
         totals,
         currentDay: getCurrentJourneyDay(journey.createdAt),
         statusLabel: getJourneyStatusLabel(journey),
@@ -675,6 +732,20 @@ export const updateJourney = async (req, res) => {
         success: false,
         message: "Journey not found or not authorized",
       });
+    }
+
+    await syncJourneyStatus(journey);
+
+    if (typeof req.body.finalNote === "string") {
+      if (journey.status !== "uncompleted") {
+        return res.status(400).json({
+          success: false,
+          message: "A final note can only be added to a missed journey",
+        });
+      }
+
+      journey.finalNote = req.body.finalNote.trim();
+      journey.finalNoteAt = new Date();
     }
 
     const oldDays = Number(journey.targetDays || journey.totalDays || 100);
@@ -1191,24 +1262,27 @@ export const getJourneyFeed = async (req, res) => {
       isPublic: true,
     }).select("_id creator createdAt targetDays totalDays status isActive");
 
-    const activeJourneyIds = [];
+    const visibleJourneyIds = [];
 
     for (const journey of possibleJourneys) {
       await syncJourneyStatus(journey);
 
-      if (journey.status === "active" && journey.isActive === true) {
-        activeJourneyIds.push(journey._id);
+      if (
+        (journey.status === "active" && journey.isActive === true) ||
+        journey.status === "uncompleted"
+      ) {
+        visibleJourneyIds.push(journey._id);
       }
     }
 
     const milestones = await JourneyMilestone.find({
-      journey: { $in: activeJourneyIds },
+      journey: { $in: visibleJourneyIds },
       isDeleted: false,
     })
       .populate("creator", userFields)
       .populate(
         "journey",
-        "title description coverImage updatesCount followersCount targetDays totalDays creator status isActive"
+        "title description coverImage updatesCount followersCount targetDays totalDays creator status isActive uncompletedReason uncompletedAt finalNote finalNoteAt"
       )
       .sort({ createdAt: -1 });
 
@@ -1259,10 +1333,6 @@ export const getJourneyFeed = async (req, res) => {
 
     const finalMilestones = milestones
       .filter((item) => item.journey)
-      .filter(
-        (item) =>
-          item.journey.status === "active" && item.journey.isActive === true
-      )
       .map((item) => {
         const obj = item.toObject();
         const milestoneId = obj._id.toString();

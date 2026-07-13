@@ -1,5 +1,7 @@
-import { ArrowLeft } from "lucide-react";
+import { useState } from "react";
+import { ArrowLeft, ChevronRight, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import DeleteAccountModal from "../../components/common/DeleteAccountModal";
 
 const SECTIONS = [
   {
@@ -62,6 +64,7 @@ const SECTIONS = [
 
 function PrivacyPolicy() {
   const navigate = useNavigate();
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-[var(--imc-bg)]">
@@ -102,8 +105,34 @@ function PrivacyPolicy() {
               </div>
             ))}
           </div>
+
+          <div className="mt-3 border-t border-[var(--imc-border)] pt-5">
+            <p className="px-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--imc-text-faint)]">
+              Account and data controls
+            </p>
+            <button
+              type="button"
+              onClick={() => setDeleteOpen(true)}
+              className="mt-2.5 flex w-full items-center gap-3 rounded-[18px] border border-[var(--imc-border)] bg-[var(--imc-surface)] p-3.5 text-left active:scale-[0.99]"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--imc-surface-2)] text-[var(--imc-text-muted)]">
+                <Trash2 size={17} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[12.5px] font-black text-[var(--imc-text)]">
+                  Delete your account
+                </span>
+                <span className="mt-0.5 block text-[10.5px] font-semibold text-[var(--imc-text-faint)]">
+                  Remove your account and hide its related data
+                </span>
+              </span>
+              <ChevronRight size={17} className="text-[var(--imc-text-faint)]" />
+            </button>
+          </div>
         </div>
       </div>
+
+      <DeleteAccountModal open={deleteOpen} onClose={() => setDeleteOpen(false)} />
     </div>
   );
 }

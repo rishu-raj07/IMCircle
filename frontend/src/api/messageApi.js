@@ -25,9 +25,9 @@ export const markMessagesSeen = async (conversationId) => {
   return res.data;
 };
 
-export const deleteMessages = async (messageIds = []) => {
+export const deleteMessages = async (messageIds = [], scope = "me") => {
   const res = await api.delete("/messages/messages/bulk", {
-    data: { messageIds },
+    data: { messageIds, scope },
   });
   return res.data;
 };

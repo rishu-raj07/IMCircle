@@ -1,7 +1,6 @@
-import { Check, Plus, Repeat2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Repeat2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { followUserById } from "../../api/userApi";
+import CircleAction from "../common/CircleAction";
 
 function getStoredUser() {
   const keys = ["user", "bharat_user", "authUser", "currentUser"];
@@ -107,34 +106,8 @@ function RepostCard({
   const storedUser = getStoredUser();
   const viewerId = storedUser?._id || storedUser?.id;
   const isSelf = viewerIsAuthor || Boolean(viewerId && userId && String(viewerId) === String(userId));
-
-  const getInitialFollowing = () =>
-    Boolean(user?.isFollowing === true || user?.followedByMe === true);
-
-  const [following, setFollowing] = useState(getInitialFollowing);
-  const [followLoading, setFollowLoading] = useState(false);
-
-  useEffect(() => {
-    setFollowing(getInitialFollowing());
-  }, [userId, user?.isFollowing, user?.followedByMe]);
-
-  const showFollowButton = Boolean(userId) && !isSelf && !following;
-
-  const handleFollow = async (event) => {
-    event.stopPropagation();
-    if (!userId || isSelf || followLoading) return;
-
-    setFollowLoading(true);
-    setFollowing(true);
-
-    try {
-      await followUserById(userId);
-    } catch (error) {
-      setFollowing(false);
-    } finally {
-      setFollowLoading(false);
-    }
-  };
+  const inCircle = Boolean(user?.inCircle === true);
+  const circleRequested = Boolean(user?.circleRequested === true);
 
   const avatarUrl = getImageUrl(
     user?.avatar ||
@@ -209,27 +182,12 @@ function RepostCard({
                 </span>
               )}
 
-              {showFollowButton && (
-                <button
-                  type="button"
-                  onClick={handleFollow}
-                  disabled={followLoading}
-                  className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black text-white active:scale-95 disabled:opacity-60"
-                  style={{ background: "#12141C" }}
-                >
-                  <Plus size={11} strokeWidth={3} />
-                  {followLoading ? "..." : "Follow"}
-                </button>
-              )}
-
-              {following && !isSelf && (
-                <span
-                  className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black"
-                  style={{ background: "var(--imc-surface-2)", border: "1px solid var(--imc-border)", color: "#12141C" }}
-                >
-                  <Check size={11} />
-                  Following
-                </span>
+              {!isSelf && userId && (
+                <CircleAction
+                  userId={userId}
+                  isCircleMember={inCircle}
+                  isRequested={circleRequested}
+                />
               )}
             </div>
 

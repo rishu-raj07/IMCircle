@@ -44,6 +44,7 @@ import ExperienceCard from "./ExperienceCard";
 import EducationCard from "./EducationCard";
 
 import RankBadge from "../../components/badges/RankBadge";
+import ProfileCompleteBadge from "../../components/badges/ProfileCompleteBadge";
 import StreakMilestoneCard from "../../components/badges/StreakMilestoneCard";
 import { getStreakBadgeTier } from "../../utils/badges";
 import { useSEO } from "../../hooks/useSEO";
@@ -477,32 +478,65 @@ function UserProfile() {
             if (!cancelled) setJourneys([]);
           }
 
+          // Scoped strictly to targetId (the profile being viewed) via
+          // /users/:userId/posts and /users/:userId/reposts — NOT the
+          // personalized /feed endpoint, which reflects the LOGGED-IN
+          // VIEWER's own state (their own repost flags, their own ranking).
+          // Filtering that viewer-scoped feed client-side by an "isRepost"
+          // flag was the root cause of every profile showing unrelated
+          // posts as if the profile owner had reposted them: the flag was
+          // never actually checked against targetId, just against whatever
+          // the feed said about the current viewer.
           try {
-            const feedRes = await getFeed({ tab: "for-you", limit: 100, page: 1 });
-            const feed = normalizeFeed(feedRes);
+            const [postsRes, repostsRes] = await Promise.all([
+              getUserPostsById(targetId),
+              getUserRepostsById(targetId),
+            ]);
 
-            const theirs = feed
-              .map((item) => {
-                const rawType = getRawType(item);
-                const data = getData(item);
-                const ownerId = getOwnerId(data);
-                const isOwn =
-                  ownerId && targetId && String(ownerId) === String(targetId);
-                const isRepost = isReposted(data);
+            const authoredPosts = Array.isArray(postsRes?.posts) ? postsRes.posts : [];
+            const repostBundle = repostsRes?.reposts || {};
+            const repostedPosts = Array.isArray(repostBundle.posts) ? repostBundle.posts : [];
+            const repostedLearnings = Array.isArray(repostBundle.learnings) ? repostBundle.learnings : [];
+            const repostedMilestones = Array.isArray(repostBundle.milestones) ? repostBundle.milestones : [];
 
-                if (!isOwn && !isRepost) return null;
-                if (rawType === "learning" && !isRepost) return null;
-
-                return {
-                  id: `${rawType}-${data?._id || item?._id}`,
-                  rawType,
-                  data,
-                  isRepost,
-                  repostText: getRepostText(data),
-                  categories: getCategories(rawType, isRepost),
-                };
-              })
-              .filter(Boolean);
+            const theirs = [
+              ...authoredPosts.map((post) => ({
+                id: `post-${post._id}`,
+                rawType: "post",
+                data: post,
+                isRepost: false,
+                repostText: "",
+                categories: getCategories("post", false),
+              })),
+              ...repostedPosts.map((post) => ({
+                id: `repost-post-${post._id}`,
+                rawType: "post",
+                data: post,
+                isRepost: true,
+                repostText: getRepostText(post),
+                categories: getCategories("post", true),
+              })),
+              ...repostedLearnings.map((learning) => ({
+                id: `repost-learning-${learning._id}`,
+                rawType: "learning",
+                data: learning,
+                isRepost: true,
+                repostText: getRepostText(learning),
+                categories: getCategories("learning", true),
+              })),
+              ...repostedMilestones.map((milestone) => ({
+                id: `repost-journey-${milestone._id}`,
+                rawType: "journey",
+                data: milestone,
+                isRepost: true,
+                repostText: getRepostText(milestone),
+                categories: getCategories("journey", true),
+              })),
+            ].sort((a, b) => {
+              const aDate = new Date(a.data?.repostedAt || a.data?.createdAt || 0).getTime();
+              const bDate = new Date(b.data?.repostedAt || b.data?.createdAt || 0).getTime();
+              return bDate - aDate;
+            });
 
             if (!cancelled) setActivity(theirs);
           } catch (error) {
@@ -822,7 +856,7 @@ function UserProfile() {
                   <h1 className="truncate text-[21px] font-black text-[var(--imc-text)]">
                     {fullName}
                   </h1>
-                  {completionPercent >= 100 && <ProfileCompleteBadge />}
+                  {completionPercent >= 100 && <ProfileCompleteBadge name={fullName} />}
                   <RankBadge tier={rankBadge} rank={signupRank} />
                 </div>
 
@@ -1453,18 +1487,6 @@ function UserProfileSkeleton() {
         </div>
       </div>
     </div>
-  );
-}
-
-function ProfileCompleteBadge() {
-  return (
-    <span
-      aria-label="Profile completion shield"
-      title="Profile completed 100%"
-      className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#4338CA] text-white shadow-[0_8px_18px_rgba(67,56,202,0.28)]"
-    >
-      <Shield size={14} strokeWidth={2.5} />
-    </span>
   );
 }
 

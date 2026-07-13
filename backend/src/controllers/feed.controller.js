@@ -15,9 +15,10 @@ import JourneyFollower from "../models/JourneyFollower.js";
 import Opportunity from "../models/Opportunity.js";
 import Project from "../models/Project.js";
 import FeedView from "../models/FeedView.js";
+import CircleRequest from "../models/CircleRequest.js";
 
 const authorFields =
-  "fullName name username avatar profilePicture profileImage photo photoURL picture headline role field primaryInterest location followers following circle blockedUsers";
+  "fullName name username avatar profilePicture profileImage photo photoURL picture headline role field primaryInterest location followers following circle blockedUsers isProfileCompleted profileCompletionPercent";
 const commenterFields = "fullName username avatar profilePicture profileImage";
 
 const FEED_WEIGHTS = {
@@ -32,7 +33,7 @@ const FEED_WEIGHTS = {
 };
 
 const VALID_TABS = new Set(["for-you", "following", "journeys", "learning", "jobs"]);
-const CANDIDATE_CAP = 80;
+const CANDIDATE_CAP = 250;
 
 const getId = (value) => {
   if (!value) return "";
@@ -97,12 +98,22 @@ const cursorQuery = (cursor) => {
   };
 };
 
-const normalizeTopicTokens = (...values) =>
-  values
-    .flat()
-    .filter(Boolean)
-    .map((value) => String(value).trim().toLowerCase())
-    .filter(Boolean);
+const normalizeTopicTokens = (...values) => {
+  const tokens = new Set();
+
+  for (const value of values.flat(Infinity).filter(Boolean)) {
+    const normalized = String(value).trim().toLowerCase();
+    if (!normalized) continue;
+    tokens.add(normalized);
+    normalized
+      .split(/[^a-z0-9+#.-]+/i)
+      .map((token) => token.trim())
+      .filter((token) => token.length > 2)
+      .forEach((token) => tokens.add(token));
+  }
+
+  return [...tokens];
+};
 
 const isFollowedAuthor = (author, followingSet) => followingSet.has(getId(author));
 const isCircleAuthor = (author, circleSet) => circleSet.has(getId(author));
@@ -169,9 +180,16 @@ const scoreItem = ({ type, data, viewer, followingSet, circleSet, followedJourne
     data.type,
     data.tags,
     data.skills,
-    data.techStack
+    data.techStack,
+    data.title,
+    data.headline,
+    data.content,
+    data.description,
+    data.text
   );
-  const topicMatch = itemTopics.some((topic) => viewerTopics.includes(topic));
+  const topicMatch = itemTopics.some((topic) =>
+    viewerTopics.some((interest) => topic === interest || topic.includes(interest) || interest.includes(topic))
+  );
   const sameCity =
     viewer?.location?.city &&
     author?.location?.city &&
@@ -225,12 +243,13 @@ const isBlockedRelation = (author, viewerId, myBlockedSet) => {
   return authorBlockedList.some((id) => getId(id) === getId(viewerId));
 };
 
-const withAuthorState = (data, viewerId, followingSet, circleSet) => {
+const withAuthorState = (data, viewerId, followingSet, circleSet, pendingCircleSet) => {
   const author = data?.author || data?.creator || data?.user || {};
   const authorId = getId(author);
   const isMine = authorId && authorId === getId(viewerId);
   const followedAuthor = !isMine && followingSet.has(authorId);
   const inCircle = !isMine && circleSet.has(authorId);
+  const circleRequested = !isMine && !inCircle && pendingCircleSet.has(authorId);
   const cleanAuthor = data.author ? stripPrivateAuthorFields(data.author) : data.author;
   const cleanCreator = data.creator ? stripPrivateAuthorFields(data.creator) : data.creator;
 
@@ -240,12 +259,18 @@ const withAuthorState = (data, viewerId, followingSet, circleSet) => {
     isMe: isMine,
     isFollowing: followedAuthor,
     followedByMe: followedAuthor,
-    author: cleanAuthor ? { ...cleanAuthor, isMe: isMine, isFollowing: followedAuthor } : cleanAuthor,
-    creator: cleanCreator ? { ...cleanCreator, isMe: isMine, isFollowing: followedAuthor } : cleanCreator,
+    circleRequested,
+    author: cleanAuthor
+      ? { ...cleanAuthor, isMe: isMine, isFollowing: followedAuthor, inCircle, circleRequested }
+      : cleanAuthor,
+    creator: cleanCreator
+      ? { ...cleanCreator, isMe: isMine, isFollowing: followedAuthor, inCircle, circleRequested }
+      : cleanCreator,
     viewerState: {
       ...(data.viewerState || {}),
       followedAuthor,
       inCircle,
+      circleRequested,
     },
   };
 };
@@ -259,6 +284,7 @@ const buildNormalizedItem = (item) => {
     reposted: Boolean(data.repostedByMe),
     followedAuthor: Boolean(data.viewerState?.followedAuthor || data.followedByMe),
     inCircle: Boolean(data.viewerState?.inCircle),
+    circleRequested: Boolean(data.viewerState?.circleRequested || data.circleRequested),
     followingJourney: Boolean(data.viewerState?.followingJourney || data.journey?.followedByMe),
   };
 
@@ -282,9 +308,11 @@ const buildNormalizedItem = (item) => {
   };
 };
 
-const fetchCandidates = async ({ tab, limit, cursor, followingIds, circleIds, followedJourneyIds }) => {
-  const cap = Math.min(CANDIDATE_CAP, Math.max(limit * 6, 24));
-  const byCursor = cursorQuery(cursor);
+const fetchCandidates = async ({ tab, page, limit, cursor, followingIds, circleIds, followedJourneyIds }) => {
+  const cap = Math.min(CANDIDATE_CAP, Math.max(limit * (page + 5), 60));
+  // For You is score-ranked, so a date cursor can skip newer low-score items
+  // forever. Fetch the same candidate window and paginate after ranking.
+  const byCursor = tab === "for-you" ? {} : cursorQuery(cursor);
   const followingAuthorIds = [...new Set([...followingIds, ...circleIds])].filter(Boolean);
   const includePosts = tab === "for-you" || tab === "following";
   const includeLearning = tab === "for-you" || tab === "following" || tab === "learning";
@@ -372,11 +400,10 @@ const fetchCandidates = async ({ tab, limit, cursor, followingIds, circleIds, fo
           match: {
             isDeleted: false,
             isPublic: true,
-            isActive: true,
-            status: "active",
+            status: { $in: ["active", "uncompleted"] },
           },
           select:
-            "title description coverImage targetDays totalDays updatesCount followersCount creator status isActive",
+            "title description coverImage targetDays totalDays updatesCount followersCount creator status isActive uncompletedReason uncompletedAt finalNote finalNoteAt",
         })
         .sort({ createdAt: -1, _id: -1 })
         .limit(cap)
@@ -427,7 +454,14 @@ const fetchCandidates = async ({ tab, limit, cursor, followingIds, circleIds, fo
   ];
 };
 
-const attachViewerState = async ({ items, userId, circleSet, followedJourneySet, followingSet }) => {
+const attachViewerState = async ({
+  items,
+  userId,
+  circleSet,
+  pendingCircleSet,
+  followedJourneySet,
+  followingSet,
+}) => {
   const learningIds = items.filter((item) => item.type === "learning").map((item) => item.data._id);
   const milestoneIds = items
     .filter((item) => item.type === "journey_milestone")
@@ -487,7 +521,13 @@ const attachViewerState = async ({ items, userId, circleSet, followedJourneySet,
 
   return items.map((item) => {
     const id = getId(item.data);
-    let data = withAuthorState(item.data, userId, followingSet, circleSet);
+    let data = withAuthorState(
+      item.data,
+      userId,
+      followingSet,
+      circleSet,
+      pendingCircleSet
+    );
 
     if (item.type === "post") {
       const myRepost = getMyRepost(data.reposts, userId);
@@ -577,26 +617,37 @@ export const getUniversalFeed = async (req, res) => {
     const page = Math.max(Number(req.query.page) || 1, 1);
     const limit = Math.min(Math.max(Number(req.query.limit) || 10, 1), 20);
     const cursor = typeof req.query.cursor === "string" ? req.query.cursor : "";
+    const sessionId = cleanText(req.query.sessionId).slice(0, 120);
 
     const followingIds = (req.user.following || []).map(getId).filter(Boolean);
     const circleIds = (req.user.circle || []).map(getId).filter(Boolean);
     const followingSet = new Set(followingIds);
     const circleSet = new Set(circleIds);
 
-    const followingJourneys = await JourneyFollower.find({ follower: userId }).select("journey");
+    const [followingJourneys, pendingCircleRequests] = await Promise.all([
+      JourneyFollower.find({ follower: userId }).select("journey"),
+      CircleRequest.find({ sender: userId, status: "pending" }).select("receiver"),
+    ]);
     const followedJourneyIds = followingJourneys.map((item) => getId(item.journey)).filter(Boolean);
     const followedJourneySet = new Set(followedJourneyIds);
+    const pendingCircleSet = new Set(
+      pendingCircleRequests.map((item) => getId(item.receiver)).filter(Boolean)
+    );
 
     const [rawCandidates, seenDocs] = await Promise.all([
       fetchCandidates({
         tab,
+        page,
         limit,
         cursor,
         followingIds,
         circleIds,
         followedJourneyIds,
       }),
-      FeedView.find({ user: userId }).sort({ createdAt: -1 }).limit(500).select("itemId itemType"),
+      FeedView.find({
+        user: userId,
+        ...(sessionId ? { sessionId: { $ne: sessionId } } : {}),
+      }).sort({ createdAt: -1 }).limit(500).select("itemId itemType"),
     ]);
 
     const seenSet = new Set(seenDocs.map((item) => `${item.itemType}:${getId(item.itemId)}`));
@@ -618,6 +669,7 @@ export const getUniversalFeed = async (req, res) => {
       items: [...uniqueMap.values()],
       userId,
       circleSet,
+      pendingCircleSet,
       followedJourneySet,
       followingSet,
     });
@@ -642,9 +694,14 @@ export const getUniversalFeed = async (req, res) => {
       return new Date(b.createdAt) - new Date(a.createdAt);
     });
 
-    const paged = candidates.slice(0, limit);
+    const pageStart = tab === "for-you" ? (page - 1) * limit : 0;
+    const pageEnd = pageStart + limit;
+    const paged = candidates.slice(pageStart, pageEnd);
     const normalized = paged.map(buildNormalizedItem);
-    const nextCursor = normalized.length === limit ? encodeCursor(paged[paged.length - 1]) : null;
+    const hasMore = tab === "for-you"
+      ? candidates.length > pageEnd
+      : normalized.length === limit;
+    const nextCursor = hasMore && paged.length ? encodeCursor(paged[paged.length - 1]) : null;
 
     return res.status(200).json({
       success: true,
@@ -659,7 +716,7 @@ export const getUniversalFeed = async (req, res) => {
         viewerState: item.viewerState,
       })),
       nextCursor,
-      hasMore: Boolean(nextCursor),
+      hasMore,
       page,
       limit,
       count: normalized.length,
@@ -695,7 +752,7 @@ export const trackFeedImpressions = async (req, res) => {
       "job",
     ];
 
-    const cleanItems = items
+    const normalizedItems = items
       .map((item) => ({
         itemId: item?.itemId || item?.id,
         itemType: item?.itemType || item?.type,
@@ -707,16 +764,59 @@ export const trackFeedImpressions = async (req, res) => {
         (item) =>
           item.itemId &&
           mongoose.Types.ObjectId.isValid(item.itemId) &&
-          allowedTypes.includes(item.itemType)
+          allowedTypes.includes(item.itemType) &&
+          item.sessionId
       )
       .slice(0, 80);
+
+    // A single request can contain the same item more than once. Collapse it
+    // before touching either FeedView or the public impression counter.
+    const cleanItems = [...new Map(
+      normalizedItems.map((item) => [`${item.itemType}:${item.itemId}:${item.sessionId}`, item])
+    ).values()];
 
     if (!cleanItems.length) {
       return res.status(200).json({ success: true, count: 0 });
     }
 
+    // Insert-first makes the compound unique index the source of truth. Only
+    // the request that creates a new (user, item, type, session) record is
+    // allowed to increment the item's public impression count. Duplicate
+    // observer calls and request retries update duration/position but add 0.
+    const insertionResults = await Promise.all(
+      cleanItems.map(async (item) => {
+        try {
+          await FeedView.create({
+            user: req.user._id,
+            itemId: item.itemId,
+            itemType: item.itemType,
+            sessionId: item.sessionId,
+            visibleMs: item.visibleMs,
+            position: item.position,
+          });
+          return { item, isNew: true };
+        } catch (error) {
+          if (error?.code !== 11000) throw error;
+          await FeedView.updateOne(
+            {
+              user: req.user._id,
+              itemId: item.itemId,
+              itemType: item.itemType,
+              sessionId: item.sessionId,
+            },
+            {
+              $max: { visibleMs: item.visibleMs },
+              $set: { position: item.position },
+            }
+          );
+          return { item, isNew: false };
+        }
+      })
+    );
+
+    const newItems = insertionResults.filter((result) => result.isNew).map((result) => result.item);
     const byType = (type) =>
-      cleanItems.filter((item) => item.itemType === type).map((item) => item.itemId);
+      newItems.filter((item) => item.itemType === type).map((item) => item.itemId);
 
     const postIds = byType("post");
     const learningIds = byType("learning");
@@ -738,38 +838,13 @@ export const trackFeedImpressions = async (req, res) => {
       projectIds.length
         ? Project.updateMany({ _id: { $in: projectIds } }, { $inc: { impressionsCount: 1 } })
         : null,
-      FeedView.bulkWrite(
-        cleanItems.map((item) => ({
-          updateOne: {
-            filter: {
-              user: req.user._id,
-              itemId: item.itemId,
-              itemType: item.itemType,
-              sessionId: item.sessionId,
-            },
-            update: {
-              $setOnInsert: {
-                user: req.user._id,
-                itemId: item.itemId,
-                itemType: item.itemType,
-                sessionId: item.sessionId,
-              },
-              $max: { visibleMs: item.visibleMs },
-              $set: { position: item.position },
-            },
-            upsert: true,
-          },
-        })),
-        { ordered: false }
-      ).catch((error) => {
-        if (error?.code !== 11000) throw error;
-      }),
     ]);
 
     return res.status(200).json({
       success: true,
       message: "Impressions tracked",
-      count: cleanItems.length,
+      count: newItems.length,
+      duplicatesIgnored: cleanItems.length - newItems.length,
     });
   } catch (error) {
     console.error("TRACK FEED IMPRESSIONS ERROR:", error);

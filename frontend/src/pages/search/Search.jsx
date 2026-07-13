@@ -14,7 +14,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import BottomNav from "../../components/navigation/BottomNav";
 import { getCircleMembers, getCircles, getMyCircles } from "../../api/circleApi";
-import { getJourneyFeed } from "../../api/journeyApi";
+import { getJourneyDiscoverFeed } from "../../api/journeyApi";
 import { searchEverything } from "../../api/searchApi";
 import { getUserSuggestions } from "../../api/userApi";
 import { trackEvent } from "../../utils/analyticsTracker";
@@ -57,7 +57,10 @@ function getImageUrl(value) {
     value;
 
   if (typeof url !== "string") return "";
-  if (url.startsWith("/uploads")) return `${API_URL}${url}`;
+  if (/^(https?:|data:|blob:)/i.test(url)) return url;
+  if (url.startsWith("//")) return `https:${url}`;
+  if (url.startsWith("/")) return `${API_URL}${url}`;
+  if (/^uploads[\\/]/i.test(url)) return `${API_URL}/${url.replace(/\\/g, "/")}`;
   return url;
 }
 
@@ -79,6 +82,8 @@ function getCoverImage(item) {
       item?.banner ||
       item?.image ||
       item?.thumbnail ||
+      item?.images?.[0] ||
+      item?.media?.[0] ||
       item?.journey?.coverImage
   );
 }
@@ -167,7 +172,7 @@ function Search() {
           getUserSuggestions(),
           getMyCircles(),
           getCircles(),
-          getJourneyFeed(),
+          getJourneyDiscoverFeed(),
         ]);
 
       const users = normalizeArray(
@@ -304,6 +309,22 @@ function Search() {
     suggestedUsers,
   ]);
 
+  const journeyBuilders = useMemo(() => {
+    const unique = new Map();
+
+    journeys.forEach((raw) => {
+      const milestone = raw?.data || raw;
+      const journey = milestone?.journey || milestone;
+      const creator = milestone?.creator || journey?.creator;
+      const creatorId = getId(creator);
+      const journeyId = getId(journey);
+      if (!creatorId || !journeyId || unique.has(creatorId)) return;
+      unique.set(creatorId, { creator, journey, milestone });
+    });
+
+    return [...unique.values()].slice(0, 8);
+  }, [journeys]);
+
   // Records "this person appeared in someone's search results" — this had
   // no caller anywhere in the app before, which is why a profile's search
   // appearances/clicks always read 0 on the Analytics page even after real
@@ -368,19 +389,19 @@ function Search() {
   };
 
   return (
-    <div className="flex min-h-screen justify-center" style={{ background: "#DED8CC" }}>
-      <div className="min-h-screen w-full max-w-[430px] pb-24" style={{ background: PAPER }}>
-        <header className="sticky top-0 z-20 border-b bg-white/95 px-4 py-4 backdrop-blur-xl" style={{ borderColor: LINE }}>
+    <div className="flex min-h-screen justify-center" style={{ background: "var(--imc-bg)" }}>
+      <div className="min-h-screen w-full max-w-[430px] pb-24" style={{ background: "var(--imc-bg)" }}>
+        <header className="sticky top-0 z-20 border-b px-4 pb-4 pt-[max(16px,env(safe-area-inset-top))] backdrop-blur-xl" style={{ borderColor: "var(--imc-border)", background: "color-mix(in srgb, var(--imc-bg) 92%, transparent)" }}>
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate(-1)}
               className="grid h-10 w-10 place-items-center rounded-full"
-              style={{ background: PAPER, color: INK }}
+              style={{ background: "var(--imc-surface)", color: "var(--imc-text)", border: "1px solid var(--imc-border)" }}
             >
               <ArrowLeft size={20} />
             </button>
-            <div className="flex h-12 flex-1 items-center gap-2 rounded-[18px] px-4" style={{ background: PAPER }}>
-              <SearchIcon size={18} style={{ color: MUTED }} />
+            <div className="flex h-12 flex-1 items-center gap-2 rounded-[18px] border px-4" style={{ background: "var(--imc-surface)", borderColor: "var(--imc-border)" }}>
+              <SearchIcon size={18} style={{ color: "var(--imc-indigo-text)" }} />
               <input
                 value={query}
                 onChange={(event) => {
@@ -390,7 +411,7 @@ function Search() {
                 autoFocus
                 placeholder="Search people, journeys, communities"
                 className="w-full bg-transparent text-[13px] font-semibold outline-none"
-                style={{ color: INK }}
+                style={{ color: "var(--imc-text)" }}
               />
             </div>
           </div>
@@ -404,8 +425,8 @@ function Search() {
                 className="shrink-0 rounded-full px-4 py-1.5 text-[11.5px] font-black transition"
                 style={
                   activeFilter === tab.value
-                    ? { background: MARIGOLD, color: INK }
-                    : { background: PAPER, color: MUTED, border: `1px solid ${LINE}` }
+                    ? { background: "var(--imc-action-soft)", color: "var(--imc-indigo-text)", border: "1px solid var(--imc-action-border)" }
+                    : { background: "var(--imc-surface)", color: "var(--imc-text-muted)", border: "1px solid var(--imc-border)" }
                 }
               >
                 {tab.label}
@@ -417,7 +438,7 @@ function Search() {
         <main className="px-4 pt-5">
           {loading ? (
             <div className="grid min-h-[180px] place-items-center">
-              <Loader2 className="animate-spin" size={25} style={{ color: MARIGOLD }} />
+              <Loader2 className="animate-spin" size={25} style={{ color: "var(--imc-indigo-text)" }} />
             </div>
           ) : selected ? (
             <SelectedResult
@@ -429,31 +450,46 @@ function Search() {
               onOpen={() => openResult(selected)}
             />
           ) : results.length > 0 ? (
-            <div className="divide-y rounded-[18px] bg-[var(--imc-surface)]" style={{ border: `1px solid ${LINE}`, borderColor: LINE }}>
+            <div className="divide-y divide-[var(--imc-border)] rounded-[18px] bg-[var(--imc-surface)]" style={{ border: "1px solid var(--imc-border)" }}>
               {results.map((item) => (
                 <button
                   key={makeKey(item.type, item.data)}
                   onClick={() => openResult(item)}
                   className="flex w-full items-center gap-3 px-3 py-2.5 text-left first:rounded-t-[18px] last:rounded-b-[18px]"
-                  style={{ borderColor: LINE }}
+                  style={{ borderColor: "var(--imc-border)" }}
                 >
                   <ResultImage item={item} />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[14px] font-black" style={{ color: INK }}>
+                    <p className="truncate text-[14px] font-black" style={{ color: "var(--imc-text)" }}>
                       {item.data?.fullName || item.data?.name || item.data?.username || item.data?.title || "Result"}
                     </p>
-                    <p className="truncate text-[11px] font-semibold" style={{ color: MUTED }}>
+                    <p className="truncate text-[11px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>
                       {item.data?.description || item.data?.headline || getHeadline(item.data)}
                     </p>
                   </div>
                 </button>
               ))}
             </div>
+          ) : !query.trim() && journeyBuilders.length > 0 ? (
+            <section>
+              <div className="mb-3 flex items-center gap-2">
+                <span className="grid h-8 w-8 place-items-center rounded-xl" style={{ background: "var(--imc-action-soft)", color: "var(--imc-indigo-text)" }}><Sparkles size={16} /></span>
+                <div>
+                  <h2 className="text-[14px] font-black" style={{ color: "var(--imc-text)" }}>Builders on a journey</h2>
+                  <p className="text-[10px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>People sharing progress in public</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {journeyBuilders.map((item) => (
+                  <JourneyBuilderRecommendation key={`${getId(item.creator)}:${getId(item.journey)}`} item={item} navigate={navigate} />
+                ))}
+              </div>
+            </section>
           ) : (
             query.trim() && (
-              <div className="rounded-[24px] bg-[var(--imc-surface)] p-6 text-center" style={{ border: `1px solid ${LINE}` }}>
-                <Compass className="mx-auto" size={26} style={{ color: MARIGOLD }} />
-                <p className="mt-3 text-[14px] font-black" style={{ color: INK }}>
+              <div className="rounded-[24px] bg-[var(--imc-surface)] p-6 text-center" style={{ border: "1px solid var(--imc-border)" }}>
+                <Compass className="mx-auto" size={26} style={{ color: "var(--imc-indigo-text)" }} />
+                <p className="mt-3 text-[14px] font-black" style={{ color: "var(--imc-text)" }}>
                   No results
                 </p>
               </div>
@@ -491,8 +527,8 @@ function ResultImage({ item, large = false }) {
       style={{
         width: size,
         height: size,
-        background: INK,
-        color: MARIGOLD,
+        background: "var(--imc-action-soft)",
+        color: "var(--imc-indigo-text)",
       }}
     >
       {image ? (
@@ -519,14 +555,14 @@ function SelectedResult({ item, onClear, onOpen }) {
       role="button"
       tabIndex={0}
       className="flex w-full cursor-pointer items-center gap-3 rounded-[18px] bg-[var(--imc-surface)] p-3 text-left"
-      style={{ border: `1px solid ${LINE}` }}
+      style={{ border: "1px solid var(--imc-border)" }}
     >
         <ResultImage item={item} large />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[14px] font-black" style={{ color: INK }}>
+          <p className="truncate text-[14px] font-black" style={{ color: "var(--imc-text)" }}>
             {data?.fullName || data?.name || data?.username || data?.title || "Result"}
           </p>
-          <p className="mt-0.5 truncate text-[11px] font-semibold" style={{ color: MUTED }}>
+          <p className="mt-0.5 truncate text-[11px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>
             {data?.description || data?.headline || getHeadline(data)}
           </p>
         </div>
@@ -536,12 +572,58 @@ function SelectedResult({ item, onClear, onOpen }) {
             onClear();
           }}
           className="grid h-9 w-9 shrink-0 place-items-center rounded-full"
-          style={{ background: PAPER, color: INK }}
+          style={{ background: "var(--imc-surface-2)", color: "var(--imc-text)" }}
         >
           <X size={17} />
         </button>
     </div>
   );
+}
+
+function JourneyBuilderRecommendation({ item, navigate }) {
+  const { creator, journey, milestone } = item;
+  const creatorId = getId(creator);
+  const journeyId = getId(journey);
+  const cover = getCoverImage(journey) || getCoverImage(milestone);
+  const avatar = getUserImage(creator);
+  const currentDay = Number(journey?.currentDay || milestone?.day || 1);
+  const targetDays = Number(journey?.targetDays || journey?.totalDays || 100);
+  const progress = Math.min(100, Math.max(1, Math.round((currentDay / Math.max(1, targetDays)) * 100)));
+
+  return (
+    <article className="overflow-hidden rounded-[20px] border" style={{ background: "var(--imc-surface)", borderColor: "var(--imc-border)" }}>
+      <button
+        type="button"
+        onClick={() => creator?.username ? navigate(`/profile/${creator.username}`) : navigate(`/profile/user/${creatorId}`)}
+        className="flex w-full items-center gap-2.5 px-3 py-3 text-left"
+      >
+        <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full" style={{ background: "var(--imc-surface-2)", color: "var(--imc-indigo-text)" }}>
+          {avatar ? <SafeImage src={avatar} fallback={<User size={19} />} className="h-full w-full object-cover" /> : <User size={19} />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[12px] font-black" style={{ color: "var(--imc-text)" }}>{getName(creator)}</p>
+          <p className="truncate text-[9.5px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>{getHeadline(creator)}</p>
+        </div>
+        <span className="text-[9.5px] font-black" style={{ color: "var(--imc-indigo-text)" }}>View profile</span>
+      </button>
+      <button type="button" onClick={() => navigate(`/journey/${journeyId}`)} className="flex w-full gap-3 border-t p-3 text-left" style={{ borderColor: "var(--imc-border)" }}>
+        <div className="grid h-16 w-20 shrink-0 place-items-center overflow-hidden rounded-[14px]" style={{ background: "var(--imc-action-soft)", color: "var(--imc-indigo-text)" }}>
+          {cover ? <SafeImage src={cover} fallback={<Sparkles size={20} />} className="h-full w-full object-cover" /> : <Sparkles size={20} />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[12px] font-black" style={{ color: "var(--imc-text)" }}>{journey?.title || "Building in public"}</p>
+          <p className="mt-1 text-[9.5px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>Day {currentDay} of {targetDays} · {progress}% complete</p>
+          <div className="mt-2 h-1 overflow-hidden rounded-full" style={{ background: "var(--imc-surface-2)" }}><div className="h-full rounded-full" style={{ width: `${progress}%`, background: "var(--imc-indigo-text)" }} /></div>
+        </div>
+      </button>
+    </article>
+  );
+}
+
+function SafeImage({ src, fallback, className }) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) return fallback;
+  return <img src={src} alt="" className={className} onError={() => setFailed(true)} />;
 }
 
 export default Search;

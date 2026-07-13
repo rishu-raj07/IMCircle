@@ -118,6 +118,18 @@ const journeySchema = new mongoose.Schema(
       default: "",
     },
 
+    finalNote: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+      default: "",
+    },
+
+    finalNoteAt: {
+      type: Date,
+      default: null,
+    },
+
     isPublic: {
       type: Boolean,
       default: true,

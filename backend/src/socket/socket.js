@@ -244,3 +244,11 @@ export const emitMessageSeen = (conversationId, userId) => {
     userId: userId.toString(),
   });
 };
+
+export const emitMessagesUnsent = (conversationId, messageIds = []) => {
+  if (!io || !conversationId || messageIds.length === 0) return;
+  io.to(conversationId.toString()).emit("messages_unsent", {
+    conversationId: conversationId.toString(),
+    messageIds: messageIds.map(String),
+  });
+};

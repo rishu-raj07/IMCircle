@@ -73,7 +73,7 @@ const messageSchema = new mongoose.Schema(
         },
         reaction: {
           type: String,
-          enum: ["❤️", "😂", "😮", "😢", "👍"],
+          maxlength: 16,
         },
         reactedAt: {
           type: Date,

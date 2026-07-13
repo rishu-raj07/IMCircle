@@ -4,18 +4,16 @@ import {
   Image,
   Mic,
   Square,
-  Send,
   X,
   Loader2,
   Globe2,
   Trophy,
   CircleHelp,
-  MessageCircleQuestion,
   Lightbulb,
   Megaphone,
+  UserRound,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import BottomNav from "../../components/navigation/BottomNav";
 import { createPost } from "../../api/postApi";
 import { currentUser } from "../../store/authStore";
 import { trackEvent } from "../../utils/analyticsTracker";
@@ -35,22 +33,16 @@ const POST_PURPOSES = [
     hint: "Share an update",
   },
   {
-    id: "achievement",
-    label: "Achievement",
-    icon: Trophy,
-    hint: "Celebrate a win",
-  },
-  {
     id: "question",
     label: "Question",
     icon: CircleHelp,
     hint: "Ask the community",
   },
   {
-    id: "query",
-    label: "General Query",
-    icon: MessageCircleQuestion,
-    hint: "Need help or clarity",
+    id: "achievement",
+    label: "Achievement",
+    icon: Trophy,
+    hint: "Celebrate a win",
   },
   {
     id: "opportunity",
@@ -108,8 +100,6 @@ function CreatePost() {
     typeof rawUserImage === "string" && rawUserImage.startsWith("/uploads")
       ? `${uploadsBaseUrl}${rawUserImage}`
       : rawUserImage;
-
-  const userInitial = userName.charAt(0).toUpperCase();
 
   const handleMediaChange = (e) => {
     const files = Array.from(e.target.files || []);
@@ -309,34 +299,39 @@ function CreatePost() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--imc-bg)] pb-24">
-      <div className="sticky top-0 z-20 border-b border-[var(--imc-border)] bg-[var(--imc-surface)]/95 px-4 py-4 backdrop-blur-xl">
-        <div className="flex items-center justify-between">
+    <div className="min-h-screen bg-[var(--imc-bg)]">
+      <div className="mx-auto min-h-screen w-full max-w-[430px] bg-[var(--imc-bg)] pb-[max(28px,env(safe-area-inset-bottom))]">
+      <header className="sticky top-0 z-20 border-b border-[var(--imc-border)] bg-[var(--imc-bg)]/95 px-4 pb-3 pt-[max(14px,env(safe-area-inset-top))] backdrop-blur-xl">
+        <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={() => navigate(-1)}
-            className="grid h-10 w-10 place-items-center rounded-full bg-[var(--imc-surface-2)] text-[var(--imc-text)] active:scale-95"
+            aria-label="Go back"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[var(--imc-surface)] text-[var(--imc-text)] active:scale-95"
+            style={{ border: "1px solid var(--imc-border)" }}
           >
-            <ArrowLeft size={20} />
+            <ArrowLeft size={19} />
           </button>
 
-          <h1 className="text-[17px] font-black text-[var(--imc-text)]">
-            Create Post
-          </h1>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-[18px] font-black text-[var(--imc-text)]">Create Post</h1>
+            <p className="text-[10.5px] font-semibold text-[var(--imc-text-muted)]">Share something with your circle</p>
+          </div>
 
           <button
+            type="button"
             onClick={handleSubmit}
-            disabled={loading}
-            className="text-[13px] font-black text-[var(--imc-marigold-dark)] disabled:opacity-50"
+            disabled={loading || (!post.trim() && mediaFiles.length === 0)}
+            className="flex h-10 min-w-[66px] items-center justify-center rounded-full bg-[#4338CA] px-4 text-[12px] font-black text-white active:scale-95 disabled:opacity-40"
           >
-            {loading ? "Posting" : "Post"}
+            {loading ? <Loader2 size={16} className="animate-spin" /> : "Post"}
           </button>
         </div>
-      </div>
+      </header>
 
-      <main className="px-4 pt-4">
-        <div className="rounded-[30px] border border-[var(--imc-border)] bg-[var(--imc-surface)] p-4 shadow-sm">
-          <div className="mb-4 flex items-center gap-3">
-            <div className="h-12 w-12 overflow-hidden rounded-full bg-[#12141C]">
+      <main className="px-4 py-5">
+        <div className="flex items-center gap-3 px-1">
+            <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full bg-[var(--imc-indigo-soft)] text-[var(--imc-indigo-text)]">
               {userImage && !avatarBroken ? (
                 <img
                   src={userImage}
@@ -345,9 +340,7 @@ function CreatePost() {
                   className="h-full w-full object-cover"
                 />
               ) : (
-                <div className="grid h-full w-full place-items-center text-[13px] font-black text-[#EC9A1E]">
-                  {userInitial}
-                </div>
+                <UserRound size={22} />
               )}
             </div>
 
@@ -359,17 +352,18 @@ function CreatePost() {
               <button
                 type="button"
                 onClick={() => setVisibilityOpen(true)}
-                className="mt-1 flex items-center gap-1 rounded-full bg-[var(--imc-surface-2)] px-2.5 py-1 text-[12px] font-black text-[var(--imc-text-muted)] active:scale-95"
+                className="mt-1 flex items-center gap-1 rounded-full bg-[var(--imc-surface)] px-2.5 py-1 text-[10px] font-black text-[var(--imc-text-muted)] active:scale-95"
+                style={{ border: "1px solid var(--imc-border)" }}
               >
-                <Globe2 size={13} />
+                <Globe2 size={11} />
                 Public
               </button>
             </div>
           </div>
 
-          <div className="mb-4">
-            <p className="mb-2 text-[12px] font-black uppercase tracking-[0.5px] text-[var(--imc-text-muted)]">
-              What is this post for?
+          <section className="mt-6">
+            <p className="mb-2.5 text-[11px] font-black uppercase tracking-[0.08em] text-[var(--imc-text-muted)]">
+              Choose post type
             </p>
 
             <div className="grid grid-cols-2 gap-2">
@@ -382,23 +376,24 @@ function CreatePost() {
                     key={item.id}
                     type="button"
                     onClick={() => setPurpose(item.id)}
-                    className="flex items-center gap-2 rounded-2xl px-3 py-2.5 text-left active:scale-[0.98]"
+                    className="flex min-h-[62px] items-center gap-2.5 rounded-[16px] px-3 py-2.5 text-left active:scale-[0.98]"
                     style={{
-                      background: active ? "#12141C" : "var(--imc-surface-2)",
-                      color: active ? "#ffffff" : "var(--imc-text)",
+                      background: active ? "var(--imc-indigo-soft)" : "var(--imc-surface)",
+                      border: `1px solid ${active ? "#4338CA" : "var(--imc-border)"}`,
+                      color: active ? "var(--imc-indigo-text)" : "var(--imc-text)",
                     }}
                   >
-                    <Icon size={17} />
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px]" style={{ background: active ? "#4338CA" : "var(--imc-surface-2)", color: active ? "white" : "var(--imc-text-muted)" }}>
+                      <Icon size={15} />
+                    </span>
                     <span className="min-w-0">
-                      <span className="block text-[12px] font-black">
+                      <span className="block text-[11.5px] font-black">
                         {item.label}
                       </span>
                       <span
-                        className="block truncate text-[10px] font-bold"
+                        className="mt-0.5 block truncate text-[8.5px] font-semibold"
                         style={{
-                          color: active
-                            ? "rgba(255,255,255,0.7)"
-                            : "var(--imc-text-muted)",
+                          color: "var(--imc-text-muted)",
                         }}
                       >
                         {item.hint}
@@ -408,18 +403,19 @@ function CreatePost() {
                 );
               })}
             </div>
-          </div>
+          </section>
 
-          <textarea
-            value={post}
-            onChange={(e) => setPost(e.target.value.slice(0, MAX_TEXT))}
-            placeholder="What's on your mind?"
-            className="min-h-[120px] w-full resize-none bg-transparent text-[15px] font-semibold leading-6 text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)]"
-          />
+          <section className="mt-4 rounded-[22px] bg-[var(--imc-surface)] p-4" style={{ border: "1px solid var(--imc-border)" }}>
+            <textarea
+              value={post}
+              onChange={(e) => setPost(e.target.value.slice(0, MAX_TEXT))}
+              placeholder="What would you like to share?"
+              className="min-h-[190px] w-full resize-none bg-transparent text-[15px] font-semibold leading-6 text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)]"
+            />
 
-          <p className="mt-1 text-right text-[11px] font-bold text-[var(--imc-text-faint)]">
-            {post.length}/{MAX_TEXT}
-          </p>
+            <p className="mt-1 text-right text-[10px] font-bold text-[var(--imc-text-faint)]">
+              {post.length}/{MAX_TEXT}
+            </p>
 
           {mediaFiles
             .filter((item) => item.kind === "image")
@@ -462,14 +458,14 @@ function CreatePost() {
               </div>
             ))}
 
-          <div className="mt-4 flex items-center gap-3 border-t border-[var(--imc-border)] pt-3">
+          <div className="mt-3 flex items-center gap-2 border-t border-[var(--imc-border)] pt-3">
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="grid h-11 w-11 place-items-center rounded-full bg-[var(--imc-surface-2)] text-[var(--imc-text)] active:scale-95"
+              className="flex h-10 items-center gap-2 rounded-full bg-[var(--imc-surface-2)] px-3.5 text-[10.5px] font-black text-[var(--imc-text-muted)] active:scale-95"
               aria-label="Add image"
             >
-              <Image size={19} />
+              <Image size={16} /> Photo
             </button>
 
             {recording ? (
@@ -486,10 +482,10 @@ function CreatePost() {
               <button
                 type="button"
                 onClick={startVoiceRecording}
-                className="grid h-11 w-11 place-items-center rounded-full bg-[var(--imc-surface-2)] text-[var(--imc-text)] active:scale-95"
+                className="flex h-10 items-center gap-2 rounded-full bg-[var(--imc-surface-2)] px-3.5 text-[10.5px] font-black text-[var(--imc-text-muted)] active:scale-95"
                 aria-label="Record voice note"
               >
-                <Mic size={19} />
+                <Mic size={16} /> Voice
               </button>
             )}
           </div>
@@ -501,10 +497,8 @@ function CreatePost() {
             hidden
             onChange={handleMediaChange}
           />
-        </div>
+          </section>
       </main>
-
-      <BottomNav />
 
       {visibilityOpen ? (
         <div
@@ -534,6 +528,7 @@ function CreatePost() {
           </div>
         </div>
       ) : null}
+      </div>
     </div>
   );
 }

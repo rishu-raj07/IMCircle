@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
+  BriefcaseBusiness,
   Building2,
-  CheckCircle2,
+  ChevronRight,
   FileText,
+  MapPin,
+  Sparkles,
 } from "lucide-react";
 
 import CompanySearch from "./CompanySearch";
 import DatePickerField from "./DatePickerField";
+import LocationField from "./LocationField";
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -24,6 +28,11 @@ function getDateValue(value) {
 function getFirstItem(value) {
   if (Array.isArray(value)) return value[0] || {};
   return value || {};
+}
+
+function parseLocationText(value = "") {
+  const [city = "", state = ""] = String(value).split(",").map((item) => item.trim());
+  return { city, state };
 }
 
 function FieldLabel({ children, required }) {
@@ -143,6 +152,7 @@ function ExperiencePage({ value, onBack, onSave }) {
   const [companySearchOpen, setCompanySearchOpen] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [step, setStep] = useState(1);
 
   useEffect(() => {
     const item = getFirstItem(value);
@@ -173,6 +183,7 @@ function ExperiencePage({ value, onBack, onSave }) {
     setEndDate(getDateValue(item?.endDate || item?.workedTill));
     setCurrent(item?.current ?? true);
     setSummary(item?.summary || "");
+    setStep(1);
   }, [value]);
 
   useEffect(() => {
@@ -195,11 +206,76 @@ function ExperiencePage({ value, onBack, onSave }) {
     return true;
   }, [title, organisation, startDate, current, endDate]);
 
+  const stepMeta = [
+    {
+      icon: BriefcaseBusiness,
+      eyebrow: "ROLE & COMPANY",
+      title: "Where did you work?",
+      copy: "Start with the role and organisation people will recognize.",
+    },
+    {
+      icon: MapPin,
+      eyebrow: "WORK SETUP",
+      title: "When and where?",
+      copy: "Add the work style, location and timeline for this experience.",
+    },
+    {
+      icon: Sparkles,
+      eyebrow: "YOUR IMPACT",
+      title: "What did you accomplish?",
+      copy: "A short, specific summary makes your experience stand out.",
+    },
+  ];
+
+  const validateStep = () => {
+    setError("");
+    if (step === 1 && !title.trim()) {
+      setError("Add your role or title to continue.");
+      return false;
+    }
+    if (step === 1 && !organisation.trim()) {
+      setError("Choose or create an organisation to continue.");
+      return false;
+    }
+    if (step === 2 && !startDate) {
+      setError("Choose a start date to continue.");
+      return false;
+    }
+    if (step === 2 && !location.trim()) {
+      setError("Choose a work location from the suggestions.");
+      return false;
+    }
+    if (step === 2 && !current && !endDate) {
+      setError("Choose an end date or mark this as your current role.");
+      return false;
+    }
+    return true;
+  };
+
+  const goNext = () => {
+    if (!validateStep()) return;
+    setStep((currentStep) => Math.min(3, currentStep + 1));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleBack = () => {
+    setError("");
+    if (step > 1) {
+      setStep((currentStep) => currentStep - 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    onBack();
+  };
+
   const handleSave = async () => {
     setError("");
 
     if (!title.trim()) return setError("Title is required");
     if (!organisation.trim()) return setError("Organisation is required");
+    if (!location.trim()) {
+      return setError("Choose a work location from the suggestions");
+    }
     if (!startDate) return setError("Start date is required");
 
     if (new Date(startDate) > new Date(today)) {
@@ -251,41 +327,43 @@ function ExperiencePage({ value, onBack, onSave }) {
     }
   };
 
+  const ActiveIcon = stepMeta[step - 1].icon;
+
   return (
     <div className="min-h-screen bg-[var(--imc-bg)]">
       <div className="mx-auto min-h-screen w-full max-w-[430px] bg-[var(--imc-bg)] px-5 pb-8">
-        <div className="sticky top-0 z-30 -mx-5 flex h-[72px] items-center justify-between border-b border-[var(--imc-border)] bg-[var(--imc-bg)] px-5">
+        <div className="sticky top-0 z-30 -mx-5 border-b border-[var(--imc-border)] bg-[var(--imc-bg)] px-5 pb-4 pt-2">
+          <div className="flex h-12 items-center justify-between">
           <button
             type="button"
-            onClick={onBack}
+            onClick={handleBack}
             disabled={saving}
             className="flex h-10 w-10 items-center justify-center rounded-full active:bg-[var(--imc-surface)] disabled:opacity-40"
           >
             <ArrowLeft size={27} />
           </button>
 
-          <h1 className="text-[22px] font-black text-[var(--imc-text)]">
-            Add Experience
+          <h1 className="text-[18px] font-black text-[var(--imc-text)]">
+            {data?._id ? "Edit Experience" : "Add Experience"}
           </h1>
-
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!canSave || saving}
-            className="text-[var(--imc-text)] disabled:opacity-40"
-          >
-            <CheckCircle2 size={34} />
-          </button>
+          <span className="flex h-9 min-w-9 items-center justify-center rounded-full border border-[var(--imc-border)] bg-[var(--imc-surface)] px-2 text-[12px] font-black text-[var(--imc-indigo-text)]">{step}/3</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {[1, 2, 3].map((item) => (
+              <div key={item} className={`h-1.5 rounded-full transition-colors ${item <= step ? "bg-[var(--imc-indigo-text)]" : "bg-[var(--imc-surface-2)]"}`} />
+            ))}
+          </div>
         </div>
 
-        <div className="pt-6">
-          <h2 className="text-[25px] font-black tracking-[-0.5px] text-[var(--imc-text)]">
-            Work Details
-          </h2>
+        <div className="pb-28 pt-6">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[rgba(79,70,229,0.09)] text-[var(--imc-indigo-text)]"><ActiveIcon size={19} /></div>
+            <div><p className="text-[10px] font-black tracking-[0.14em] text-[var(--imc-indigo-text)]">{stepMeta[step - 1].eyebrow}</p>
+            <h2 className="mt-1 text-[24px] font-black tracking-[-0.6px] text-[var(--imc-text)]">{stepMeta[step - 1].title}</h2></div>
+          </div>
 
-          <p className="mt-1 text-[13px] font-bold leading-5 text-[var(--imc-text-muted)]">
-            Add your job, business, internship, freelance or self-employed work.
-          </p>
+          <div className="mt-5 border-t border-[var(--imc-border)] pt-1">
+          {step === 1 && <>
 
           <TextInput
             label="Title"
@@ -317,13 +395,17 @@ function ExperiencePage({ value, onBack, onSave }) {
             <option>Founder</option>
           </SelectInput>
 
-          <TextInput
-            label="Location"
-            value={location}
-            onChange={setLocation}
-            placeholder="Delhi, India"
-            maxLength={80}
-          />
+          </>}
+
+          {step === 2 && <>
+          <div className="mt-5">
+            <LocationField
+              label="Work location"
+              value={parseLocationText(location)}
+              onChange={(nextLocation) => setLocation([nextLocation?.city, nextLocation?.state].filter(Boolean).join(", "))}
+              placeholder="Search your work city"
+            />
+          </div>
 
           <SelectInput
             label="Location Type"
@@ -364,6 +446,9 @@ function ExperiencePage({ value, onBack, onSave }) {
             />
           )}
 
+          </>}
+
+          {step === 3 && <>
           <div className="mt-5">
             <div className="mb-2 flex items-center justify-between">
               <FieldLabel>Summary</FieldLabel>
@@ -388,19 +473,27 @@ function ExperiencePage({ value, onBack, onSave }) {
             </div>
           </div>
 
+          </>}
+          </div>
+
           {error && (
             <div className="mt-5 rounded-2xl bg-red-50 px-4 py-3 text-[13px] font-bold text-red-600">
               {error}
             </div>
           )}
 
+        </div>
+
+        <div className="fixed bottom-0 left-1/2 z-40 flex w-full max-w-[430px] -translate-x-1/2 gap-3 border-t border-[var(--imc-border)] bg-[var(--imc-bg)] px-5 py-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
+          {step > 1 && <button type="button" onClick={handleBack} disabled={saving} className="h-[52px] min-w-[104px] rounded-2xl border border-[var(--imc-border)] bg-[var(--imc-surface)] text-[14px] font-black text-[var(--imc-text)]">Back</button>}
           <button
             type="button"
-            onClick={handleSave}
-            disabled={!canSave || saving}
-            className="mt-8 flex h-[54px] w-full items-center justify-center rounded-full bg-[var(--imc-surface-strong)] text-[16px] font-black text-[var(--imc-on-surface-strong)] active:scale-[0.98] disabled:opacity-50"
+            onClick={step === 3 ? handleSave : goNext}
+            disabled={(step === 3 && !canSave) || saving}
+            className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl border border-[var(--imc-indigo-text)] bg-[rgba(79,70,229,0.08)] text-[15px] font-black text-[var(--imc-indigo-text)] active:scale-[0.99] disabled:opacity-45"
           >
-            {saving ? "Saving..." : "Save Experience"}
+            {saving ? "Saving..." : step === 3 ? "Save Experience" : "Continue"}
+            {!saving && step < 3 && <ChevronRight size={18} />}
           </button>
         </div>
       </div>

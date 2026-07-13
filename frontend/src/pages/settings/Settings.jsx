@@ -12,7 +12,6 @@ import {
   Shield,
   ShieldCheck,
   ShieldOff,
-  Trash2,
   User,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -24,7 +23,6 @@ import { logoutUser } from "../../store/authStore";
 import { logoutApi } from "../../api/authApi";
 import { unregisterPushToken } from "../../utils/pushNotifications";
 import { reportProblem } from "../../api/supportApi";
-import { deleteMyAccount } from "../../api/profileApi";
 
 const APP_VERSION = "1.0.0";
 
@@ -32,8 +30,8 @@ function Settings() {
   const navigate = useNavigate();
   const { isDark, toggleTheme } = useTheme();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const user = getSessionUser();
   const email = user?.email || user?.username || "";
@@ -169,16 +167,7 @@ function Settings() {
           <SettingItem
             icon={<LogOut size={19} />}
             title={loggingOut ? "Logging out…" : "Logout"}
-            danger
-            onClick={handleLogout}
-            hideChevron
-          />
-
-          <SettingItem
-            icon={<Trash2 size={19} />}
-            title="Delete Account"
-            danger
-            onClick={() => setDeleteOpen(true)}
+            onClick={() => setLogoutOpen(true)}
             hideChevron
           />
 
@@ -198,7 +187,29 @@ function Settings() {
       </div>
 
       <ReportProblemModal open={reportOpen} onClose={() => setReportOpen(false)} />
-      <DeleteAccountModal open={deleteOpen} onClose={() => setDeleteOpen(false)} />
+      <Modal open={logoutOpen} onClose={() => !loggingOut && setLogoutOpen(false)} title="Log out?">
+        <p className="text-[12px] font-semibold leading-5 text-[var(--imc-text-muted)]">
+          You can sign back in at any time. Your profile and activity will stay unchanged.
+        </p>
+        <div className="mt-5 flex gap-2.5">
+          <button
+            type="button"
+            onClick={() => setLogoutOpen(false)}
+            disabled={loggingOut}
+            className="h-11 flex-1 rounded-2xl border border-[var(--imc-border)] bg-[var(--imc-surface)] text-[12px] font-black text-[var(--imc-text)] active:scale-[0.99] disabled:opacity-50"
+          >
+            Stay signed in
+          </button>
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="h-11 flex-1 rounded-2xl bg-[var(--imc-surface-2)] text-[12px] font-black text-[var(--imc-text)] active:scale-[0.99] disabled:opacity-50"
+          >
+            {loggingOut ? "Logging out..." : "Log out"}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -338,81 +349,6 @@ function ReportProblemModal({ open, onClose }) {
           </button>
         </div>
       )}
-    </Modal>
-  );
-}
-
-function DeleteAccountModal({ open, onClose }) {
-  const navigate = useNavigate();
-  const [confirmText, setConfirmText] = useState("");
-  const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState("");
-
-  const handleClose = () => {
-    if (deleting) return;
-    onClose();
-    setTimeout(() => {
-      setConfirmText("");
-      setError("");
-    }, 200);
-  };
-
-  const handleDelete = async () => {
-    if (confirmText.trim().toUpperCase() !== "DELETE" || deleting) return;
-
-    setDeleting(true);
-    setError("");
-
-    try {
-      await deleteMyAccount();
-    } catch (err) {
-      setError(
-        err?.response?.data?.message || "Couldn't delete your account. Try again."
-      );
-      setDeleting(false);
-      return;
-    }
-
-    try {
-      await logoutApi();
-    } catch {
-      // best-effort — account is already deleted server-side either way
-    }
-
-    logoutUser();
-    navigate("/login", { replace: true });
-  };
-
-  return (
-    <Modal open={open} onClose={handleClose} title="Delete Account">
-      <p className="text-[12px] font-semibold text-[var(--imc-text-muted)]">
-        This permanently deletes your IMCircle account and hides your posts,
-        journeys, and profile. This can't be undone.
-      </p>
-
-      <p className="mt-4 text-[12px] font-black text-[var(--imc-text)]">
-        Type DELETE to confirm
-      </p>
-
-      <input
-        value={confirmText}
-        onChange={(e) => setConfirmText(e.target.value)}
-        placeholder="DELETE"
-        maxLength={10}
-        className="mt-2 w-full rounded-2xl border border-[var(--imc-border)] bg-[var(--imc-surface)] p-3.5 text-[13px] font-semibold text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)]"
-      />
-
-      {error && (
-        <p className="mt-2 text-[11px] font-semibold text-red-500">{error}</p>
-      )}
-
-      <button
-        onClick={handleDelete}
-        disabled={confirmText.trim().toUpperCase() !== "DELETE" || deleting}
-        className="mt-4 flex h-12 w-full items-center justify-center rounded-2xl bg-[#D92D20] text-[13px] font-black text-white active:scale-[0.99] disabled:opacity-50"
-      >
-        {deleting ? "Deleting…" : "Permanently Delete My Account"}
-      </button>
     </Modal>
   );
 }

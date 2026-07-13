@@ -18,6 +18,7 @@ import {
   Save,
   X,
   Send,
+  Flag,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -128,11 +129,15 @@ function JourneyProfile() {
   const [coverUploading, setCoverUploading] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   const [userFollowLoading, setUserFollowLoading] = useState(false);
+  const [viewerImage, setViewerImage] = useState("");
 
   const [editingAbout, setEditingAbout] = useState(false);
   const [aboutText, setAboutText] = useState("");
   const [editDays, setEditDays] = useState(100);
   const [savingAbout, setSavingAbout] = useState(false);
+  const [editingFinalNote, setEditingFinalNote] = useState(false);
+  const [finalNote, setFinalNote] = useState("");
+  const [savingFinalNote, setSavingFinalNote] = useState(false);
 
   useSEO({
     title: journey?.title ? `${journey.title} — Journey` : "Journey",
@@ -151,6 +156,7 @@ function JourneyProfile() {
       setJourney(j);
       setMilestones(Array.isArray(res?.milestones) ? res.milestones : []);
       setAboutText(j?.description || "");
+      setFinalNote(j?.finalNote || "");
       setEditDays(j?.targetDays || j?.totalDays || 100);
     } catch (error) {
       // In dev, React 18 StrictMode fires this effect twice; the axios
@@ -182,9 +188,16 @@ function JourneyProfile() {
 
   const currentDay = journey?.currentDay || 1;
   const targetDays = journey?.targetDays || journey?.totalDays || 100;
-  const progress = Math.min(Math.round((currentDay / targetDays) * 100), 100);
+  const isMissed = journey?.status === "uncompleted";
+  const progressDay = isMissed
+    ? Math.max(Number(journey?.updatesCount || 0), 0)
+    : Math.min(Number(currentDay), Number(targetDays));
+  const progress = journey?.status === "completed"
+    ? 100
+    : Math.min(Math.round((progressDay / targetDays) * 100), 100);
 
   const coverImage = normalizeImageUrl(journey?.coverImage);
+  const heroImage = coverImage || firstImage;
   const creator = journey?.creator || {};
   const avatar = getAvatar(creator);
   const totals = journey?.totals || {};
@@ -247,6 +260,26 @@ function JourneyProfile() {
       alert(error?.response?.data?.message || "Failed to update journey");
     } finally {
       setSavingAbout(false);
+    }
+  };
+
+  const handleSaveFinalNote = async () => {
+    const note = finalNote.trim();
+    if (!journey?._id || !note) return;
+
+    try {
+      setSavingFinalNote(true);
+      const res = await updateJourney(journey._id, { finalNote: note });
+      setJourney((prev) => ({
+        ...prev,
+        finalNote: res?.journey?.finalNote || note,
+        finalNoteAt: res?.journey?.finalNoteAt || new Date().toISOString(),
+      }));
+      setEditingFinalNote(false);
+    } catch (error) {
+      alert(error?.response?.data?.message || "Failed to save final note");
+    } finally {
+      setSavingFinalNote(false);
     }
   };
 
@@ -322,22 +355,27 @@ function JourneyProfile() {
 
   return (
     <div className="min-h-screen pb-28" style={{ background: "var(--imc-bg)" }}>
+      <div className="mx-auto min-h-screen w-full max-w-[430px]">
       <header
-        className="sticky top-0 z-30 px-4 py-3 backdrop-blur-xl"
-        style={{ borderBottom: "1px solid var(--imc-border)", background: "var(--imc-surface)" }}
+        className="sticky top-0 z-30 px-4 pb-3 pt-[max(14px,env(safe-area-inset-top))] backdrop-blur-xl"
+        style={{ borderBottom: "1px solid var(--imc-border)", background: "color-mix(in srgb, var(--imc-bg) 94%, transparent)" }}
       >
-        <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}
-            className="grid h-10 w-10 place-items-center rounded-full active:scale-95"
-            style={{ background: "var(--imc-surface-2)", color: "var(--imc-text)" }}
+            aria-label="Go back"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-full active:scale-95"
+            style={{ background: "var(--imc-surface)", color: "var(--imc-text)", border: "1px solid var(--imc-border)" }}
           >
-            <ArrowLeft size={20} />
+            <ArrowLeft size={19} />
           </button>
 
-          <h1 className="text-[16px] font-black" style={{ color: "var(--imc-text)" }}>Journey</h1>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-[17px] font-black" style={{ color: "var(--imc-text)" }}>Journey</h1>
+            <p className="truncate text-[10px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>{journey.title}</p>
+          </div>
 
-          {journey.isOwner && !journey.todayUpdateDone ? (
+          {journey.isOwner && journey.status === "active" && journey.isActive !== false && !journey.todayUpdateDone ? (
             <button
               onClick={() => navigate(`/journey/${journey._id}/update`)}
               className="rounded-full px-4 py-2 text-[12px] font-black active:scale-95"
@@ -346,26 +384,22 @@ function JourneyProfile() {
               Update
             </button>
           ) : (
-            <div className="h-9 w-16" />
+            <div className="h-9 w-[68px]" />
           )}
         </div>
       </header>
 
-      <main className="mx-auto max-w-xl">
-        <section style={{ borderBottom: "1px solid var(--imc-border)", background: "var(--imc-surface)" }}>
-          <div className="relative h-40 overflow-hidden" style={{ background: "linear-gradient(135deg, var(--imc-indigo-tint), var(--imc-surface))" }}>
-            {coverImage ? (
-              <img
-                src={coverImage}
-                alt={journey.title}
-                className="h-full w-full object-cover"
-              />
-            ) : firstImage ? (
-              <img
-                src={firstImage}
-                alt={journey.title}
-                className="h-full w-full object-cover"
-              />
+      <main className="mx-auto max-w-[430px]">
+        <section className="mx-4 mt-4 overflow-hidden rounded-[24px]" style={{ border: "1px solid var(--imc-border)", background: "var(--imc-surface)" }}>
+          <div className="relative h-44 overflow-hidden" style={{ background: "linear-gradient(135deg, var(--imc-indigo-tint), var(--imc-surface))" }}>
+            {heroImage ? (
+              <button type="button" onClick={() => setViewerImage(heroImage)} aria-label="View journey cover" className="block h-full w-full">
+                <img
+                  src={heroImage}
+                  alt={journey.title}
+                  className="h-full w-full object-cover"
+                />
+              </button>
             ) : (
               <div className="imc-lattice flex h-full items-center justify-center">
                 <div className="text-center">
@@ -377,7 +411,7 @@ function JourneyProfile() {
               </div>
             )}
 
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-transparent" />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-transparent" />
 
             {journey.isOwner && (
               <>
@@ -509,6 +543,12 @@ function JourneyProfile() {
                 <Flame size={11} />
                 Day {currentDay} streak
               </div>
+              {isMissed && (
+                <div className="flex items-center gap-1.5 rounded-full bg-[#FEF3F2] px-2.5 py-1 text-[9px] font-black text-[#D92D20]">
+                  <Flag size={11} />
+                  Missed this journey
+                </div>
+              )}
             </div>
 
             <div className="mt-3 grid grid-cols-5 gap-2">
@@ -530,6 +570,63 @@ function JourneyProfile() {
               />
               <StatBox icon={Eye} value={totals.views || 0} label="Views" />
             </div>
+
+            {isMissed && (
+              <div className="mt-3 overflow-hidden rounded-[22px] border border-[rgba(67,56,202,0.18)] bg-[var(--imc-indigo-soft)] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="flex items-center gap-1.5 text-[12px] font-black text-[var(--imc-indigo-text)]">
+                      <Flag size={14} /> Journey closed as missed
+                    </p>
+                    <p className="mt-1 text-[11px] font-semibold leading-5 text-[var(--imc-text-muted)]">
+                      {journey.uncompletedReason || "A required daily update was missed."}
+                    </p>
+                  </div>
+                  {journey.isOwner && !editingFinalNote && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingFinalNote(true)}
+                      className="shrink-0 rounded-full bg-[var(--imc-indigo)] px-3 py-1.5 text-[10px] font-black text-white active:scale-95"
+                    >
+                      {journey.finalNote ? "Edit note" : "Add final note"}
+                    </button>
+                  )}
+                </div>
+
+                {editingFinalNote ? (
+                  <div className="mt-3">
+                    <textarea
+                      value={finalNote}
+                      onChange={(event) => setFinalNote(event.target.value.slice(0, 1000))}
+                      maxLength={1000}
+                      autoFocus
+                      placeholder="Share honestly what happened, what you learned, and what you will do differently next time."
+                      className="min-h-[120px] w-full resize-none rounded-2xl border border-[rgba(67,56,202,0.24)] bg-[var(--imc-surface)] p-3 text-[13px] font-semibold leading-5 text-[var(--imc-text)] outline-none focus:border-[var(--imc-indigo)]"
+                    />
+                    <div className="mt-2 flex items-center justify-between gap-3">
+                      <span className="text-[10px] font-bold text-[var(--imc-text-muted)]">{finalNote.length}/1000</span>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => { setEditingFinalNote(false); setFinalNote(journey.finalNote || ""); }} className="rounded-full px-3 py-2 text-[11px] font-black text-[var(--imc-indigo-text)]">
+                          Cancel
+                        </button>
+                        <button type="button" onClick={handleSaveFinalNote} disabled={savingFinalNote || !finalNote.trim()} className="rounded-full bg-[var(--imc-indigo)] px-4 py-2 text-[11px] font-black text-white disabled:opacity-50">
+                          {savingFinalNote ? "Saving..." : "Publish final note"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : journey.finalNote ? (
+                  <div className="mt-3 border-t border-[rgba(67,56,202,0.18)] pt-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[var(--imc-indigo-text)]">Creator's final note</p>
+                    <p className="mt-1 whitespace-pre-wrap text-[13px] font-semibold leading-6 text-[var(--imc-text)]">{journey.finalNote}</p>
+                  </div>
+                ) : (
+                  <p className="mt-3 border-t border-[rgba(67,56,202,0.18)] pt-3 text-[11px] font-semibold text-[var(--imc-text-muted)]">
+                    No final reflection has been added yet.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="mt-3 rounded-2xl p-3" style={{ background: "var(--imc-surface-2)" }}>
               <div className="mb-2 flex items-center justify-between">
@@ -674,7 +771,7 @@ function JourneyProfile() {
               <div className="mb-2 flex items-center justify-between">
                 <p className="flex items-center gap-1.5 text-[11px] font-black" style={{ color: "var(--imc-marigold)" }}>
                   <Flame size={13} style={{ color: "var(--imc-marigold)" }} />
-                  Day {currentDay} of {targetDays}
+                  Day {progressDay} of {targetDays}
                 </p>
                 <p className="text-[11px] font-black" style={{ color: "var(--imc-marigold)" }}>
                   {progress}%
@@ -688,7 +785,11 @@ function JourneyProfile() {
                 />
               </div>
 
-              {journey.todayUpdateDone && journey.isOwner ? (
+              {isMissed ? (
+                <p className="mt-2 text-[11px] font-bold text-[#FDA29B]">
+                  This journey is closed. Progress updates are no longer available.
+                </p>
+              ) : journey.todayUpdateDone && journey.isOwner ? (
                 <p className="mt-2 text-[11px] font-bold" style={{ color: "var(--imc-success)" }}>
                   Today's journey update is already completed.
                 </p>
@@ -703,7 +804,7 @@ function JourneyProfile() {
           </div>
         </section>
 
-        <section className="px-4 py-3">
+        <section className="px-4 py-5">
           <div className="mb-3">
             <h3 className="text-[17px] font-black" style={{ color: "var(--imc-text)" }}>
               Progress Timeline
@@ -750,6 +851,7 @@ function JourneyProfile() {
                         milestone={item}
                         firstImage={firstImage}
                         onChanged={refreshJourneySilently}
+                        onImageOpen={setViewerImage}
                       />
                     </div>
                   </div>
@@ -760,7 +862,10 @@ function JourneyProfile() {
         </section>
       </main>
 
+      {viewerImage && <ImageViewer src={viewerImage} onClose={() => setViewerImage("")} />}
+
       <BottomNav />
+      </div>
     </div>
   );
 }
@@ -820,7 +925,7 @@ function InfoBox({ icon: Icon, label, value }) {
   );
 }
 
-function TimelineItem({ milestone, firstImage, onChanged }) {
+function TimelineItem({ milestone, firstImage, onChanged, onImageOpen }) {
   const currentImage = getImageUrl(milestone.images?.[0]);
   const showComparison =
     firstImage &&
@@ -950,8 +1055,8 @@ function TimelineItem({ milestone, firstImage, onChanged }) {
 
         {showComparison ? (
           <div className="grid grid-cols-2 gap-2">
-            <ProgressImage label="Day 1" src={firstImage} />
-            <ProgressImage label={`Day ${milestone.day}`} src={currentImage} />
+            <ProgressImage label="Day 1" src={firstImage} onOpen={onImageOpen} />
+            <ProgressImage label={`Day ${milestone.day}`} src={currentImage} onOpen={onImageOpen} />
             {milestone.achievement && (
               <div
                 className="col-span-2 inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[10px] font-black"
@@ -967,6 +1072,7 @@ function TimelineItem({ milestone, firstImage, onChanged }) {
             label={`Day ${milestone.day}`}
             src={currentImage}
             achievement={milestone.achievement}
+            onOpen={onImageOpen}
           />
         ) : (
           milestone.achievement && (
@@ -1091,12 +1197,14 @@ function ActionButton({ icon: Icon, count, active, onClick }) {
   );
 }
 
-function ProgressImage({ src, label, achievement }) {
+function ProgressImage({ src, label, achievement, onOpen }) {
   if (!src) return null;
 
   return (
     <div className="relative overflow-hidden rounded-2xl" style={{ background: "var(--imc-surface-2)" }}>
-      <img src={src} alt={label} className="h-40 w-full object-cover" />
+      <button type="button" onClick={() => onOpen?.(src)} aria-label={`View ${label} image`} className="block w-full active:opacity-90">
+        <img src={src} alt={label} className="h-40 w-full object-cover" />
+      </button>
 
       <div
         className="absolute left-2 top-2 rounded-full px-2.5 py-1 text-[10px] font-black text-white"
@@ -1114,6 +1222,17 @@ function ProgressImage({ src, label, achievement }) {
           <span className="truncate">{achievement}</span>
         </div>
       )}
+    </div>
+  );
+}
+
+function ImageViewer({ src, onClose }) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 p-3" role="dialog" aria-modal="true" aria-label="Journey image viewer" onClick={onClose}>
+      <button type="button" onClick={onClose} aria-label="Close image" className="absolute right-4 top-[max(16px,env(safe-area-inset-top))] z-10 grid h-11 w-11 place-items-center rounded-full bg-white/15 text-white backdrop-blur-md active:scale-95">
+        <X size={21} />
+      </button>
+      <img src={src} alt="Journey full view" onClick={(event) => event.stopPropagation()} className="max-h-full max-w-full object-contain" />
     </div>
   );
 }

@@ -31,8 +31,8 @@ import { useSEO } from "../../hooks/useSEO";
 
 const STEPS = [
   { label: "Step 1", action: "Open IMCircle", icon: Compass },
-  { label: "Step 2", action: "Go to Settings", icon: SettingsIcon },
-  { label: "Step 3", action: "Tap Delete Account", icon: Trash2 },
+  { label: "Step 2", action: "Open Privacy Policy", icon: SettingsIcon },
+  { label: "Step 3", action: "Tap Delete your account", icon: Trash2 },
   { label: "Step 4", action: "Type DELETE", icon: Keyboard },
   { label: "Step 5", action: "Confirm deletion", icon: ShieldCheck },
 ];
@@ -54,7 +54,7 @@ function AccountDeletion() {
   useSEO({
     title: "Delete Your Account",
     description:
-      "Learn how to permanently delete your IMCircle account, what data is removed, and our retention policy.",
+      "Learn how to delete your IMCircle account, what data is removed, and how to request restoration.",
     path: "/delete-account",
     type: "website",
   });
@@ -94,8 +94,8 @@ function AccountDeletion() {
             </h1>
 
             <p className="mx-auto mt-4 max-w-[440px] text-[15px] font-semibold leading-6 text-[var(--imc-text-muted)]">
-              Your privacy matters. You can permanently delete your IMCircle
-              account at any time.
+              Your privacy matters. You can delete your IMCircle account and
+              remove its content from public access at any time.
             </p>
           </div>
         </section>
@@ -140,7 +140,7 @@ function AccountDeletion() {
         <section className="mt-14">
           <h2 className="text-[22px] font-black tracking-tight">What is deleted</h2>
           <p className="mt-1.5 text-[13.5px] font-semibold text-[var(--imc-text-muted)]">
-            Confirming deletion permanently removes the following from IMCircle.
+            Confirming deletion immediately removes the following from public access on IMCircle.
           </p>
 
           <ul className="mt-6 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
@@ -165,6 +165,24 @@ function AccountDeletion() {
           </ul>
         </section>
 
+        <section className="mt-8">
+          <div className="rounded-[24px] border border-[var(--imc-border)] bg-[var(--imc-surface)] p-6 text-center sm:p-7">
+            <h2 className="text-[16px] font-black text-[var(--imc-text)]">
+              Restore your account
+            </h2>
+            <p className="mt-2.5 text-[13.5px] font-semibold leading-6 text-[var(--imc-text-muted)]">
+              To request restoration after deletion, email us from the address linked to your account.
+            </p>
+            <a
+              href="mailto:rishu@imcircle.com"
+              className="mt-3 inline-flex items-center gap-2 text-[14px] font-black text-[var(--imc-indigo-text)]"
+            >
+              <Mail size={16} />
+              rishu@imcircle.com
+            </a>
+          </div>
+        </section>
+
         {/* Retention policy */}
         <section className="mt-14">
           <div className="rounded-[24px] border border-[var(--imc-border)] bg-[var(--imc-marigold-tint)] p-6 sm:p-7">
@@ -186,11 +204,11 @@ function AccountDeletion() {
         <section className="mt-14 text-center">
           <h2 className="text-[22px] font-black tracking-tight">Need help?</h2>
           <a
-            href="mailto:support@imcircle.com"
+            href="mailto:rishu@imcircle.com"
             className="mt-3 inline-flex items-center gap-2 text-[15px] font-black text-[var(--imc-indigo-text)]"
           >
             <Mail size={16} />
-            support@imcircle.com
+            rishu@imcircle.com
           </a>
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">

@@ -84,23 +84,22 @@ function CreateLearning() {
   };
 
   return (
-    <div className="flex min-h-screen justify-center bg-[#08090C]">
+    <div className="flex min-h-screen justify-center bg-[var(--imc-bg)]">
       <main className="relative min-h-screen w-full max-w-[430px] overflow-hidden bg-[var(--imc-bg)] text-[var(--imc-text)]">
         <div
           className="absolute inset-0"
           style={{
             background:
-              "linear-gradient(180deg, color-mix(in srgb, var(--imc-marigold) 40%, var(--imc-surface)) 0%, color-mix(in srgb, var(--imc-marigold) 26%, var(--imc-bg)) 48%, var(--imc-bg) 100%)",
+              "radial-gradient(circle at 100% 0%, rgba(67,56,202,0.10), transparent 34%), linear-gradient(180deg, var(--imc-marigold-tint) 0%, var(--imc-bg) 28%)",
           }}
         />
-        <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-black/55 to-transparent" />
 
-        <div className="relative z-10 flex min-h-screen flex-col px-5 pb-5 pt-5">
+        <div className="relative z-10 flex min-h-screen flex-col px-5 pb-[calc(24px+env(safe-area-inset-bottom))] pt-[max(18px,env(safe-area-inset-top))]">
           <div className="flex items-center justify-between">
             <button
               type="button"
               onClick={() => navigate(-1)}
-              className="grid h-11 w-11 place-items-center rounded-full bg-black/25 text-white backdrop-blur active:scale-95"
+              className="grid h-11 w-11 place-items-center rounded-full border border-[var(--imc-border)] bg-[var(--imc-surface)] text-[var(--imc-text)] shadow-sm active:scale-95"
               aria-label="Go back"
             >
               <ArrowLeft size={22} />
@@ -110,20 +109,24 @@ function CreateLearning() {
               type="button"
               disabled={loading}
               onClick={handleSubmit}
-              className="grid h-11 w-11 place-items-center rounded-full bg-[#4338CA] text-white shadow-[0_12px_28px_rgba(67,56,202,0.28)] disabled:opacity-60 active:scale-95"
+              className="flex h-11 items-center gap-2 rounded-full bg-[var(--imc-indigo)] px-4 text-[12px] font-black text-white shadow-[0_10px_24px_rgba(67,56,202,0.24)] disabled:opacity-60 active:scale-95"
               aria-label="Publish learning"
             >
-              <Send size={19} />
+              <Send size={16} /> Publish
             </button>
           </div>
 
           <section className="mt-7">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-[var(--imc-marigold-tint)] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--imc-marigold-dark)]">
+              Daily learning
+            </div>
             <input
               value={headline}
               onChange={(e) => setHeadline(e.target.value.slice(0, 120))}
-              placeholder="Headline"
-              className="w-full bg-transparent text-[34px] font-black leading-[1.05] text-white outline-none placeholder:text-white/80"
+              placeholder="Give your learning a headline"
+              className="w-full bg-transparent text-[28px] font-black leading-[1.1] text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)]"
             />
+            <p className="mt-2 text-[12px] font-semibold text-[var(--imc-text-muted)]">Share one useful idea your circle can apply today.</p>
           </section>
 
           {/*
@@ -137,13 +140,13 @@ function CreateLearning() {
             the image stays visible and long text just scrolls into view
             rather than collapsing/overlapping.
           */}
-          <section className="mt-5 flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain rounded-[28px] bg-white/18 shadow-[0_18px_52px_rgba(0,0,0,0.18)] backdrop-blur-sm">
+          <section className="mt-5 flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain rounded-[26px] border border-[var(--imc-border)] bg-[var(--imc-surface)] shadow-[0_16px_42px_rgba(18,20,28,0.07)]">
             {imagePreview ? (
-              <div className="relative h-[54%] min-h-[250px] overflow-hidden">
+              <div className="relative min-h-[210px] overflow-hidden bg-[var(--imc-surface-2)]">
                 <img
                   src={imagePreview}
                   alt="Learning preview"
-                  className="h-full w-full object-cover"
+                  className="h-auto max-h-[360px] w-full object-contain"
                 />
 
                 <button
@@ -159,12 +162,13 @@ function CreateLearning() {
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
-                className="flex h-[54%] min-h-[250px] flex-col items-center justify-center gap-3 text-white/85 active:scale-[0.99]"
+                className="m-4 flex min-h-[190px] flex-col items-center justify-center gap-3 rounded-[20px] border border-dashed border-[rgba(67,56,202,0.28)] bg-[rgba(67,56,202,0.04)] text-[var(--imc-indigo-text)] active:scale-[0.99]"
               >
-                <span className="grid h-14 w-14 place-items-center rounded-full bg-black/24">
+                <span className="grid h-14 w-14 place-items-center rounded-2xl bg-[rgba(67,56,202,0.10)]">
                   <Image size={24} />
                 </span>
-                <span className="text-[13px] font-black">Add image</span>
+                <span className="text-[13px] font-black">Add a supporting image</span>
+                <span className="text-[10px] font-semibold text-[var(--imc-text-muted)]">Tap to choose from your device</span>
               </button>
             )}
 
@@ -174,25 +178,25 @@ function CreateLearning() {
                 setLesson(e.target.value.slice(0, MAX_LESSON_LENGTH))
               }
               placeholder="What did you learn today?"
-              className="min-h-[150px] flex-1 resize-none bg-white/92 px-5 py-5 text-[24px] font-black leading-[1.12] text-[#12141C] outline-none placeholder:text-[#12141C]/45"
+              className="min-h-[190px] flex-1 resize-none border-t border-[var(--imc-border)] bg-[var(--imc-surface)] px-5 py-5 text-[18px] font-semibold leading-7 text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)]"
             />
           </section>
 
           <div className="mt-4 flex items-center gap-3">
-            <label className="flex h-12 min-w-0 flex-1 items-center gap-2 rounded-full bg-black/24 px-4 text-white backdrop-blur">
+            <label className="flex h-12 min-w-0 flex-1 items-center gap-2 rounded-2xl border border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 text-[var(--imc-indigo-text)] shadow-sm">
               <Hash size={17} className="shrink-0" />
               <input
                 value={tag}
                 onChange={(e) => setTag(e.target.value.slice(0, 80))}
                 placeholder="hashtag"
-                className="min-w-0 flex-1 bg-transparent text-[14px] font-black text-white outline-none placeholder:text-white/70"
+                className="min-w-0 flex-1 bg-transparent text-[13px] font-bold text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)]"
               />
             </label>
 
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              className="grid h-12 w-12 place-items-center rounded-full bg-black/24 text-white backdrop-blur"
+              className="grid h-12 w-12 place-items-center rounded-2xl border border-[var(--imc-border)] bg-[var(--imc-surface)] text-[var(--imc-indigo-text)] shadow-sm"
               aria-label="Add image"
             >
               <Image size={21} />
@@ -204,7 +208,7 @@ function CreateLearning() {
               {cleanTags.map((item) => (
                 <span
                   key={item}
-                  className="shrink-0 rounded-full bg-white px-3 py-1.5 text-[11px] font-black text-[#12141C]"
+                  className="shrink-0 rounded-full bg-[var(--imc-indigo-tint)] px-3 py-1.5 text-[11px] font-black text-[var(--imc-indigo-text)]"
                 >
                   #{item}
                 </span>
@@ -212,24 +216,14 @@ function CreateLearning() {
             </div>
           ) : null}
 
-          <div className="mt-4 flex items-center gap-3">
+          <div className="mt-4">
             <button
               type="button"
               onClick={handleSubmit}
               disabled={loading}
-              className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-full bg-white text-[14px] font-black text-[#12141C] disabled:opacity-60 active:scale-[0.99]"
+              className="flex h-[54px] w-full items-center justify-center gap-2 rounded-2xl bg-[var(--imc-indigo)] text-[14px] font-black text-white shadow-[0_12px_28px_rgba(67,56,202,0.24)] disabled:opacity-60 active:scale-[0.99]"
             >
-              {loading ? "Publishing..." : "Your learning"}
-            </button>
-
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={loading}
-              className="grid h-[52px] w-[52px] place-items-center rounded-full bg-[#4338CA] text-white disabled:opacity-60"
-              aria-label="Publish learning"
-            >
-              <Send size={20} />
+              <Send size={18} /> {loading ? "Publishing..." : "Publish learning"}
             </button>
           </div>
 
