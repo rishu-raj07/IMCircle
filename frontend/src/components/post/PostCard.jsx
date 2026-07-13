@@ -20,7 +20,7 @@ const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api
 // borders) read from the mode-aware CSS vars defined in index.css instead.
 const INK = "#12141C";
 const MARIGOLD = "#EC9A1E";
-const MARIGOLD_DARK = "#8A5A12";
+const MARIGOLD_DARK = "var(--imc-marigold-text)";
 const POST_PURPOSE_LABELS = {
   general: "General",
   achievement: "Achievement",
@@ -336,7 +336,7 @@ function PostCard({ post = {}, type = "post", currentUser = null }) {
                   {type === "learning" && (
                     <span
                       className="rounded-full px-2 py-0.5 text-[9px] font-black uppercase"
-                      style={{ background: "rgba(236,154,30,0.14)", color: MARIGOLD_DARK }}
+                      style={{ background: "var(--imc-marigold-soft)", color: MARIGOLD_DARK }}
                     >
                       Learning
                     </span>
@@ -346,7 +346,7 @@ function PostCard({ post = {}, type = "post", currentUser = null }) {
                     <span
                       className="rounded-full px-2 py-0.5 text-[9px] font-black uppercase"
                       style={{
-                        background: "rgba(236,154,30,0.14)",
+                        background: "var(--imc-marigold-soft)",
                         color: MARIGOLD_DARK,
                       }}
                     >

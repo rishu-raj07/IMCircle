@@ -8,11 +8,6 @@ import {
 } from "../../utils/shareCard";
 import { getShareAvatarBlob } from "../../api/mediaApi";
 
-const INK = "#12141C";
-const INDIGO = "#4338CA";
-const MUTED = "#6B7280";
-const LINE = "rgba(18,20,28,0.08)";
-
 function ShareCardModal({ open, onClose, kind = "streak", data = {}, filename = "imcircle-card.png", shareText }) {
   const [blob, setBlob] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -121,9 +116,9 @@ function ShareCardModal({ open, onClose, kind = "streak", data = {}, filename = 
           className="mx-auto flex aspect-[4/5] w-full max-w-[300px] items-center justify-center overflow-hidden rounded-[26px] border bg-[var(--imc-surface)]"
           style={{ borderColor: "var(--imc-border)", boxShadow: "0 22px 50px rgba(18,20,28,0.18)" }}
         >
-          {status === "generating" && <Loader2 className="animate-spin text-white/70" size={28} />}
+          {status === "generating" && <Loader2 className="animate-spin text-[var(--imc-text-muted)]" size={28} />}
           {status === "error" && (
-            <p className="px-6 text-center text-[12px] font-bold text-white/70">
+            <p className="px-6 text-center text-[12px] font-bold text-[var(--imc-text-muted)]">
               Couldn't generate the card. Try again in a moment.
             </p>
           )}
@@ -133,7 +128,7 @@ function ShareCardModal({ open, onClose, kind = "streak", data = {}, filename = 
         </div>
 
         {actionMessage && (
-          <p className="mt-3 text-center text-[12px] font-bold" style={{ color: INDIGO }}>
+          <p className="mt-3 text-center text-[12px] font-bold text-[var(--imc-indigo-text)]">
             {actionMessage}
           </p>
         )}
@@ -143,7 +138,7 @@ function ShareCardModal({ open, onClose, kind = "streak", data = {}, filename = 
             type="button"
             onClick={handleShare}
             disabled={status !== "ready"}
-            className="col-span-2 flex items-center justify-center gap-2 rounded-2xl text-[14px] font-black active:scale-[0.98] disabled:opacity-50"
+            className="col-span-2 flex min-h-[52px] items-center justify-center gap-2 rounded-2xl px-4 text-[14px] font-black active:scale-[0.98] disabled:opacity-50"
             style={{ background: "var(--imc-action-soft)", border: "1px solid var(--imc-action-border)", color: "var(--imc-indigo-text)", height: 52 }}
           >
             <Share2 size={18} />
@@ -167,7 +162,7 @@ function ShareCardModal({ open, onClose, kind = "streak", data = {}, filename = 
               onClick={handleVCardDownload}
               disabled={status !== "ready"}
               className="flex items-center justify-center gap-2 rounded-2xl bg-[var(--imc-surface)] px-3 text-[12px] font-black active:scale-95 disabled:opacity-50"
-              style={{ border: `1px solid ${LINE}`, height: 52, color: INK }}
+              style={{ border: "1px solid var(--imc-border)", height: 52, color: "var(--imc-text)" }}
             >
               <ContactRound size={18} />
               Download vCard
@@ -175,7 +170,7 @@ function ShareCardModal({ open, onClose, kind = "streak", data = {}, filename = 
           )}
         </div>
 
-        <p className="mt-3 text-center text-[10.5px] font-semibold" style={{ color: MUTED }}>
+        <p className="mt-3 text-center text-[10.5px] font-semibold text-[var(--imc-text-muted)]">
           {kind === "profile"
             ? "The QR opens your unique IMCircle profile"
             : "Perfect for WhatsApp Status, Instagram Stories or X"}

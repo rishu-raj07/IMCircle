@@ -69,6 +69,8 @@
   --imc-indigo-text: #4338ca;
   --imc-action-soft: rgba(67, 56, 202, 0.07);
   --imc-action-border: rgba(67, 56, 202, 0.2);
+  --imc-marigold-text: #8a5a12;
+  --imc-marigold-soft: rgba(236, 154, 30, 0.14);
 
   /* Scoped to the Learning reader only (Learning View redesign) — a warm
      cream surface distinct from the neutral --imc-bg used app-wide.
@@ -105,6 +107,8 @@
   --imc-indigo-text: #f2f1ec;
   --imc-action-soft: rgba(255, 255, 255, 0.08);
   --imc-action-border: rgba(255, 255, 255, 0.18);
+  --imc-marigold-text: #f4b84a;
+  --imc-marigold-soft: rgba(236, 154, 30, 0.12);
 
   --imc-reel-scrim-rgb: 18, 20, 28;
   --imc-reel-chip-bg: rgba(255, 255, 255, 0.14);
@@ -137,6 +141,11 @@
 
 html {
   font-family: var(--font-sans);
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 body {

@@ -7,11 +7,13 @@ import {
   Info,
   LogOut,
   MessageSquareWarning,
+  Monitor,
   Moon,
   Share2,
   Shield,
   ShieldCheck,
   ShieldOff,
+  Sun,
   User,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -28,7 +30,7 @@ const APP_VERSION = "1.0.0";
 
 function Settings() {
   const navigate = useNavigate();
-  const { isDark, toggleTheme } = useTheme();
+  const { preference, setTheme } = useTheme();
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -108,7 +110,7 @@ function Settings() {
             onClick={() => navigate("/account")}
           />
 
-          <ThemeItem isDark={isDark} onToggle={toggleTheme} />
+          <ThemeItem preference={preference} onChange={setTheme} />
 
           <SettingItem
             icon={<MessageSquareWarning size={19} />}
@@ -243,30 +245,52 @@ function SettingItem({ icon, title, onClick, danger, hideChevron }) {
   );
 }
 
-function ThemeItem({ isDark, onToggle }) {
+const THEME_OPTIONS = [
+  { value: "system", label: "System", icon: Monitor },
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+];
+
+function ThemeItem({ preference, onChange }) {
   return (
-    <button
-      onClick={onToggle}
-      className="flex w-full items-center gap-3 border-b border-[var(--imc-border)] py-4 text-left active:opacity-70"
-    >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[var(--imc-surface-2)] text-[var(--imc-indigo-text)]">
-        <Moon size={19} />
+    <div className="border-b border-[var(--imc-border)] py-4">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[var(--imc-surface-2)] text-[var(--imc-indigo-text)]">
+          <Moon size={19} />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-[14px] font-black text-[var(--imc-text)]">App Theme</p>
+          <p className="mt-0.5 text-[10px] font-semibold text-[var(--imc-text-muted)]">
+            System follows your device automatically
+          </p>
+        </div>
       </div>
 
-      <span className="flex-1 text-[14px] font-black text-[var(--imc-text)]">
-        App Theme
-      </span>
-
-      <span
-        className="relative h-6 w-11 shrink-0 rounded-full transition-colors"
-        style={{ background: isDark ? "#4338CA" : "#E3E1F7" }}
-      >
-        <span
-          className="absolute top-0.5 h-5 w-5 rounded-full bg-[var(--imc-surface)] shadow-sm transition-transform"
-          style={{ transform: isDark ? "translateX(20px)" : "translateX(2px)" }}
-        />
-      </span>
-    </button>
+      <div className="ml-[52px] mt-3 grid grid-cols-3 gap-2" role="radiogroup" aria-label="App theme">
+        {THEME_OPTIONS.map(({ value, label, icon: Icon }) => {
+          const active = preference === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => onChange(value)}
+              className="flex min-h-10 items-center justify-center gap-1.5 rounded-xl border px-2 text-[11px] font-black transition active:scale-[0.98]"
+              style={{
+                background: active ? "var(--imc-action-soft)" : "var(--imc-surface)",
+                borderColor: active ? "var(--imc-action-border)" : "var(--imc-border)",
+                color: active ? "var(--imc-indigo-text)" : "var(--imc-text-muted)",
+              }}
+            >
+              <Icon size={14} />
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

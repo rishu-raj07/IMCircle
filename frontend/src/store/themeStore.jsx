@@ -6,12 +6,19 @@ const ThemeContext = createContext(null);
 function getStoredTheme() {
   try {
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    if (stored === "light" || stored === "dark") return stored;
+    if (["system", "light", "dark"].includes(stored)) return stored;
   } catch {
     // localStorage unavailable — fall through to default
   }
 
-  return "light";
+  return "system";
+}
+
+function getSystemTheme() {
+  if (typeof window === "undefined" || !window.matchMedia) return "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
 }
 
 function applyThemeToDocument(theme) {
@@ -20,27 +27,45 @@ function applyThemeToDocument(theme) {
 }
 
 export function ThemeProvider({ children }) {
-  const [theme, setThemeState] = useState(getStoredTheme);
+  const [preference, setPreference] = useState(getStoredTheme);
+  const [systemTheme, setSystemTheme] = useState(getSystemTheme);
+  const theme = preference === "system" ? systemTheme : preference;
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return undefined;
+
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const syncSystemTheme = (event) =>
+      setSystemTheme(event.matches ? "dark" : "light");
+
+    media.addEventListener?.("change", syncSystemTheme);
+    return () => media.removeEventListener?.("change", syncSystemTheme);
+  }, []);
 
   useEffect(() => {
     applyThemeToDocument(theme);
+  }, [theme]);
 
+  useEffect(() => {
     try {
-      localStorage.setItem(THEME_STORAGE_KEY, theme);
+      localStorage.setItem(THEME_STORAGE_KEY, preference);
     } catch {
       // ignore storage failures (private browsing, quota, etc.)
     }
-  }, [theme]);
+  }, [preference]);
 
   const value = useMemo(
     () => ({
       theme,
+      preference,
       isDark: theme === "dark",
-      setTheme: (next) => setThemeState(next === "dark" ? "dark" : "light"),
+      isSystem: preference === "system",
+      setTheme: (next) =>
+        setPreference(["system", "light", "dark"].includes(next) ? next : "system"),
       toggleTheme: () =>
-        setThemeState((prev) => (prev === "dark" ? "light" : "dark")),
+        setPreference(theme === "dark" ? "light" : "dark"),
     }),
-    [theme]
+    [preference, theme]
   );
 
   return (

@@ -117,7 +117,7 @@ function AccountDeletion() {
                     index === STEPS.length - 1 ? "sm:col-span-2" : ""
                   }`}
                 >
-                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#12141C] text-[15px] font-black text-[#EC9A1E]">
+                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[var(--imc-surface-strong)] text-[15px] font-black text-[var(--imc-marigold-text)]">
                     {index + 1}
                   </div>
 
@@ -185,16 +185,16 @@ function AccountDeletion() {
 
         {/* Retention policy */}
         <section className="mt-14">
-          <div className="rounded-[24px] border border-[var(--imc-border)] bg-[var(--imc-marigold-tint)] p-6 sm:p-7">
-            <h2 className="text-[16px] font-black text-[var(--imc-marigold-dark)]">
+          <div className="rounded-[24px] border border-[var(--imc-action-border)] bg-[var(--imc-action-soft)] p-6 sm:p-7">
+            <h2 className="text-[16px] font-black text-[var(--imc-marigold-text)]">
               Retention Policy
             </h2>
-            <p className="mt-2.5 text-[13.5px] font-semibold leading-6 text-[var(--imc-ink-soft)]">
+            <p className="mt-2.5 text-[13.5px] font-semibold leading-6 text-[var(--imc-text-muted)]">
               Some security logs or legally required records may be retained
               for up to 90 days before permanent deletion where required by
               law.
             </p>
-            <p className="mt-3 text-[13.5px] font-black text-[var(--imc-ink-soft)]">
+            <p className="mt-3 text-[13.5px] font-black text-[var(--imc-text)]">
               No deleted content remains publicly visible.
             </p>
           </div>
@@ -226,7 +226,7 @@ function AccountDeletion() {
             </Link>
             <Link
               to="/"
-              className="rounded-full bg-[#12141C] px-5 py-2.5 text-[13px] font-black text-white active:scale-[0.97]"
+              className="rounded-full border border-[var(--imc-action-border)] bg-[var(--imc-action-soft)] px-5 py-2.5 text-[13px] font-black text-[var(--imc-indigo-text)] active:scale-[0.97]"
             >
               Back to IMCircle
             </Link>

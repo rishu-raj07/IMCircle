@@ -45,8 +45,8 @@ function normalizeStatus(value) {
 }
 
 const SIZES = {
-  sm: { padding: "min-h-7 px-2.5 py-1", text: "text-[10px]", icon: 12 },
-  xs: { padding: "min-h-6 px-2 py-0.5", text: "text-[9px]", icon: 10 },
+  sm: { padding: "min-h-8 px-3 py-1.5", text: "text-[10px]", icon: 12 },
+  xs: { padding: "min-h-7 px-2.5 py-1", text: "text-[9px]", icon: 10 },
 };
 
 const CIRCLE_STATUS_EVENT = "imcircle:circle-status";
@@ -186,7 +186,7 @@ function CircleAction({
             setShowRemoveConfirm(true);
           }}
           className={`flex items-center gap-1 rounded-full font-black active:scale-95 ${sizeCls.padding} ${sizeCls.text} ${className}`}
-          style={{ background: "var(--imc-surface-2)", border: "1px solid var(--imc-border)", color: "#12141C" }}
+          style={{ background: "var(--imc-surface-2)", border: "1px solid var(--imc-border)", color: "var(--imc-text)" }}
         >
           <Check size={sizeCls.icon} />
           In Circle

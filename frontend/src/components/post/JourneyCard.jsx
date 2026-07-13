@@ -53,7 +53,7 @@ const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api
 // regardless of theme — everything else reads mode-aware CSS vars.
 const INK = "#12141C";
 const MARIGOLD = "#EC9A1E";
-const MARIGOLD_DARK = "#8A5A12";
+const MARIGOLD_DARK = "var(--imc-marigold-text)";
 const INDIGO = "#4338CA";
 
 function formatRelativeTime(value) {
@@ -531,7 +531,7 @@ function JourneyCard({ milestone = {} }) {
                 <button
                   type="button"
                   onClick={handleFollow}
-                  className="shrink-0 rounded-full border px-2 py-1 text-[9px] font-bold transition active:scale-95"
+                  className="shrink-0 min-h-8 rounded-full border px-3 py-1.5 text-[10px] font-bold transition active:scale-95"
                   style={
                     following
                       ? {
@@ -547,14 +547,14 @@ function JourneyCard({ milestone = {} }) {
                   }
                 >
                   <span className="flex items-center gap-1">
-                    {following ? <Check size={9} /> : <UserPlus size={9} />}
+                    {following ? <Check size={11} /> : <UserPlus size={11} />}
                     {following ? "Following" : "Follow Journey"}
                   </span>
                 </button>
               )}
 
               {isJourneyInactive && (
-                <span className="shrink-0 rounded-full bg-[#FEF3F2] px-2 py-0.5 text-[9px] font-black text-[#D92D20]">
+                <span className="shrink-0 rounded-full border border-[rgba(217,45,32,0.2)] bg-[rgba(217,45,32,0.1)] px-2 py-0.5 text-[9px] font-black text-[var(--imc-danger)]">
                   {isMissed ? "Missed this journey" : "Completed"}
                 </span>
               )}
@@ -655,7 +655,7 @@ function JourneyCard({ milestone = {} }) {
             {milestone.achievement && !firstImage && (
               <div
                 className="mb-1.5 inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-black"
-                style={{ background: "rgba(18,20,28,0.06)", color: MARIGOLD_DARK }}
+                style={{ background: "var(--imc-marigold-soft)", color: MARIGOLD_DARK }}
               >
                 <Trophy size={12} />
                 <span className="truncate">{milestone.achievement}</span>

@@ -17,6 +17,47 @@ const api = axios.create({
 const GET_CACHE_TTL = 5 * 60 * 1000;
 const getCache = new Map();
 const pendingGetControllers = new Map();
+let proactiveRefreshPromise = null;
+
+function tokenExpiresSoon(token, bufferMs = 30 * 1000) {
+  try {
+    const encoded = String(token || "").split(".")[1];
+    if (!encoded) return false;
+
+    const normalized = encoded.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const payload = JSON.parse(window.atob(padded));
+    const expiresAt = Number(payload?.exp || 0) * 1000;
+    return expiresAt > 0 && expiresAt <= Date.now() + bufferMs;
+  } catch {
+    return false;
+  }
+}
+
+async function proactivelyRefreshAccessToken() {
+  if (!proactiveRefreshPromise) {
+    proactiveRefreshPromise = axios
+      .post(
+        `${API_URL}/auth/refresh-token`,
+        {},
+        {
+          withCredentials: true,
+          headers: { "Content-Type": "application/json" },
+        }
+      )
+      .then((response) => {
+        const nextToken = response.data?.accessToken;
+        if (!nextToken) throw new Error("No access token returned");
+        setAccessToken(nextToken);
+        return nextToken;
+      })
+      .finally(() => {
+        proactiveRefreshPromise = null;
+      });
+  }
+
+  return proactiveRefreshPromise;
+}
 
 function getRequestKey(config) {
   const params = config.params
@@ -53,8 +94,22 @@ function shouldBypassGetCache(config) {
   return false;
 }
 
-api.interceptors.request.use((config) => {
-  const token = getAccessToken();
+api.interceptors.request.use(async (config) => {
+  let token = getAccessToken();
+  const isRefreshRequest = String(config.url || "").includes("/auth/refresh-token");
+
+  // Refresh an expiring access token before the protected request leaves
+  // the browser. This avoids the noisy /profile/me 401-then-retry cycle
+  // while preserving the existing response fallback for genuinely stale
+  // or revoked sessions.
+  if (token && !isRefreshRequest && tokenExpiresSoon(token)) {
+    try {
+      token = await proactivelyRefreshAccessToken();
+    } catch {
+      // Let the normal response interceptor handle a genuinely expired
+      // refresh session and redirect consistently.
+    }
+  }
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;

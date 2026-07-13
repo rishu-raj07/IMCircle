@@ -57,8 +57,8 @@ function StreakCard({
           onClick={onPrimaryAction}
           className="flex min-h-[58px] w-full items-center gap-3 rounded-[14px] px-3 py-2.5 text-left shadow-[0_7px_20px_rgba(91,55,238,0.08)] active:scale-[0.99]"
           style={{
-            background: "linear-gradient(90deg, rgba(255,255,255,0.98), rgba(246,242,255,0.98))",
-            border: "1px solid rgba(109,74,255,0.08)",
+            background: "linear-gradient(100deg, var(--imc-surface), var(--imc-action-soft))",
+            border: "1px solid var(--imc-action-border)",
           }}
         >
           <div
@@ -83,12 +83,12 @@ function StreakCard({
           </div>
 
           {hasActiveJourney && streak > 0 ? (
-            <div className="flex shrink-0 items-center gap-3 border-l pl-4" style={{ borderColor: "rgba(91,55,238,0.18)" }}>
+            <div className="flex shrink-0 items-center gap-3 border-l pl-4" style={{ borderColor: "var(--imc-action-border)" }}>
               <div className="min-w-[42px] text-center">
-                <p className="text-[21px] font-black leading-5" style={{ color: "#5b35e9" }}>{streak}</p>
+                <p className="text-[21px] font-black leading-5" style={{ color: "var(--imc-indigo-text)" }}>{streak}</p>
                 <p className="mt-0.5 text-[8px] font-black" style={{ color: "var(--imc-text)" }}>Day Streak</p>
               </div>
-              <ArrowRight size={15} style={{ color: "#6d4aff" }} />
+              <ArrowRight size={15} style={{ color: "var(--imc-indigo-text)" }} />
             </div>
           ) : (
             <span
