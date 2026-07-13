@@ -1,6 +1,7 @@
 import User from "../models/User.js";
 import { getSignupRankBadge } from "../utils/badges.js";
 import { hideContentForDeletedAccount } from "../utils/accountDeletion.js";
+import { repairMissingProfileMedia } from "../utils/profileMediaRepair.js";
 
 const USER_PUBLIC_FIELDS =
   "fullName name username headline bio avatar profileImage profilePicture picture photo location field role gender verification stats";
@@ -264,6 +265,8 @@ export const getProfile = async (req, res) => {
       });
     }
 
+    await repairMissingProfileMedia(user);
+
     // Legacy accounts can already have a username without the timestamp
     // introduced for the 30-day username cooldown. Using account creation
     // time made old accounts appear immediately eligible, so the Change
@@ -338,9 +341,12 @@ export const getProfile = async (req, res) => {
 
     const { signupRank, rankBadge } = await getSignupRankBadge(user.createdAt);
 
+    const responseUser = user.toObject();
+    delete responseUser.profileMediaValidation;
+
     return res.status(200).json({
       success: true,
-      user,
+      user: responseUser,
       signupRank,
       rankBadge,
       profileCompletionPercent: getProfileCompletionPercent(user),

@@ -7,6 +7,7 @@ import {
   hideContentForDeletedAccount,
   restoreContentForDeletedAccount,
 } from "../utils/accountDeletion.js";
+import { repairMissingProfileMedia } from "../utils/profileMediaRepair.js";
 
 const publicFields =
   "fullName username mobile email avatar profilePicture profileImage photo photoURL picture coverImage headline bio role field primaryInterest dob gender location stats builderScore journeyStats profileCompletion profileCompletionPercent preferences verification isProfileCompleted onboardingCompleted isBlocked isDeleted createdAt updatedAt lastActiveAt usernameLastChangedAt";
@@ -174,12 +175,20 @@ export const restoreAdminUser = async (req, res) => {
   try {
     await restoreContentForDeletedAccount(req.params.userId);
 
-    const user = await User.findByIdAndUpdate(
+    let user = await User.findByIdAndUpdate(
       req.params.userId,
-      { isDeleted: false },
+      {
+        isDeleted: false,
+        "profileMediaValidation.avatarUrl": "",
+        "profileMediaValidation.coverImageUrl": "",
+        "profileMediaValidation.checkedAt": null,
+      },
       { new: true }
-    ).select(publicFields);
+    ).select(`${publicFields} profileMediaValidation`);
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    await repairMissingProfileMedia(user);
+    user = await User.findById(user._id).select(publicFields);
 
     await AnalyticsEvent.create({
       user: user._id,

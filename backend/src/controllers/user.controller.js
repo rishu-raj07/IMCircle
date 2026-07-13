@@ -6,6 +6,7 @@ import JourneyMilestoneRepost from "../models/JourneyMilestoneRepost.js";
 import { emitNotification } from "../socket/socket.js";
 import { getSignupRankBadge } from "../utils/badges.js";
 import { sendOtpSms, verifyOtpSms } from "../services/msg91.service.js";
+import { repairMissingProfileMedia } from "../utils/profileMediaRepair.js";
 
 const activityAuthorFields =
   "fullName username avatar profileImage profilePicture photo picture headline role field verification";
@@ -60,6 +61,7 @@ const compactPublicUser = (user, currentUserId = null) => {
     circle: undefined,
     mobile: undefined,
     blockedUsers: undefined,
+    profileMediaValidation: undefined,
   };
 };
 
@@ -99,7 +101,7 @@ export const getUserByUsername = async (req, res) => {
       username: username.toLowerCase(),
       isDeleted: false,
       isBlocked: false,
-    }).select(publicUserFields);
+    }).select(`${publicUserFields} profileMediaValidation`);
 
     if (!user) {
       return res.status(404).json({
@@ -107,6 +109,8 @@ export const getUserByUsername = async (req, res) => {
         message: "User not found",
       });
     }
+
+    await repairMissingProfileMedia(user);
 
     const { signupRank, rankBadge } = await getSignupRankBadge(user.createdAt);
 

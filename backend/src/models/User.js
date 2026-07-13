@@ -62,6 +62,23 @@ const userSchema = new mongoose.Schema(
       default: "",
     },
 
+    // Internal one-time validation cache for media referenced by restored
+    // accounts. This never appears in the public profile response.
+    profileMediaValidation: {
+      avatarUrl: {
+        type: String,
+        default: "",
+      },
+      coverImageUrl: {
+        type: String,
+        default: "",
+      },
+      checkedAt: {
+        type: Date,
+        default: null,
+      },
+    },
+
     headline: {
       type: String,
       maxlength: 320,
