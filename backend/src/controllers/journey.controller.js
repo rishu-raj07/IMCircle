@@ -1121,6 +1121,9 @@ export const getJourneyDiscoverFeed = async (req, res) => {
     const followedJourneyIds = new Set(
       following.map((item) => item.journey.toString())
     );
+    const followedCreatorIds = new Set(
+      (req.user.following || []).map((id) => id.toString())
+    );
 
     const milestones = await JourneyMilestone.find({ isDeleted: false })
       .populate("creator", userFields)
@@ -1192,6 +1195,7 @@ export const getJourneyDiscoverFeed = async (req, res) => {
       const obj = item.toObject();
       const milestoneId = obj._id.toString();
       const journeyId = obj.journey?._id?.toString();
+      const creatorId = obj.creator?._id?.toString();
       const myRepost = repostMap.get(milestoneId) || null;
       const isFollowed = followedJourneyIds.has(journeyId);
       const interestMatch = scoreJourneyForInterest(obj.journey, keywords);
@@ -1204,6 +1208,9 @@ export const getJourneyDiscoverFeed = async (req, res) => {
           myRepost,
           repostText: myRepost?.caption || "",
           savedByMe: savedSet.has(milestoneId),
+          creatorFollowedByMe: creatorId
+            ? followedCreatorIds.has(creatorId)
+            : false,
           commentsCount: commentCountMap.get(milestoneId) || 0,
           repliesCount: commentCountMap.get(milestoneId) || 0,
           journey: { ...obj.journey, followedByMe: isFollowed },

@@ -42,6 +42,7 @@ import { getMyAnalyticsDashboard } from "../../api/analyticsApi";
 import { getMyJourneys } from "../../api/journeyApi";
 import { getMyBuilderScore } from "../../api/builderScoreApi";
 import { getMyCircles } from "../../api/circleApi";
+import { getAvatarUrl } from "../../utils/avatar";
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
 const PUBLIC_APP_URL = (
@@ -515,13 +516,7 @@ function Profile() {
     : `/profile/user/${getId(user)}`;
   const profileUrl = `${PUBLIC_APP_URL}${profilePath}`;
 
-  const avatar = getImageUrl(
-    user?.avatar ||
-      user?.profileImage ||
-      user?.profilePicture ||
-      user?.picture ||
-      user?.photo
-  );
+  const avatar = getImageUrl(getAvatarUrl(user));
 
   const stats = user?.stats || {};
   const overview = analyticsDashboard?.overview || {};

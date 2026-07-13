@@ -6,8 +6,8 @@ import {
   searchLocations,
 } from "../../api/locationApi";
 import {
+  queryPermissionState,
   setStoredPermissionState,
-  shouldAttemptPermission,
 } from "../../utils/permissions";
 
 function formatDisplay(value) {
@@ -28,10 +28,11 @@ function LocationField({
   const [searching, setSearching] = useState(false);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState("");
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
-    setText(formatDisplay(value));
-  }, [value?.city, value?.state]);
+    if (!editing) setText(formatDisplay(value));
+  }, [editing, value?.city, value?.state]);
 
   useEffect(() => {
     const query = text.trim();
@@ -60,6 +61,7 @@ function LocationField({
     try {
       setSearching(true);
       const location = await getLocationDetails(suggestion.id);
+      setEditing(false);
       onChange(location);
       setText(formatDisplay(location));
       setSuggestions([]);
@@ -71,34 +73,58 @@ function LocationField({
     }
   };
 
+  const getDevicePosition = (options) =>
+    new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, options);
+    });
+
   const useMyLocation = async () => {
     if (!navigator.geolocation) return setError("Location isn't supported on this device");
-    if (!(await shouldAttemptPermission("geolocation"))) {
+    const permission = await queryPermissionState("geolocation");
+    if (permission === "denied") {
       return setError("Location access is off. Enable it in your device settings.");
     }
 
     setLocating(true);
     setError("");
-    navigator.geolocation.getCurrentPosition(
-      async ({ coords }) => {
-        setStoredPermissionState("geolocation", "granted");
-        try {
-          const location = await reverseLocation(coords.latitude, coords.longitude);
-          onChange(location);
-          setText(formatDisplay(location));
-        } catch {
-          setError("Couldn't detect your location");
-        } finally {
-          setLocating(false);
-        }
-      },
-      (geoError) => {
-        setLocating(false);
-        if (geoError.code === 1) setStoredPermissionState("geolocation", "denied");
-        setError(geoError.code === 1 ? "Location access denied" : "Couldn't detect your location");
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+    try {
+      let position;
+      try {
+        position = await getDevicePosition({
+          enableHighAccuracy: false,
+          timeout: 20000,
+          maximumAge: 300000,
+        });
+      } catch (firstError) {
+        if (firstError?.code === 1) throw firstError;
+        position = await getDevicePosition({
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 0,
+        });
+      }
+
+      setStoredPermissionState("geolocation", "granted");
+      const location = await reverseLocation(
+        position.coords.latitude,
+        position.coords.longitude
+      );
+      if (!location?.city) throw new Error("Location unavailable");
+      setEditing(false);
+      onChange(location);
+      setText(formatDisplay(location));
+      setSuggestions([]);
+      setError("");
+    } catch (geoError) {
+      if (geoError?.code === 1) {
+        setStoredPermissionState("geolocation", "denied");
+        setError("Location access denied. Allow it in your browser settings.");
+      } else {
+        setError("Current location unavailable. Search and select your city instead.");
+      }
+    } finally {
+      setLocating(false);
+    }
   };
 
   return (
@@ -109,7 +135,18 @@ function LocationField({
           <MapPin size={19} className="pointer-events-none absolute left-4 top-[27px] -translate-y-1/2 text-[var(--imc-indigo-text)]" />
           <input
             value={text}
-            onChange={(event) => setText(event.target.value)}
+            onChange={(event) => {
+              setEditing(true);
+              setText(event.target.value);
+              setError("");
+              onChange({ city: "", state: "", country: "", lat: null, lng: null });
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && suggestions[0]) {
+                event.preventDefault();
+                selectSuggestion(suggestions[0]);
+              }
+            }}
             placeholder={placeholder}
             autoComplete="off"
             className="h-[54px] w-full rounded-[16px] border border-[var(--imc-border)] bg-[var(--imc-surface)] pl-11 pr-10 text-[15px] font-bold text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)] focus:border-[var(--imc-indigo-text)]"

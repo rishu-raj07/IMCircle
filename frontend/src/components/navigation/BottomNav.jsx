@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useState } from "react";
+import { getMyJourneys } from "../../api/journeyApi";
 
 const MARIGOLD = "#EC9A1E";
 
@@ -18,6 +19,7 @@ function BottomNav() {
   const location = useLocation();
   const [showCreate, setShowCreate] = useState(false);
   const [showJourneyConfirm, setShowJourneyConfirm] = useState(false);
+  const [checkingJourneys, setCheckingJourneys] = useState(false);
 
   const isActive = (path) => location.pathname === path;
 
@@ -25,6 +27,31 @@ function BottomNav() {
     setShowCreate(false);
     setShowJourneyConfirm(false);
     navigate(path);
+  };
+
+  const handleCreateJourney = async () => {
+    if (checkingJourneys) return;
+    setCheckingJourneys(true);
+    try {
+      const response = await getMyJourneys();
+      const raw =
+        response?.journeys ||
+        response?.data?.journeys ||
+        response?.items ||
+        response?.data ||
+        [];
+      const journeys = Array.isArray(raw) ? raw : [];
+      const hasActiveJourney = journeys.some(
+        (journey) => journey?.status === "active" && journey?.isActive !== false
+      );
+
+      if (hasActiveJourney) setShowJourneyConfirm(true);
+      else goTo("/create-journey");
+    } catch {
+      goTo("/create-journey");
+    } finally {
+      setCheckingJourneys(false);
+    }
   };
 
   return (
@@ -67,8 +94,9 @@ function BottomNav() {
 
               <CreateOption
                 icon={Rocket}
-                title="Make a New Journey"
-                onClick={() => setShowJourneyConfirm(true)}
+                title={checkingJourneys ? "Checking journeys..." : "Make a New Journey"}
+                onClick={handleCreateJourney}
+                disabled={checkingJourneys}
               />
             </div>
           </div>
@@ -186,11 +214,12 @@ function BottomNav() {
   );
 }
 
-function CreateOption({ icon: Icon, title, onClick }) {
+function CreateOption({ icon: Icon, title, onClick, disabled = false }) {
   return (
     <button
       onClick={onClick}
-      className="group flex w-full items-center gap-3 rounded-[18px] p-3.5 text-left active:scale-[0.98]"
+      disabled={disabled}
+      className="group flex w-full items-center gap-3 rounded-[18px] p-3.5 text-left active:scale-[0.98] disabled:opacity-60"
       style={{
         border: "1px solid var(--imc-border)",
         background: "var(--imc-surface)",

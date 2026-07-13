@@ -4,11 +4,21 @@ import Notification from "../models/Notification.js";
 import { emitNotification } from "../socket/socket.js";
 
 const publicUserFields =
-  "fullName username avatar coverImage headline bio field role skills location preferences stats followers following circle createdAt";
+  "fullName name username avatar profileImage profilePicture picture photo photoURL image coverImage headline bio field role primaryInterest skills interests location preferences stats followers following circle createdAt";
 
 const getId = (value) => String(value);
 
 const isSameId = (a, b) => getId(a) === getId(b);
+
+const withMutualCircleCount = (user, viewerCircleIds) => {
+  if (!user) return null;
+  const value = typeof user.toObject === "function" ? user.toObject() : user;
+  const mutualCircleCount = (value.circle || []).filter((id) =>
+    viewerCircleIds.has(String(id))
+  ).length;
+
+  return { ...value, mutualCircleCount };
+};
 
 const createNotification = async ({ recipient, sender, type, title, message }) => {
   try {
@@ -263,12 +273,19 @@ export const rejectCircleRequest = async (req, res) => {
 
 export const getReceivedCircleRequests = async (req, res) => {
   try {
-    const requests = await CircleRequest.find({
+    const rawRequests = await CircleRequest.find({
       receiver: req.user._id,
       status: "pending",
     })
       .populate("sender", publicUserFields)
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const viewerCircleIds = new Set((req.user.circle || []).map(String));
+    const requests = rawRequests.map((request) => ({
+      ...request,
+      sender: withMutualCircleCount(request.sender, viewerCircleIds),
+    }));
 
     return res.status(200).json({
       success: true,
@@ -295,11 +312,15 @@ export const getSentCircleRequests = async (req, res) => {
       .lean();
 
     const receiverIds = rawRequests.map((request) => request.receiver);
-    const receivers = await User.find({ _id: { $in: receiverIds } }).select(
-      publicUserFields
-    );
+    const receivers = await User.find({ _id: { $in: receiverIds } })
+      .select(publicUserFields)
+      .lean();
+    const viewerCircleIds = new Set((req.user.circle || []).map(String));
     const receiverById = new Map(
-      receivers.map((user) => [String(user._id), user])
+      receivers.map((user) => [
+        String(user._id),
+        withMutualCircleCount(user, viewerCircleIds),
+      ])
     );
 
     // populate("receiver", ...) used to be used here directly, but Mongoose

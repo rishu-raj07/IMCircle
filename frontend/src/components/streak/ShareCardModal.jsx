@@ -6,6 +6,7 @@ import {
   generateShareCard,
   shareBlob,
 } from "../../utils/shareCard";
+import { getShareAvatarBlob } from "../../api/mediaApi";
 
 const INK = "#12141C";
 const INDIGO = "#4338CA";
@@ -26,7 +27,22 @@ function ShareCardModal({ open, onClose, kind = "streak", data = {}, filename = 
     setStatus("generating");
     setActionMessage("");
 
-    generateShareCard(kind, data).then((result) => {
+    let temporaryAvatarUrl = "";
+
+    const generate = async () => {
+      let cardData = data;
+      if (data?.avatarUrl && !String(data.avatarUrl).startsWith("data:")) {
+        try {
+          const avatarBlob = await getShareAvatarBlob(data.avatarUrl);
+          temporaryAvatarUrl = URL.createObjectURL(avatarBlob);
+          cardData = { ...data, avatarUrl: temporaryAvatarUrl };
+        } catch {
+          // The card renderer will use its standard user icon fallback.
+        }
+      }
+
+      const result = await generateShareCard(kind, cardData);
+      if (temporaryAvatarUrl) URL.revokeObjectURL(temporaryAvatarUrl);
       if (cancelled) return;
       if (!result) {
         setStatus("error");
@@ -36,13 +52,16 @@ function ShareCardModal({ open, onClose, kind = "streak", data = {}, filename = 
       setBlob(result);
       setPreviewUrl(URL.createObjectURL(result));
       setStatus("ready");
-    });
+    };
+
+    generate();
 
     return () => {
       cancelled = true;
+      if (temporaryAvatarUrl) URL.revokeObjectURL(temporaryAvatarUrl);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, kind, data?.profileUrl, data?.streak, data?.longestStreak, data?.name, data?.username, data?.headline, data?.interest, data?.location, data?.level]);
+  }, [open, kind, data?.profileUrl, data?.avatarUrl, data?.streak, data?.longestStreak, data?.name, data?.username, data?.headline, data?.interest, data?.location, data?.level]);
 
   useEffect(() => {
     return () => {

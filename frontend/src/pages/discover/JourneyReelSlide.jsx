@@ -228,10 +228,48 @@ function JourneyReelSlide({ milestone = {} }) {
   const [following, setFollowing] = useState(Boolean(journey.followedByMe));
   const [userFollowing, setUserFollowing] = useState(
     Boolean(
-      milestone.isFollowing || milestone.followedByMe || creator?.isFollowing
+      milestone.creatorFollowedByMe ||
+        milestone.isFollowing ||
+        creator?.isFollowing ||
+        creator?.followedByMe
     )
   );
   const [avatarBroken, setAvatarBroken] = useState(false);
+
+  useEffect(() => {
+    setFollowing(Boolean(journey.followedByMe));
+  }, [journeyId, journey.followedByMe]);
+
+  useEffect(() => {
+    setUserFollowing(
+      Boolean(
+        milestone.creatorFollowedByMe ||
+          milestone.isFollowing ||
+          creator?.isFollowing ||
+          creator?.followedByMe
+      )
+    );
+  }, [creatorId, milestone.creatorFollowedByMe, milestone.isFollowing, creator?.isFollowing, creator?.followedByMe]);
+
+  useEffect(() => {
+    const syncUserFollow = (event) => {
+      if (String(event.detail?.userId || "") === creatorId) {
+        setUserFollowing(Boolean(event.detail?.following));
+      }
+    };
+    const syncJourneyFollow = (event) => {
+      if (String(event.detail?.journeyId || "") === journeyId) {
+        setFollowing(Boolean(event.detail?.following));
+      }
+    };
+
+    window.addEventListener("imcircle:user-follow-changed", syncUserFollow);
+    window.addEventListener("imcircle:journey-follow-changed", syncJourneyFollow);
+    return () => {
+      window.removeEventListener("imcircle:user-follow-changed", syncUserFollow);
+      window.removeEventListener("imcircle:journey-follow-changed", syncJourneyFollow);
+    };
+  }, [creatorId, journeyId]);
 
   const [showReplies, setShowReplies] = useState(false);
   const [showRepost, setShowRepost] = useState(false);
@@ -285,9 +323,12 @@ function JourneyReelSlide({ milestone = {} }) {
     try {
       if (nextFollowing) await followJourney(journeyId);
       else await unfollowJourney(journeyId);
-    } catch (error) {
+      window.dispatchEvent(new CustomEvent("imcircle:journey-follow-changed", {
+        detail: { journeyId, following: nextFollowing },
+      }));
+    } catch {
       setFollowing(!nextFollowing);
-      alert(error?.response?.data?.message || "Failed to update follow");
+      alert("Couldn't update this journey. Please try again.");
     }
   };
 
@@ -300,9 +341,12 @@ function JourneyReelSlide({ milestone = {} }) {
     try {
       if (nextFollowing) await followUserById(creatorId);
       else await unfollowUserById(creatorId);
-    } catch (error) {
+      window.dispatchEvent(new CustomEvent("imcircle:user-follow-changed", {
+        detail: { userId: creatorId, following: nextFollowing },
+      }));
+    } catch {
       setUserFollowing(!nextFollowing);
-      alert(error?.response?.data?.message || "Failed to update follow");
+      alert("Couldn't update this follow. Please try again.");
     }
   };
 
@@ -522,11 +566,11 @@ function JourneyReelSlide({ milestone = {} }) {
               {!isOwnJourney && (
                 <button
                   onClick={handleFollowUser}
-                  className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black active:scale-95"
+                  className="h-8 shrink-0 rounded-full border border-white/35 px-3 text-[10px] font-black text-white active:scale-95"
                   style={
                     userFollowing
-                      ? { background: "rgba(255,255,255,0.18)", color: "#fff" }
-                      : { background: "#fff", color: INK }
+                      ? { background: "rgba(255,255,255,0.16)" }
+                      : { background: "rgba(0,0,0,0.20)" }
                   }
                 >
                   <span className="flex items-center gap-1">
@@ -559,11 +603,11 @@ function JourneyReelSlide({ milestone = {} }) {
           {!isOwnJourney && (
             <button
               onClick={handleFollow}
-              className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black active:scale-95"
+              className="h-8 shrink-0 rounded-full border border-white/35 px-3 text-[10px] font-black text-white active:scale-95"
               style={
                 following
-                  ? { background: "rgba(255,255,255,0.18)", color: "#fff" }
-                  : { background: "#4338CA", color: "#fff" }
+                  ? { background: "rgba(255,255,255,0.16)" }
+                  : { background: "rgba(0,0,0,0.20)" }
               }
             >
               <span className="flex items-center gap-1">

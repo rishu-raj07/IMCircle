@@ -8,11 +8,11 @@ import {
   MapPin,
   Search,
   Sparkles,
-  UserRound,
   Users,
   X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import ProfileAvatar from "../../components/common/Avatar";
 
 import {
   acceptCircleRequest,
@@ -57,6 +57,29 @@ function getName(user) {
 function getLocation(user) {
   if (typeof user?.location === "string") return user.location;
   return [user?.location?.city, user?.location?.state].filter(Boolean).join(", ") || user?.city || "India";
+}
+
+function getInterest(user) {
+  const preferences = user?.preferences?.interests || user?.preferences?.topics;
+  const interests = user?.interests || preferences;
+  return (
+    user?.primaryInterest ||
+    user?.field ||
+    user?.role ||
+    (Array.isArray(interests) ? interests[0] : interests) ||
+    user?.skills?.[0]?.name ||
+    user?.skills?.[0] ||
+    "IMCircle member"
+  );
+}
+
+function getMutualCircleCount(user) {
+  return Number(
+    user?.mutualCircleCount ??
+      user?.mutualCirclesCount ??
+      user?.mutualConnectionsCount ??
+      0
+  );
 }
 
 function getImageUrl(image) {
@@ -335,22 +358,16 @@ function PageSection({ title, count, children }) {
   );
 }
 
-function Avatar({ user, size = 44 }) {
-  const image = getImageUrl(user);
-  return (
-    <div className="grid shrink-0 place-items-center overflow-hidden rounded-full bg-[var(--imc-indigo-soft)] text-[var(--imc-indigo-text)]" style={{ width: size, height: size }}>
-      {image ? <img src={image} alt={getName(user)} className="h-full w-full object-cover" /> : <UserRound size={Math.round(size * 0.48)} />}
-    </div>
-  );
-}
-
 function SentRequestCard({ user, onOpen }) {
+  const mutualCount = getMutualCircleCount(user);
   return (
-    <button type="button" onClick={onOpen} className="w-[148px] min-w-[148px] rounded-[18px] bg-[var(--imc-surface)] p-3 text-left active:scale-[0.98]" style={{ border: `1px solid ${LINE}` }}>
-      <Avatar user={user} size={46} />
-      <p className="mt-2 truncate text-[12px] font-black" style={{ color: INK }}>{getName(user)}</p>
-      <p className="mt-0.5 truncate text-[9.5px] font-semibold" style={{ color: MUTED }}>{user?.primaryInterest || user?.role || "IMCircle member"}</p>
-      <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-[rgba(236,154,30,0.12)] px-2.5 py-1.5 text-[9px] font-black" style={{ color: "#A86400" }}>
+    <button type="button" onClick={onOpen} aria-label={`Open ${getName(user)} profile`} className="w-[176px] min-w-[176px] rounded-[20px] bg-[var(--imc-surface)] p-3.5 text-left shadow-sm active:scale-[0.98]" style={{ border: `1px solid ${LINE}` }}>
+      <ProfileAvatar user={user} size={54} className="border-2 border-[var(--imc-indigo-soft)]" />
+      <p className="mt-2.5 truncate text-[12.5px] font-black" style={{ color: INK }}>{getName(user)}</p>
+      <p className="mt-1 flex items-center gap-1 truncate text-[9.5px] font-semibold" style={{ color: MUTED }}><Briefcase size={10} />{getInterest(user)}</p>
+      <p className="mt-1 flex items-center gap-1 truncate text-[9px] font-semibold text-[var(--imc-text-faint)]"><MapPin size={10} />{getLocation(user)}</p>
+      <p className="mt-1 flex items-center gap-1 truncate text-[9px] font-semibold text-[var(--imc-text-faint)]"><Users size={10} />{mutualCount} mutual {mutualCount === 1 ? "circle" : "circles"}</p>
+      <span className="mt-3 inline-flex h-7 items-center gap-1 rounded-full bg-[var(--imc-surface-2)] px-2.5 text-[9px] font-black" style={{ color: MUTED }}>
         <Clock3 size={11} /> Pending
       </span>
     </button>
@@ -358,17 +375,19 @@ function SentRequestCard({ user, onOpen }) {
 }
 
 function ReceivedRequestCard({ user, loading, onOpen, onAccept, onIgnore }) {
+  const mutualCount = getMutualCircleCount(user);
   return (
-    <div className="rounded-[18px] bg-[var(--imc-surface)] p-3.5" style={{ border: `1px solid ${LINE}` }}>
+    <div role="button" tabIndex={0} onClick={onOpen} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onOpen(); }} className="cursor-pointer rounded-[18px] bg-[var(--imc-surface)] p-3.5 active:scale-[0.99]" style={{ border: `1px solid ${LINE}` }}>
       <div className="flex items-center gap-3">
-        <button type="button" onClick={onOpen} aria-label={`Open ${getName(user)} profile`}><Avatar user={user} size={48} /></button>
-        <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
+        <ProfileAvatar user={user} size={50} className="border-2 border-[var(--imc-indigo-soft)]" />
+        <div className="min-w-0 flex-1 text-left">
           <p className="truncate text-[12.5px] font-black" style={{ color: INK }}>{getName(user)}</p>
-          <p className="mt-0.5 flex items-center gap-1 truncate text-[9.5px] font-semibold" style={{ color: MUTED }}><Briefcase size={10} />{user?.primaryInterest || user?.role || "IMCircle member"}</p>
+          <p className="mt-0.5 flex items-center gap-1 truncate text-[9.5px] font-semibold" style={{ color: MUTED }}><Briefcase size={10} />{getInterest(user)}</p>
           <p className="mt-0.5 flex items-center gap-1 truncate text-[9px] font-semibold text-[var(--imc-text-faint)]"><MapPin size={10} />{getLocation(user)}</p>
-        </button>
-        <button type="button" disabled={loading} onClick={onIgnore} aria-label="Ignore request" className="grid h-9 w-9 place-items-center rounded-full bg-[var(--imc-surface-2)] disabled:opacity-50"><X size={15} style={{ color: MUTED }} /></button>
-        <button type="button" disabled={loading} onClick={onAccept} className="flex h-9 items-center gap-1.5 rounded-full bg-[#4338CA] px-3 text-[10px] font-black text-white disabled:opacity-50">
+          <p className="mt-0.5 flex items-center gap-1 truncate text-[9px] font-semibold text-[var(--imc-text-faint)]"><Users size={10} />{mutualCount} mutual {mutualCount === 1 ? "circle" : "circles"}</p>
+        </div>
+        <button type="button" disabled={loading} onClick={(event) => { event.stopPropagation(); onIgnore(); }} aria-label="Ignore request" className="grid h-9 w-9 place-items-center rounded-full bg-[var(--imc-surface-2)] disabled:opacity-50"><X size={15} style={{ color: MUTED }} /></button>
+        <button type="button" disabled={loading} onClick={(event) => { event.stopPropagation(); onAccept(); }} className="flex h-9 items-center gap-1.5 rounded-full border border-[var(--imc-indigo-text)] bg-[var(--imc-action-soft)] px-3 text-[10px] font-black text-[var(--imc-indigo-text)] disabled:opacity-50">
           {loading ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Accept
         </button>
       </div>
