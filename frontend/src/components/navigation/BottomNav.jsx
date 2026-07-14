@@ -14,6 +14,12 @@ import { getMyJourneys } from "../../api/journeyApi";
 
 const MARIGOLD = "#EC9A1E";
 
+// Pages that render their own dedicated header/scroll flow and shouldn't
+// have the global tab bar competing for space at the bottom — the profile
+// activity list is the first of these, deliberately checked with
+// startsWith so /profile/activity?tab=Journey etc. still matches.
+const HIDDEN_ON_PATHS = ["/profile/activity"];
+
 function BottomNav() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -22,6 +28,10 @@ function BottomNav() {
   const [checkingJourneys, setCheckingJourneys] = useState(false);
 
   const isActive = (path) => location.pathname === path;
+
+  if (HIDDEN_ON_PATHS.some((path) => location.pathname.startsWith(path))) {
+    return null;
+  }
 
   const goTo = (path) => {
     setShowCreate(false);

@@ -22,12 +22,22 @@ import {
 } from "../../api/notificationApi";
 import { createConversation } from "../../api/messageApi";
 
-const INK = "#12141C";
-const PAPER = "#F8F4EA";
+// Fixed brand hue (doesn't flip between themes, same convention as
+// PostCard.jsx's MARIGOLD). Everything else below reads a CSS variable
+// instead of a fixed hex — this page used to be a hardcoded cream "paper"
+// design that never adapted to dark mode, so half of it stayed light while
+// the rest of the app went dark.
 const MARIGOLD = "#EC9A1E";
-const GOLD_TINT = "#FDF3E3";
-const MUTED = "#6B7280";
-const LINE = "rgba(18,20,28,0.08)";
+const INK = "var(--imc-text)";
+const PAPER = "var(--imc-bg)";
+const MUTED = "var(--imc-text-muted)";
+const LINE = "var(--imc-border)";
+const GOLD_TINT = "var(--imc-marigold-soft)";
+const GOLD_TEXT = "var(--imc-marigold-text)";
+const SURFACE = "var(--imc-surface)";
+const SURFACE_2 = "var(--imc-surface-2)";
+const SURFACE_STRONG = "var(--imc-surface-strong)";
+const DANGER = "var(--imc-danger)";
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
 
 function getId(value) {
@@ -393,14 +403,14 @@ function Notifications() {
   };
 
   return (
-    <div className="flex min-h-screen justify-center" style={{ background: "#DED8CC" }}>
+    <div className="flex min-h-screen justify-center" style={{ background: "var(--imc-bg)" }}>
       <div className="min-h-screen w-full max-w-[430px]" style={{ background: PAPER }}>
-        <header className="sticky top-0 z-20 border-b bg-white/95 px-4 py-4 backdrop-blur-xl" style={{ borderColor: LINE }}>
+        <header className="sticky top-0 z-20 border-b px-4 py-4 backdrop-blur-xl" style={{ borderColor: LINE, background: SURFACE }}>
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate(-1)}
               className="grid h-10 w-10 place-items-center rounded-full"
-              style={{ background: PAPER, color: INK }}
+              style={{ background: SURFACE_2, color: INK }}
             >
               <ArrowLeft size={20} />
             </button>
@@ -415,7 +425,7 @@ function Notifications() {
             <button
               onClick={handleReadAll}
               className="grid h-10 w-10 place-items-center rounded-full"
-              style={{ background: GOLD_TINT, color: "#8A5A12" }}
+              style={{ background: GOLD_TINT, color: GOLD_TEXT }}
             >
               <CheckCheck size={19} />
             </button>
@@ -432,7 +442,7 @@ function Notifications() {
                   onClick={() => setActiveTab(tab)}
                   className="h-9 shrink-0 rounded-full px-4 text-[12px] font-black"
                   style={{
-                    background: active ? INK : "#fff",
+                    background: active ? SURFACE_STRONG : SURFACE,
                     color: active ? MARIGOLD : MUTED,
                     border: `1px solid ${LINE}`,
                   }}
@@ -512,7 +522,7 @@ function NotificationCard({ item, loading, onClick, onOpenActor, onDelete }) {
       <button
         onClick={onDelete}
         className="absolute inset-y-0 right-0 w-24 text-[12px] font-black text-white"
-        style={{ background: "#D92D20" }}
+        style={{ background: DANGER }}
       >
         Delete
       </button>
@@ -538,7 +548,7 @@ function NotificationCard({ item, loading, onClick, onOpenActor, onDelete }) {
         onClick={(event) => onOpenActor(event)}
         aria-label={senderName ? `Open ${senderName}'s profile` : "Open profile"}
         className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full"
-        style={{ background: unread ? INK : PAPER, color: unread ? MARIGOLD : MUTED }}
+        style={{ background: unread ? GOLD_TINT : SURFACE_2, color: unread ? GOLD_TEXT : MUTED }}
       >
         {loading ? (
           <Loader2 className="animate-spin" size={20} />

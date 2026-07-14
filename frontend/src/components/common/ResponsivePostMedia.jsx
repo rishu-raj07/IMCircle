@@ -86,6 +86,15 @@ function ResponsivePostMedia({
       style={{
         background: "var(--imc-surface-2)",
         minHeight: loaded ? undefined : "180px",
+        // maxHeight is the actual fix here — without it, an extreme-ratio
+        // image (a tall boomerang/portrait shot) computes its box height
+        // straight from aspectRatio with no ceiling, so the card can grow
+        // taller than the viewport and blow out the whole page layout. This
+        // caps that growth; the img below is sized to fill whatever height
+        // the box actually ends up with (capped or not) via height:"100%",
+        // so nothing overflows past this boundary. Tapping still opens the
+        // full, uncropped image in the lightbox via the existing onClick.
+        maxHeight: maxHeightCss,
         aspectRatio: uniform ? uniformRatio : ratio ? String(ratio) : "4 / 3",
       }}
     >
@@ -109,7 +118,7 @@ function ResponsivePostMedia({
           className="mx-auto block"
           style={{
             width: "100%",
-            height: uniform ? "100%" : "auto",
+            height: "100%",
             objectFit: uniform ? "cover" : "contain",
             opacity: loaded ? 1 : 0,
             transition: "opacity .3s ease",
@@ -130,7 +139,7 @@ function ResponsivePostMedia({
           className="mx-auto block"
           style={{
             width: "100%",
-            height: uniform ? "100%" : "auto",
+            height: "100%",
             objectFit: uniform ? "cover" : "contain",
             opacity: loaded ? 1 : 0,
             transition: "opacity .3s ease",

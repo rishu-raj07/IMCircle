@@ -4,6 +4,7 @@ import Message from "../models/Message.js";
 import Conversation from "../models/Conversation.js";
 import User from "../models/User.js";
 import { sendPushToUser } from "../services/push.service.js";
+import { allowedOrigins } from "../middleware/security.middleware.js";
 
 let io;
 const onlineUsers = new Map();
@@ -100,7 +101,16 @@ const broadcastOnlineUsers = () => {
 export const initSocket = (server) => {
   io = new Server(server, {
     cors: {
-      origin: process.env.CLIENT_URL || "http://localhost:5173",
+      // Was a single hardcoded origin — anyone whose browser sent
+      // Origin: https://www.imcircle.com (nginx serves both www and apex)
+      // had their socket handshake rejected outright. That socket never
+      // connecting is exactly what silently breaks online/offline status,
+      // the typing indicator, and live message delivery for that person's
+      // whole session — REST calls (loading the page, sending a message)
+      // still work fine over plain HTTPS, so nothing looked "down" until
+      // you noticed presence/typing never updated and a refresh was needed
+      // to see a message that had actually already arrived.
+      origin: allowedOrigins,
       credentials: true,
     },
   });
