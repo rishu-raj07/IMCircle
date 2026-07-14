@@ -164,16 +164,15 @@ function isReposted(data = {}) {
   );
 }
 
+// Categories are mutually exclusive by design: a reposted post must ONLY
+// count toward "Reposts", never also "Posts" — otherwise something you
+// reposted from someone else shows up looking like your own post. "All"
+// bypasses this filter entirely, so nothing is hidden there; this only
+// controls the Posts/Journey/Reposts tab split.
 function getCategories(rawType, isRepost) {
-  const categories = [];
-
-  if (rawType === "journey") categories.push("Journey");
-  else if (rawType !== "learning") categories.push("Posts");
-  else categories.push("Posts");
-
-  if (isRepost) categories.push("Reposts");
-
-  return categories;
+  if (isRepost) return ["Reposts"];
+  if (rawType === "journey") return ["Journey"];
+  return ["Posts"];
 }
 
 function normalizeFeed(feedData) {

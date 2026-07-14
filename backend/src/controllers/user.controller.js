@@ -4,6 +4,8 @@ import Post from "../models/Post.js";
 import LearningRepost from "../models/LearningRepost.js";
 import JourneyMilestoneRepost from "../models/JourneyMilestoneRepost.js";
 import JourneyMilestone from "../models/JourneyMilestone.js";
+import JourneyMilestoneLike from "../models/JourneyMilestoneLike.js";
+import JourneyMilestoneSave from "../models/JourneyMilestoneSave.js";
 import CircleRequest from "../models/CircleRequest.js";
 import JourneyFollower from "../models/JourneyFollower.js";
 import { emitNotification } from "../socket/socket.js";
@@ -755,6 +757,101 @@ function annotateJourneyRef(journey, sets) {
   };
 }
 
+// Below: viewer-relative ENGAGEMENT state (liked/saved/reposted by the
+// person currently looking at the screen — not the profile owner). Without
+// this, PostCard/PostActions.jsx never receives `likedByMe`/`savedByMe`/
+// `repostedByMe` (they default to false), so the heart/bookmark/repost
+// buttons always render as "off" on profile pages even when the viewer
+// already liked/saved/reposted that exact post — the same class of bug as
+// the stale Circle/Follow badges above, just at the post level instead of
+// the author level. feed.controller.js already solves this for the main
+// feed (see attachViewerState/withAuthorState there); this mirrors it for
+// the profile-scoped endpoints.
+const hasUserId = (arr = [], userId) => {
+  const target = String(userId);
+  return Array.isArray(arr) && arr.some((item) => String(item?.user || item) === target);
+};
+
+const getMyRepostEntry = (arr = [], userId) =>
+  Array.isArray(arr)
+    ? arr.find((item) => String(item?.user || item) === String(userId))
+    : null;
+
+const cleanRepostText = (value) =>
+  typeof value === "string" && value !== "[object Object]" ? value : "";
+
+const getRepostTextFrom = (repost) =>
+  cleanRepostText(
+    repost?.caption || repost?.text || repost?.thought || repost?.repostText || repost?.quote || ""
+  );
+
+// Post documents store likes/saves/reposts as embedded arrays right on the
+// doc, so no extra query is needed — just read them off the already-fetched
+// `.lean()` object.
+function annotatePostEngagement(post, viewerId) {
+  if (!post) return post;
+
+  const myRepost = getMyRepostEntry(post.reposts, viewerId);
+
+  return {
+    ...post,
+    likesCount: post.likes?.length || 0,
+    commentsCount: (post.comments || []).filter((c) => !c?.isDeleted).length,
+    repliesCount: (post.comments || []).filter((c) => !c?.isDeleted).length,
+    repostsCount: post.reposts?.length || 0,
+    savesCount: post.saves?.length || 0,
+    likedByMe: hasUserId(post.likes, viewerId),
+    savedByMe: hasUserId(post.saves, viewerId),
+    repostedByMe: Boolean(myRepost),
+    repostText: getRepostTextFrom(myRepost),
+    myRepost,
+  };
+}
+
+// Journey milestones, unlike Post, keep likes/saves/reposts in their own
+// collections (JourneyMilestoneLike/Save/Repost) rather than as embedded
+// arrays — so the viewer's own state has to be fetched separately, scoped to
+// just the milestone ids on this page.
+async function getMilestoneEngagementSets(viewerId, milestoneIds) {
+  if (!milestoneIds.length) {
+    return { likedSet: new Set(), savedSet: new Set(), repostMap: new Map() };
+  }
+
+  const [likes, saves, reposts] = await Promise.all([
+    JourneyMilestoneLike.find({ user: viewerId, milestone: { $in: milestoneIds } })
+      .select("milestone")
+      .lean(),
+    JourneyMilestoneSave.find({ user: viewerId, milestone: { $in: milestoneIds } })
+      .select("milestone")
+      .lean(),
+    JourneyMilestoneRepost.find({ user: viewerId, milestone: { $in: milestoneIds } })
+      .select("milestone caption text thought repostText quote")
+      .lean(),
+  ]);
+
+  return {
+    likedSet: new Set(likes.map((item) => String(item.milestone))),
+    savedSet: new Set(saves.map((item) => String(item.milestone))),
+    repostMap: new Map(reposts.map((item) => [String(item.milestone), item])),
+  };
+}
+
+function annotateMilestoneEngagement(milestone, engagementSets) {
+  if (!milestone) return milestone;
+
+  const id = String(milestone._id);
+  const myRepost = engagementSets.repostMap.get(id);
+
+  return {
+    ...milestone,
+    likedByMe: engagementSets.likedSet.has(id),
+    savedByMe: engagementSets.savedSet.has(id),
+    repostedByMe: Boolean(myRepost),
+    repostText: getRepostTextFrom(myRepost),
+    myRepost,
+  };
+}
+
 // Posts genuinely AUTHORED by :userId — used by the profile "Posts" tab.
 // This intentionally does not exist on post.routes.js today; the profile
 // page previously reused the personalized /feed endpoint (scoped to the
@@ -764,6 +861,7 @@ function annotateJourneyRef(journey, sets) {
 export const getUserPosts = async (req, res) => {
   try {
     const { userId } = req.params;
+    const viewerId = req.user._id;
 
     const [sets, posts, rawMilestones] = await Promise.all([
       getViewerRelationshipSets(req),
@@ -786,13 +884,18 @@ export const getUserPosts = async (req, res) => {
         .lean(),
     ]);
 
+    const engagementSets = await getMilestoneEngagementSets(
+      viewerId,
+      rawMilestones.map((m) => m._id)
+    );
+
     const annotatedPosts = posts.map((post) => ({
-      ...post,
+      ...annotatePostEngagement(post, viewerId),
       author: annotatePerson(post.author, sets),
     }));
 
     const milestones = rawMilestones.map((milestone) => ({
-      ...milestone,
+      ...annotateMilestoneEngagement(milestone, engagementSets),
       creator: annotatePerson(milestone.creator, sets),
       journey: annotateJourneyRef(milestone.journey, sets),
     }));
@@ -825,6 +928,7 @@ export const getUserPosts = async (req, res) => {
 export const getUserReposts = async (req, res) => {
   try {
     const { userId } = req.params;
+    const viewerId = req.user._id;
 
     const [sets, repostedPosts, learningReposts, milestoneReposts] = await Promise.all([
       getViewerRelationshipSets(req),
@@ -854,17 +958,29 @@ export const getUserReposts = async (req, res) => {
         .lean(),
     ]);
 
+    // The "repostedBy X" caption above these cards is about the PROFILE
+    // OWNER's (userId's) repost note — but the like/save/repost BUTTON
+    // state below the card must reflect the person currently looking at the
+    // screen (viewerId), which is a different id whenever you're viewing
+    // someone else's profile. Mixing these up is what made the buttons look
+    // permanently "off": annotatePostEngagement/annotateMilestoneEngagement
+    // are always called with viewerId, never userId.
+    const milestoneEngagementSets = await getMilestoneEngagementSets(
+      viewerId,
+      milestoneReposts.filter((entry) => entry.milestone).map((entry) => entry.milestone._id)
+    );
+
     const posts = repostedPosts.map((post) => {
-      const myRepost = (post.reposts || []).find(
+      const theirRepost = (post.reposts || []).find(
         (entry) => String(entry.user) === String(userId)
       );
 
       return {
-        ...post,
+        ...annotatePostEngagement(post, viewerId),
         author: annotatePerson(post.author, sets),
         repostedBy: userId,
-        repostCaption: myRepost?.text || "",
-        repostedAt: myRepost?.createdAt || post.createdAt,
+        repostCaption: theirRepost?.text || "",
+        repostedAt: theirRepost?.createdAt || post.createdAt,
       };
     });
 
@@ -881,7 +997,7 @@ export const getUserReposts = async (req, res) => {
     const milestones = milestoneReposts
       .filter((entry) => entry.milestone)
       .map((entry) => ({
-        ...entry.milestone,
+        ...annotateMilestoneEngagement(entry.milestone, milestoneEngagementSets),
         creator: annotatePerson(entry.milestone.creator, sets),
         journey: annotateJourneyRef(entry.milestone.journey, sets),
         repostedBy: userId,
