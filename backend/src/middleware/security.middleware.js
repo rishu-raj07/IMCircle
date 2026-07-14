@@ -50,6 +50,23 @@ function withWwwVariant(url) {
   }
 }
 
+// Deriving the www/apex pair purely from parsing CLIENT_URL turned out to be
+// fragile in practice — depending on exactly how CLIENT_URL is written in
+// .env on the server (trailing slash, which variant it happens to be set
+// to, etc.) the derived pair kept flipping which of the two real domains it
+// covered, so one of them was still getting rejected after the "fix".
+// Skip the guessing entirely: both real production domains are hardcoded
+// here explicitly, so neither can ever depend on how CLIENT_URL is
+// formatted. withWwwVariant(CLIENT_URL) is kept on top of this for
+// non-production environments (local dev, staging) where CLIENT_URL is the
+// only source of truth.
+const PRODUCTION_ORIGINS = [
+  "https://imcircle.com",
+  "https://www.imcircle.com",
+  "http://imcircle.com",
+  "http://www.imcircle.com",
+];
+
 // Exported so socket.js can build its Socket.IO CORS allowlist from the
 // exact same set — the realtime connection (online status/typing/live
 // message delivery) needs the same www-vs-apex tolerance the REST API does,
@@ -60,6 +77,7 @@ function withWwwVariant(url) {
 // re-fetches over plain REST.
 export const allowedOrigins = [
   ...withWwwVariant(process.env.CLIENT_URL || "http://localhost:5173"),
+  ...PRODUCTION_ORIGINS,
   ...CAPACITOR_ORIGINS,
 ];
 
