@@ -4,6 +4,8 @@ import Post from "../models/Post.js";
 import LearningRepost from "../models/LearningRepost.js";
 import JourneyMilestoneRepost from "../models/JourneyMilestoneRepost.js";
 import JourneyMilestone from "../models/JourneyMilestone.js";
+import CircleRequest from "../models/CircleRequest.js";
+import JourneyFollower from "../models/JourneyFollower.js";
 import { emitNotification } from "../socket/socket.js";
 import { getSignupRankBadge } from "../utils/badges.js";
 import { sendOtpSms, verifyOtpSms } from "../services/msg91.service.js";
@@ -697,6 +699,62 @@ export const getUserById = async (req, res) => {
   }
 };
 
+// The viewer's own circle/following/pending-request/followed-journey sets —
+// used to stamp inCircle/circleRequested/isFollowing/followedByMe onto
+// every author, creator, and journey returned below. Without this, an
+// author populated with just `activityAuthorFields` carries no
+// viewer-relative relationship data at all, so PostCard/JourneyCard fall
+// back to their defaults and show "+Circle" / "Follow Journey" even when
+// the viewer is already connected or already following — the exact bug
+// feed.controller.js's withAuthorState() already solves for the main feed;
+// this mirrors that pattern for the profile-scoped endpoints below.
+async function getViewerRelationshipSets(req) {
+  const viewerId = req.user._id;
+  const circleSet = new Set((req.user.circle || []).map((id) => String(id)));
+  const followingSet = new Set((req.user.following || []).map((id) => String(id)));
+
+  const [pendingRequests, followedJourneys] = await Promise.all([
+    CircleRequest.find({ sender: viewerId, status: "pending" }).select("receiver").lean(),
+    JourneyFollower.find({ follower: viewerId }).select("journey").lean(),
+  ]);
+
+  const pendingCircleSet = new Set(
+    pendingRequests.map((item) => String(item.receiver)).filter(Boolean)
+  );
+  const followedJourneySet = new Set(
+    followedJourneys.map((item) => String(item.journey)).filter(Boolean)
+  );
+
+  return { viewerId: String(viewerId), circleSet, followingSet, pendingCircleSet, followedJourneySet };
+}
+
+function annotatePerson(person, sets) {
+  if (!person || !person._id) return person;
+
+  const id = String(person._id);
+  const isMe = id === sets.viewerId;
+  const inCircle = !isMe && sets.circleSet.has(id);
+  const circleRequested = !isMe && !inCircle && sets.pendingCircleSet.has(id);
+
+  return {
+    ...person,
+    isMe,
+    inCircle,
+    isInCircle: inCircle,
+    circleRequested,
+    isFollowing: !isMe && sets.followingSet.has(id),
+  };
+}
+
+function annotateJourneyRef(journey, sets) {
+  if (!journey || !journey._id) return journey;
+
+  return {
+    ...journey,
+    followedByMe: sets.followedJourneySet.has(String(journey._id)),
+  };
+}
+
 // Posts genuinely AUTHORED by :userId — used by the profile "Posts" tab.
 // This intentionally does not exist on post.routes.js today; the profile
 // page previously reused the personalized /feed endpoint (scoped to the
@@ -707,18 +765,19 @@ export const getUserPosts = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    // Journey milestones (each day's update) live on their own model, not
-    // Post — without fetching them here too, a user's own journey updates
-    // never appeared on their profile at all (only milestones they
-    // REPOSTED from someone else did, via getUserReposts below). Returned
-    // as a separate `milestones` array rather than merged into `posts` so
-    // existing callers of `posts` are unaffected.
-    const [posts, milestones] = await Promise.all([
+    const [sets, posts, rawMilestones] = await Promise.all([
+      getViewerRelationshipSets(req),
       Post.find({ author: userId, isDeleted: false })
         .populate("author", activityAuthorFields)
         .sort({ createdAt: -1 })
         .limit(200)
         .lean(),
+      // Journey milestones (each day's update) live on their own model, not
+      // Post — without fetching them here too, a user's own journey updates
+      // never appeared on their profile at all (only milestones they
+      // REPOSTED from someone else did, via getUserReposts below). Returned
+      // as a separate `milestones` array rather than merged into `posts` so
+      // existing callers of `posts` are unaffected.
       JourneyMilestone.find({ creator: userId, isDeleted: false })
         .populate("creator", activityAuthorFields)
         .populate("journey", "title targetDays totalDays")
@@ -727,10 +786,21 @@ export const getUserPosts = async (req, res) => {
         .lean(),
     ]);
 
+    const annotatedPosts = posts.map((post) => ({
+      ...post,
+      author: annotatePerson(post.author, sets),
+    }));
+
+    const milestones = rawMilestones.map((milestone) => ({
+      ...milestone,
+      creator: annotatePerson(milestone.creator, sets),
+      journey: annotateJourneyRef(milestone.journey, sets),
+    }));
+
     return res.status(200).json({
       success: true,
-      count: posts.length + milestones.length,
-      posts,
+      count: annotatedPosts.length + milestones.length,
+      posts: annotatedPosts,
       milestones,
     });
   } catch (error) {
@@ -756,7 +826,8 @@ export const getUserReposts = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const [repostedPosts, learningReposts, milestoneReposts] = await Promise.all([
+    const [sets, repostedPosts, learningReposts, milestoneReposts] = await Promise.all([
+      getViewerRelationshipSets(req),
       Post.find({ "reposts.user": userId, isDeleted: false })
         .populate("author", activityAuthorFields)
         .sort({ createdAt: -1 })
@@ -790,6 +861,7 @@ export const getUserReposts = async (req, res) => {
 
       return {
         ...post,
+        author: annotatePerson(post.author, sets),
         repostedBy: userId,
         repostCaption: myRepost?.text || "",
         repostedAt: myRepost?.createdAt || post.createdAt,
@@ -800,6 +872,7 @@ export const getUserReposts = async (req, res) => {
       .filter((entry) => entry.learning && !entry.learning.isDeleted)
       .map((entry) => ({
         ...entry.learning,
+        creator: annotatePerson(entry.learning.creator, sets),
         repostedBy: userId,
         repostCaption: entry.caption || "",
         repostedAt: entry.createdAt,
@@ -809,6 +882,8 @@ export const getUserReposts = async (req, res) => {
       .filter((entry) => entry.milestone)
       .map((entry) => ({
         ...entry.milestone,
+        creator: annotatePerson(entry.milestone.creator, sets),
+        journey: annotateJourneyRef(entry.milestone.journey, sets),
         repostedBy: userId,
         repostCaption: entry.caption || "",
         repostedAt: entry.createdAt,

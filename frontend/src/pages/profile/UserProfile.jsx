@@ -540,7 +540,6 @@ function UserProfile() {
             const authoredMilestones = Array.isArray(postsRes?.milestones) ? postsRes.milestones : [];
             const repostBundle = repostsRes?.reposts || {};
             const repostedPosts = Array.isArray(repostBundle.posts) ? repostBundle.posts : [];
-            const repostedLearnings = Array.isArray(repostBundle.learnings) ? repostBundle.learnings : [];
             const repostedMilestones = Array.isArray(repostBundle.milestones) ? repostBundle.milestones : [];
 
             const theirs = [
@@ -568,14 +567,9 @@ function UserProfile() {
                 repostText: getRepostText(post),
                 categories: getCategories("post", true),
               })),
-              ...repostedLearnings.map((learning) => ({
-                id: `repost-learning-${learning._id}`,
-                rawType: "learning",
-                data: learning,
-                isRepost: true,
-                repostText: getRepostText(learning),
-                categories: getCategories("learning", true),
-              })),
+              // Learning is intentionally excluded here — it's a story-style
+              // format only meant to be viewed through Home's learning
+              // viewer, not listed as a regular activity item.
               ...repostedMilestones.map((milestone) => ({
                 id: `repost-journey-${milestone._id}`,
                 rawType: "journey",

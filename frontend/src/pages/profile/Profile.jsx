@@ -37,7 +37,7 @@ import { getStreakBadgeTier } from "../../utils/badges";
 
 import { getMyProfile, updateProfile } from "../../api/profileApi";
 import { getUser as getCachedUser, setUser as setStoredUser } from "../../utils/storage";
-import { getFeed } from "../../api/feedApi";
+import { getUserPostsById, getUserRepostsById } from "../../api/userApi";
 import { getMyAnalyticsDashboard } from "../../api/analyticsApi";
 import { getMyJourneys } from "../../api/journeyApi";
 import { getMyBuilderScore } from "../../api/builderScoreApi";
@@ -409,17 +409,28 @@ function Profile() {
         }
       }
 
-      // These five calls are all independent of each other — running them
+      const myUserId = getId(profileUser) || getId(user);
+
+      // These six calls are all independent of each other — running them
       // sequentially (the previous behavior) meant the page waited on the
       // sum of every round trip instead of just the slowest one, which was
       // a real chunk of "why does Profile take so long" on a real network.
-      const [analyticsRes, journeyRes, circleRes, scoreRes, feedRes] =
+      //
+      // postsRes/repostsRes replace the old getFeed({tab:"for-you"}) call —
+      // the personalized "for you" feed is scored/ranked for what's
+      // interesting to show a viewer and isn't guaranteed to surface the
+      // viewer's OWN content back to them at all, which is why this tab
+      // could show nothing (including journeys) even right after posting.
+      // /users/:userId/posts and /users/:userId/reposts are scoped
+      // directly to this account instead.
+      const [analyticsRes, journeyRes, circleRes, scoreRes, postsRes, repostsRes] =
         await Promise.allSettled([
           getMyAnalyticsDashboard(),
           getMyJourneys(),
           getMyCircles(),
           getMyBuilderScore(),
-          getFeed({ tab: "for-you", limit: 100, page: 1 }),
+          myUserId ? getUserPostsById(myUserId) : Promise.resolve(null),
+          myUserId ? getUserRepostsById(myUserId) : Promise.resolve(null),
         ]);
 
       if (analyticsRes.status === "fulfilled") {
@@ -459,32 +470,55 @@ function Profile() {
         setBuilderScore(null);
       }
 
-      const myUserId = getId(profileUser) || getId(user);
-      const feed = feedRes.status === "fulfilled" ? normalizeFeed(feedRes.value) : [];
+      const postsData = postsRes.status === "fulfilled" ? postsRes.value : null;
+      const repostsData = repostsRes.status === "fulfilled" ? repostsRes.value : null;
 
-      const mine = feed
-        .map((item) => {
-          const rawType = getRawType(item);
-          const data = getData(item);
-          const ownerId = getOwnerId(data);
+      const authoredPosts = Array.isArray(postsData?.posts) ? postsData.posts : [];
+      const authoredMilestones = Array.isArray(postsData?.milestones) ? postsData.milestones : [];
+      const repostBundle = repostsData?.reposts || {};
+      const repostedPosts = Array.isArray(repostBundle.posts) ? repostBundle.posts : [];
+      const repostedMilestones = Array.isArray(repostBundle.milestones) ? repostBundle.milestones : [];
 
-          const isOwn =
-            ownerId && myUserId && String(ownerId) === String(myUserId);
-
-          const isRepost = isReposted(data);
-
-          if (!isOwn && !isRepost) return null;
-
-          return {
-            id: `${rawType}-${data?._id || item?._id}`,
-            rawType,
-            data,
-            isRepost,
-            repostText: getRepostText(data),
-            categories: getCategories(rawType, isRepost),
-          };
-        })
-        .filter(Boolean);
+      // Learning is intentionally excluded — it's a story-style format only
+      // meant to be viewed through Home's learning viewer, not listed here.
+      const mine = [
+        ...authoredMilestones.map((milestone) => ({
+          id: `journey-${milestone._id}`,
+          rawType: "journey",
+          data: milestone,
+          isRepost: false,
+          repostText: "",
+          categories: getCategories("journey", false),
+        })),
+        ...authoredPosts.map((post) => ({
+          id: `post-${post._id}`,
+          rawType: "post",
+          data: post,
+          isRepost: false,
+          repostText: "",
+          categories: getCategories("post", false),
+        })),
+        ...repostedPosts.map((post) => ({
+          id: `repost-post-${post._id}`,
+          rawType: "post",
+          data: post,
+          isRepost: true,
+          repostText: getRepostText(post),
+          categories: getCategories("post", true),
+        })),
+        ...repostedMilestones.map((milestone) => ({
+          id: `repost-journey-${milestone._id}`,
+          rawType: "journey",
+          data: milestone,
+          isRepost: true,
+          repostText: getRepostText(milestone),
+          categories: getCategories("journey", true),
+        })),
+      ].sort((a, b) => {
+        const aDate = new Date(a.data?.repostedAt || a.data?.createdAt || 0).getTime();
+        const bDate = new Date(b.data?.repostedAt || b.data?.createdAt || 0).getTime();
+        return bDate - aDate;
+      });
 
       setMyActivity(mine);
     } catch (error) {

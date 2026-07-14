@@ -1296,27 +1296,27 @@ function JourneyUpdatePrompt({ journeys, onUpdate }) {
               key={id}
               type="button"
               onClick={() => onUpdate(id)}
-              className="relative flex min-h-[82px] w-[88%] shrink-0 snap-start items-center gap-3 overflow-hidden rounded-[18px] border p-3 text-left active:scale-[0.99]"
+              className="relative flex min-h-[56px] w-[88%] shrink-0 snap-start items-center gap-2.5 overflow-hidden rounded-[16px] border px-3 py-2 text-left active:scale-[0.99]"
               style={{ background: "var(--imc-surface)", borderColor: "var(--imc-border)" }}
             >
-              <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-[14px]" style={{ background: "var(--imc-action-soft)", color: "var(--imc-indigo-text)" }}>
+              <div className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-[11px]" style={{ background: "var(--imc-action-soft)", color: "var(--imc-indigo-text)" }}>
                 {cover ? (
                   <ImageLoader src={cover} alt="" className="h-full w-full object-cover" wrapperClassName="h-full w-full" width={120} />
                 ) : (
-                  <Flame size={20} />
+                  <Flame size={16} />
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[12px] font-black" style={{ color: "var(--imc-text)" }}>
+                <p className="truncate text-[11.5px] font-black" style={{ color: "var(--imc-text)" }}>
                   {journey?.title || "Your journey"}
                 </p>
-                <p className="mt-0.5 text-[9.5px] font-bold" style={{ color: "var(--imc-text-muted)" }}>
+                <p className="mt-0.5 truncate text-[9px] font-bold" style={{ color: "var(--imc-text-muted)" }}>
                   Day {day} of {total} · Add today&apos;s proof
                 </p>
-                <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-black" style={{ color: "var(--imc-indigo-text)" }}>
-                  Share update <ArrowRight size={12} />
-                </span>
               </div>
+              <span className="inline-flex shrink-0 items-center gap-0.5 text-[9.5px] font-black" style={{ color: "var(--imc-indigo-text)" }}>
+                Share <ArrowRight size={11} />
+              </span>
             </button>
           );
         })}
