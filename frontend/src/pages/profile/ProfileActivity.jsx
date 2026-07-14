@@ -210,6 +210,7 @@ function ProfileActivity() {
       ]);
 
       const authoredPosts = Array.isArray(postsRes?.posts) ? postsRes.posts : [];
+      const authoredMilestones = Array.isArray(postsRes?.milestones) ? postsRes.milestones : [];
       const repostBundle = repostsRes?.reposts || {};
       const repostedPosts = Array.isArray(repostBundle.posts) ? repostBundle.posts : [];
       const repostedLearnings = Array.isArray(repostBundle.learnings) ? repostBundle.learnings : [];
@@ -218,6 +219,14 @@ function ProfileActivity() {
         .filter(isMissedJourney);
 
       const mine = [
+        ...authoredMilestones.map((milestone) => ({
+          id: `journey-${milestone._id}`,
+          rawType: "journey",
+          data: milestone,
+          isRepost: false,
+          repostText: "",
+          categories: getCategories("journey", false),
+        })),
         ...authoredPosts.map((post) => ({
           id: `post-${post._id}`,
           rawType: "post",
@@ -396,7 +405,7 @@ function ProfileActivity() {
           )}
 
           {!loading && visibleItems.length > 0 && (
-            <div className="space-y-3 px-3 pb-4">
+            <div className="px-3 pb-4">
               {visibleItems.map((item, index) => {
                 const isJourney = item.rawType === "journey";
                 const card = item.isJourneySummary ? (
@@ -412,7 +421,7 @@ function ProfileActivity() {
                 );
 
                 return (
-                  <div key={item.id || index}>
+                  <div key={item.id || index} className="mb-3">
                     {item.isRepost ? (
                       <RepostCard repostText={item.repostText} currentUser={user}>
                         {card}
@@ -420,6 +429,7 @@ function ProfileActivity() {
                     ) : (
                       card
                     )}
+                    <div className="-mx-3 mt-3 h-2" style={{ background: "var(--imc-surface-2)" }} />
                   </div>
                 );
               })}

@@ -76,7 +76,7 @@ export const createMilestoneValidator = [
 
   body("capturedAt").optional().isISO8601(),
 
-  body("captureSource").optional().isIn(["camera", "unknown"]),
+  body("captureSource").optional().isIn(["camera", "gallery", "unknown"]),
 ];
 
 export const commentMilestoneValidator = [

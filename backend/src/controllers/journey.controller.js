@@ -377,7 +377,9 @@ export const createMilestone = async (req, res) => {
       capturedAt: req.body.capturedAt
         ? new Date(req.body.capturedAt)
         : new Date(),
-      captureSource: req.body.captureSource === "camera" ? "camera" : "unknown",
+      captureSource: ["camera", "gallery"].includes(req.body.captureSource)
+        ? req.body.captureSource
+        : "unknown",
     });
 
     journey.updatesCount += 1;

@@ -260,6 +260,13 @@ function hasRequiredBasics(user) {
 // everyone else gets Education 10% + Experience 10%. Mirrors
 // getProfileCompletionPercent in backend/src/controllers/profile.controller.js.
 function getCompletionPercent(user) {
+  // The feed's PostCard/JourneyCard trust this boolean directly (see
+  // PostCard.jsx's `isProfileComplete`) — this page used to only look at
+  // the numeric percent, so a user flagged complete by the backend but
+  // missing/zero on the percent field would show the badge in the feed but
+  // not here. Honor the same flag first so both surfaces agree.
+  if (user?.isProfileCompleted === true) return 100;
+
   if (typeof user?.profileCompletionPercent === "number") {
     return Math.min(Math.max(user.profileCompletionPercent, 0), 100);
   }

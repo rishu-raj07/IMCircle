@@ -69,7 +69,13 @@ const journeyMilestoneSchema = new mongoose.Schema(
 
     captureSource: {
       type: String,
-      enum: ["camera", "unknown"],
+      // "gallery" = picked from the device's photo library, but only ever
+      // accepted by the frontend when the file's own date metadata puts it
+      // on the same calendar day it's being posted — see isFromToday() in
+      // UpdateJourney.jsx. Still distinct from "camera" so it stays
+      // auditable which milestones came from a live capture vs a same-day
+      // gallery pick.
+      enum: ["camera", "gallery", "unknown"],
       default: "unknown",
     },
 

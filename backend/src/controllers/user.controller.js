@@ -3,6 +3,7 @@ import Notification from "../models/Notification.js";
 import Post from "../models/Post.js";
 import LearningRepost from "../models/LearningRepost.js";
 import JourneyMilestoneRepost from "../models/JourneyMilestoneRepost.js";
+import JourneyMilestone from "../models/JourneyMilestone.js";
 import { emitNotification } from "../socket/socket.js";
 import { getSignupRankBadge } from "../utils/badges.js";
 import { sendOtpSms, verifyOtpSms } from "../services/msg91.service.js";
@@ -706,16 +707,31 @@ export const getUserPosts = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const posts = await Post.find({ author: userId, isDeleted: false })
-      .populate("author", activityAuthorFields)
-      .sort({ createdAt: -1 })
-      .limit(200)
-      .lean();
+    // Journey milestones (each day's update) live on their own model, not
+    // Post — without fetching them here too, a user's own journey updates
+    // never appeared on their profile at all (only milestones they
+    // REPOSTED from someone else did, via getUserReposts below). Returned
+    // as a separate `milestones` array rather than merged into `posts` so
+    // existing callers of `posts` are unaffected.
+    const [posts, milestones] = await Promise.all([
+      Post.find({ author: userId, isDeleted: false })
+        .populate("author", activityAuthorFields)
+        .sort({ createdAt: -1 })
+        .limit(200)
+        .lean(),
+      JourneyMilestone.find({ creator: userId, isDeleted: false })
+        .populate("creator", activityAuthorFields)
+        .populate("journey", "title targetDays totalDays")
+        .sort({ createdAt: -1 })
+        .limit(200)
+        .lean(),
+    ]);
 
     return res.status(200).json({
       success: true,
-      count: posts.length,
+      count: posts.length + milestones.length,
       posts,
+      milestones,
     });
   } catch (error) {
     console.error("GET USER POSTS ERROR:", error);

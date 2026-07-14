@@ -29,6 +29,8 @@ import {
 import {
   sendCircleRequest,
   getSentCircleRequests,
+  getReceivedCircleRequests,
+  acceptCircleRequest,
 } from "../../api/circleRequestApi";
 import { createConversation } from "../../api/messageApi";
 import { getUserBuilderScore } from "../../api/builderScoreApi";
@@ -266,6 +268,13 @@ function isStudentUser(user) {
 // gets Education 20% (no Experience item); everyone else gets Education 10%
 // + Experience 10%. Mirrors Profile.jsx / backend profile.controller.js.
 function getCompletionPercent(user) {
+  // The feed's PostCard/JourneyCard trust this boolean directly (see
+  // PostCard.jsx's `isProfileComplete`) — this page used to only look at
+  // the numeric percent, so a user flagged complete by the backend but
+  // missing/zero on the percent field would show the badge in the feed but
+  // not here. Honor the same flag first so both surfaces agree.
+  if (user?.isProfileCompleted === true) return 100;
+
   if (typeof user?.profileCompletionPercent === "number") {
     return Math.min(Math.max(user.profileCompletionPercent, 0), 100);
   }
@@ -330,8 +339,12 @@ function UserProfile() {
 
   // "none" -> not in circle, no pending request (show "+ Circle")
   // "pending" -> a circle request is already out to this user (show "Requested")
+  // "incoming" -> this user already sent ME a request I haven't acted on yet
+  //   (show "Accept Request" instead of a plain "+ Circle", so it's obvious
+  //   tapping it will connect you immediately rather than send a new ask)
   // "in_circle" -> already connected (hide the button, Message covers it)
   const [circleStatus, setCircleStatus] = useState("none");
+  const [incomingRequestId, setIncomingRequestId] = useState("");
   const [circleActionLoading, setCircleActionLoading] = useState(false);
   const [showCircleGate, setShowCircleGate] = useState(false);
 
@@ -382,16 +395,46 @@ function UserProfile() {
 
     const checkPendingRequest = async () => {
       try {
-        const sentData = await getSentCircleRequests();
+        const [sentData, receivedData] = await Promise.allSettled([
+          getSentCircleRequests(),
+          getReceivedCircleRequests(),
+        ]);
+
         const sentRequests =
-          sentData?.requests || sentData?.data?.requests || [];
+          sentData.status === "fulfilled"
+            ? sentData.value?.requests || sentData.value?.data?.requests || []
+            : [];
 
         const alreadyRequested = sentRequests.some(
           (request) => getId(request?.receiver) === profileUserId
         );
 
+        if (alreadyRequested) {
+          if (!cancelled) setCircleStatus("pending");
+          return;
+        }
+
+        // They may have already sent ME a request I haven't acted on yet —
+        // in that case tapping "+ Circle" would connect instantly (the
+        // backend auto-accepts), so the button should say as much instead
+        // of looking like a brand new, one-sided ask.
+        const receivedRequests =
+          receivedData.status === "fulfilled"
+            ? receivedData.value?.requests || receivedData.value?.data?.requests || []
+            : [];
+
+        const incoming = receivedRequests.find(
+          (request) => getId(request?.sender) === profileUserId
+        );
+
         if (!cancelled) {
-          setCircleStatus(alreadyRequested ? "pending" : "none");
+          if (incoming) {
+            setIncomingRequestId(String(getId(incoming) || incoming?._id || ""));
+            setCircleStatus("incoming");
+          } else {
+            setIncomingRequestId("");
+            setCircleStatus("none");
+          }
         }
       } catch (error) {
         if (!cancelled) setCircleStatus("none");
@@ -494,12 +537,21 @@ function UserProfile() {
             ]);
 
             const authoredPosts = Array.isArray(postsRes?.posts) ? postsRes.posts : [];
+            const authoredMilestones = Array.isArray(postsRes?.milestones) ? postsRes.milestones : [];
             const repostBundle = repostsRes?.reposts || {};
             const repostedPosts = Array.isArray(repostBundle.posts) ? repostBundle.posts : [];
             const repostedLearnings = Array.isArray(repostBundle.learnings) ? repostBundle.learnings : [];
             const repostedMilestones = Array.isArray(repostBundle.milestones) ? repostBundle.milestones : [];
 
             const theirs = [
+              ...authoredMilestones.map((milestone) => ({
+                id: `journey-${milestone._id}`,
+                rawType: "journey",
+                data: milestone,
+                isRepost: false,
+                repostText: "",
+                categories: getCategories("journey", false),
+              })),
               ...authoredPosts.map((post) => ({
                 id: `post-${post._id}`,
                 rawType: "post",
@@ -654,7 +706,27 @@ function UserProfile() {
   };
 
   const handleAddToCircle = async () => {
-    if (!profileUserId || circleActionLoading || circleStatus !== "none") return;
+    if (!profileUserId || circleActionLoading) return;
+
+    // They already sent a request — accept theirs directly instead of
+    // sending a second, redundant one.
+    if (circleStatus === "incoming") {
+      if (!incomingRequestId) return;
+
+      try {
+        setCircleActionLoading(true);
+        await acceptCircleRequest(incomingRequestId);
+        setCircleStatus("in_circle");
+        setIncomingRequestId("");
+      } catch (error) {
+        // best-effort — non-critical
+      } finally {
+        setCircleActionLoading(false);
+      }
+      return;
+    }
+
+    if (circleStatus !== "none") return;
 
     try {
       setCircleActionLoading(true);
@@ -973,15 +1045,28 @@ function UserProfile() {
                 <button
                   onClick={handleAddToCircle}
                   disabled={circleActionLoading || circleStatus === "pending"}
-                  className="flex h-11 items-center justify-center gap-1.5 rounded-2xl border border-[var(--imc-border)] bg-[var(--imc-surface)] text-[13px] font-black text-[var(--imc-text)] active:scale-[0.98] disabled:opacity-60"
+                  className="flex h-11 items-center justify-center gap-1.5 rounded-2xl border text-[13px] font-black active:scale-[0.98] disabled:opacity-60"
+                  style={
+                    circleStatus === "incoming"
+                      ? { background: "var(--imc-action-soft)", borderColor: "var(--imc-action-border)", color: "var(--imc-indigo-text)" }
+                      : { background: "var(--imc-surface)", borderColor: "var(--imc-border)", color: "var(--imc-text)" }
+                  }
                 >
-                  <CirclePlus size={15} />
+                  {circleStatus === "incoming" ? <UserCheck size={15} /> : <CirclePlus size={15} />}
                   {circleActionLoading
                     ? "..."
                     : circleStatus === "pending"
                     ? "Requested"
+                    : circleStatus === "incoming"
+                    ? "Accept Request"
                     : "+ Circle"}
                 </button>
+              )}
+
+              {circleStatus === "incoming" && (
+                <p className="col-span-2 -mt-0.5 text-center text-[11px] font-bold" style={{ color: "var(--imc-indigo-text)" }}>
+                  {fullName} wants to join your Circle
+                </p>
               )}
             </div>
 
@@ -1071,7 +1156,7 @@ function UserProfile() {
                   return (
                     <div
                       key={item.id || index}
-                      className="-mx-2"
+                      className="-mx-2 mb-3"
                       onClick={(event) => {
                         // Bring the tapped card fully into view if it's
                         // partially cut off (e.g. near the bottom of the
@@ -1095,6 +1180,7 @@ function UserProfile() {
                       ) : (
                         card
                       )}
+                      <div className="mt-3 h-2" style={{ background: "var(--imc-surface-2)" }} />
                     </div>
                   );
                 })
@@ -1301,17 +1387,19 @@ function UserProfile() {
                 type="button"
                 disabled={circleActionLoading || circleStatus === "pending"}
                 onClick={async () => {
-                  if (circleStatus === "none") {
+                  if (circleStatus === "none" || circleStatus === "incoming") {
                     await handleAddToCircle();
                   }
                 }}
                 className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#4338CA] text-[13px] font-black text-white active:scale-[0.98] disabled:opacity-60"
               >
-                <CirclePlus size={16} />
+                {circleStatus === "incoming" ? <UserCheck size={16} /> : <CirclePlus size={16} />}
                 {circleActionLoading
                   ? "..."
                   : circleStatus === "pending"
                   ? "Request sent"
+                  : circleStatus === "incoming"
+                  ? "Accept Request"
                   : "+ Circle"}
               </button>
             </div>

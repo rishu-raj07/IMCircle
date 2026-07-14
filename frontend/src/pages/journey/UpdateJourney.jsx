@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Camera,
+  Images,
   Send,
   X,
   Flame,
@@ -31,10 +32,31 @@ function getCurrentDay(createdAt) {
   );
 }
 
+// A gallery photo is only accepted if its file metadata puts it on today's
+// calendar date (device-local timezone) — the closest signal the plain
+// browser File API exposes without an EXIF-parsing dependency. Most phone
+// camera apps write `lastModified` at capture time, so a photo taken
+// earlier today and picked from the gallery still passes; anything older
+// is rejected so the "must be today's real update" spirit of the live
+// camera capture is preserved even when picking from the gallery.
+function isFromToday(file) {
+  if (!file?.lastModified) return false;
+
+  const modified = new Date(file.lastModified);
+  const today = new Date();
+
+  return (
+    modified.getFullYear() === today.getFullYear() &&
+    modified.getMonth() === today.getMonth() &&
+    modified.getDate() === today.getDate()
+  );
+}
+
 function UpdateJourney() {
   const navigate = useNavigate();
   const { journeyId } = useParams();
   const fileRef = useRef(null);
+  const galleryRef = useRef(null);
 
   const [journey, setJourney] = useState(null);
   const [update, setUpdate] = useState("");
@@ -42,6 +64,8 @@ function UpdateJourney() {
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState("");
   const [isVideoFile, setIsVideoFile] = useState(false);
+  const [captureSource, setCaptureSource] = useState("camera");
+  const [galleryError, setGalleryError] = useState("");
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
 
@@ -75,8 +99,35 @@ function UpdateJourney() {
       return;
     }
 
+    setGalleryError("");
+    setCaptureSource("camera");
     setImageFile(file);
     setIsVideoFile(file.type.startsWith("video/"));
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  // Gallery picker: images only (no video — a stale video can't be
+  // date-checked the same way), and must be from today.
+  const handleGalleryChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setGalleryError("Only photos can be added from your gallery.");
+      if (galleryRef.current) galleryRef.current.value = "";
+      return;
+    }
+
+    if (!isFromToday(file)) {
+      setGalleryError(`Only a photo from today (${new Date().toLocaleDateString()}) can be added — pick one taken earlier today, or use the camera instead.`);
+      if (galleryRef.current) galleryRef.current.value = "";
+      return;
+    }
+
+    setGalleryError("");
+    setCaptureSource("gallery");
+    setImageFile(file);
+    setIsVideoFile(false);
     setImagePreview(URL.createObjectURL(file));
   };
 
@@ -84,7 +135,10 @@ function UpdateJourney() {
     setImageFile(null);
     setImagePreview("");
     setIsVideoFile(false);
+    setCaptureSource("camera");
+    setGalleryError("");
     if (fileRef.current) fileRef.current.value = "";
+    if (galleryRef.current) galleryRef.current.value = "";
   };
 
   const handleSubmit = async () => {
@@ -105,7 +159,7 @@ function UpdateJourney() {
       formData.append("title", milestone.trim() || `Day ${todayDay} Update`);
       formData.append("description", update.trim());
       formData.append("type", milestone.trim() ? "win" : "update");
-      formData.append("captureSource", "camera");
+      formData.append("captureSource", captureSource);
       formData.append("capturedAt", new Date().toISOString());
 
       if (milestone.trim()) {
@@ -296,7 +350,13 @@ function UpdateJourney() {
           />
         </section>
 
-        <section className="flex items-center justify-between gap-3 py-4">
+        {galleryError && (
+          <p className="pt-3 text-[11.5px] font-bold leading-5 text-[#D92D20]">
+            {galleryError}
+          </p>
+        )}
+
+        <section className="flex items-center justify-between gap-2 py-4">
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
@@ -313,6 +373,28 @@ function UpdateJourney() {
             capture="environment"
             hidden
             onChange={handleImageChange}
+          />
+
+          {/* Gallery fallback — same-day photos only (see isFromToday), so
+              this can't be used to backfill old photos as if they were
+              today's real progress. Images only, no video, since a video's
+              recording date can't be checked the same lightweight way. */}
+          <button
+            type="button"
+            onClick={() => galleryRef.current?.click()}
+            aria-label="Upload today's photo from gallery"
+            title="Upload today's photo from gallery"
+            className="grid h-[46px] w-[46px] shrink-0 place-items-center rounded-full bg-[var(--imc-surface-2)] text-[var(--imc-text)] active:scale-95"
+          >
+            <Images size={18} />
+          </button>
+
+          <input
+            ref={galleryRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={handleGalleryChange}
           />
 
           <button

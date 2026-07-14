@@ -8,6 +8,7 @@ import {
   Plus,
   UserRound,
   UserPlus,
+  UserCheck,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -21,7 +22,6 @@ import StreakCard from "../../components/streak/StreakCard";
 import ShareCardModal from "../../components/streak/ShareCardModal";
 import ImageLoader from "../../components/common/ImageLoader";
 import { FeedSkeleton, HomePageSkeleton } from "../../components/common/Skeletons";
-import InstallPromptCard from "../../components/common/InstallPromptCard";
 
 import { getFeed, trackFeedImpressions } from "../../api/feedApi";
 import { getMyProfile } from "../../api/profileApi";
@@ -31,7 +31,9 @@ import { getMyJourneys } from "../../api/journeyApi";
 import { getMyLearnings } from "../../api/learningApi";
 import {
   getSentCircleRequests,
+  getReceivedCircleRequests,
   sendCircleRequest,
+  acceptCircleRequest,
 } from "../../api/circleRequestApi";
 import { trackEvent } from "../../utils/analyticsTracker";
 import { useSEO } from "../../hooks/useSEO";
@@ -312,6 +314,11 @@ function Home() {
   const [circleUsers, setCircleUsers] = useState([]);
   const [suggestedUsers, setSuggestedUsers] = useState([]);
   const [requestedUserIds, setRequestedUserIds] = useState([]);
+  // userId -> that pending CircleRequest's id, for people who already sent
+  // ME a request. Tapping their badge should accept theirs, not send a
+  // second, redundant one.
+  const [incomingRequestByUserId, setIncomingRequestByUserId] = useState({});
+  const [acceptingUserId, setAcceptingUserId] = useState("");
   const [items, setItems] = useState(() => initialFeedCache?.items || []);
   const [page, setPage] = useState(() => initialFeedCache?.page || 1);
   const [cursor, setCursor] = useState(() => initialFeedCache?.nextCursor || null);
@@ -367,10 +374,11 @@ function Home() {
 
     const loadProfileCircle = async () => {
       try {
-        const [data, suggestionsRes, sentRequestsRes, myLearningsRes] = await Promise.all([
+        const [data, suggestionsRes, sentRequestsRes, receivedRequestsRes, myLearningsRes] = await Promise.all([
           getMyProfile(),
           getUserSuggestions().catch(() => ({ users: [] })),
           getSentCircleRequests().catch(() => ({ requests: [] })),
+          getReceivedCircleRequests().catch(() => ({ requests: [] })),
           getMyLearnings().catch(() => ({ learnings: [] })),
         ]);
         const user = data?.user || data?.data?.user || data?.data || data;
@@ -410,8 +418,18 @@ function Home() {
           .map((request) => String(getPendingReceiverId(request)))
           .filter(Boolean);
 
+        const incomingByUserId = {};
+        normalizeRequestList(receivedRequestsRes)
+          .filter((request) => !request?.status || request.status === "pending")
+          .forEach((request) => {
+            const senderId = String(getId(request?.sender));
+            const requestId = String(getId(request));
+            if (senderId && requestId) incomingByUserId[senderId] = requestId;
+          });
+
         setCircleUsers(circleUsers);
         setRequestedUserIds([...new Set(pendingReceiverIds)]);
+        setIncomingRequestByUserId(incomingByUserId);
         setSuggestedUsers(
           rawSuggestions
             .filter((item) => {
@@ -706,6 +724,35 @@ function Home() {
     }
   };
 
+  // They already sent ME a request — accept theirs instead of sending a
+  // second, redundant one back.
+  const handleAcceptIncoming = async (userId) => {
+    const requestUserId = String(userId || "");
+    const requestId = incomingRequestByUserId[requestUserId];
+    if (!requestId || acceptingUserId) return;
+
+    setAcceptingUserId(requestUserId);
+
+    try {
+      await acceptCircleRequest(requestId);
+      setCircleUsers((prev) => {
+        const user = suggestedUsers.find((item) => String(getId(item)) === requestUserId);
+        if (!user || prev.some((item) => String(getId(item)) === requestUserId)) return prev;
+        return [...prev, user];
+      });
+      setSuggestedUsers((prev) => prev.filter((item) => String(getId(item)) !== requestUserId));
+      setIncomingRequestByUserId((prev) => {
+        const next = { ...prev };
+        delete next[requestUserId];
+        return next;
+      });
+    } catch {
+      // best-effort — leave the "Accept" state as-is so the person can retry
+    } finally {
+      setAcceptingUserId("");
+    }
+  };
+
   const getLearningByUserId = (userId) => {
     return learningItems.find((item) => {
       const data = getItemData(item);
@@ -734,7 +781,11 @@ function Home() {
         <div className="no-scrollbar -mx-3 flex gap-3 overflow-x-auto px-3 pb-2">
           <button
             type="button"
-            onClick={() => navigate("/profile")}
+            onClick={() =>
+              myLearning?._id
+                ? openLearning(myLearning, storyAuthorIds)
+                : navigate("/profile")
+            }
             className="group flex min-w-[64px] flex-col items-center active:scale-95"
           >
             <div
@@ -803,7 +854,7 @@ function Home() {
               <button
                 type="button"
                 key={userId || index}
-                onClick={() => navigate(`/profile/user/${userId}`)}
+                onClick={() => openLearning(learning, storyAuthorIds)}
                 className="group flex min-w-[64px] flex-col items-center active:scale-95"
               >
                 <div
@@ -844,6 +895,11 @@ function Home() {
             const userId = String(getId(user));
             const avatarUrl = getUserAvatar(user);
             const requested = requestedUserIds.includes(userId);
+            // They already sent ME a request — show a distinct "accept"
+            // badge instead of a plain "+", so it's obvious tapping it
+            // connects instantly rather than sending a fresh ask.
+            const isIncoming = Boolean(incomingRequestByUserId[userId]);
+            const isAccepting = acceptingUserId === userId;
 
             return (
               <div key={userId} className="flex min-w-[64px] flex-col items-center">
@@ -876,22 +932,38 @@ function Home() {
 
                   <button
                     type="button"
-                    onClick={() => handleCircleRequest(userId)}
-                    disabled={requested}
+                    onClick={() =>
+                      isIncoming ? handleAcceptIncoming(userId) : handleCircleRequest(userId)
+                    }
+                    disabled={isIncoming ? isAccepting : requested}
+                    aria-label={isIncoming ? "Accept their Circle request" : "Send Circle request"}
                     className="absolute -bottom-1 -right-1 grid h-5 w-5 place-items-center rounded-full ring-2 disabled:opacity-80"
-                    style={{
-                      background: "var(--imc-action-soft)",
-                      color: "var(--imc-indigo-text)",
-                      border: "1px solid var(--imc-action-border)",
-                      "--tw-ring-color": "var(--imc-surface)",
-                    }}
+                    style={
+                      isIncoming
+                        ? { background: MARIGOLD, color: "#fff", border: "1px solid rgba(0,0,0,0.06)", "--tw-ring-color": "var(--imc-surface)" }
+                        : {
+                            background: "var(--imc-action-soft)",
+                            color: "var(--imc-indigo-text)",
+                            border: "1px solid var(--imc-action-border)",
+                            "--tw-ring-color": "var(--imc-surface)",
+                          }
+                    }
                   >
-                    {requested ? <Check size={11} strokeWidth={3} /> : <UserPlus size={11} strokeWidth={3} />}
+                    {isIncoming ? (
+                      <UserCheck size={11} strokeWidth={3} />
+                    ) : requested ? (
+                      <Check size={11} strokeWidth={3} />
+                    ) : (
+                      <UserPlus size={11} strokeWidth={3} />
+                    )}
                   </button>
                 </div>
 
-                <span className="mt-1 max-w-[64px] truncate text-center text-[10px] font-black" style={{ color: "var(--imc-text)" }}>
-                  {getUserName(user)}
+                <span
+                  className="mt-1 max-w-[64px] truncate text-center text-[10px] font-black"
+                  style={{ color: isIncoming ? MARIGOLD : "var(--imc-text)" }}
+                >
+                  {isIncoming ? "Wants to Circle" : getUserName(user)}
                 </span>
               </div>
             );
@@ -925,9 +997,14 @@ function Home() {
     // React 19 disallows spreading an object that contains `key` into JSX
     // (it must be passed as a direct, literal prop) — pass it explicitly
     // here instead of inside wrapperProps.
+    // A full-bleed gray gap below every feed item (LinkedIn-style) makes it
+    // unmistakable where one post ends and the next begins — clearer than a
+    // hairline border, and it breaks out of the page's px-4 padding via
+    // -mx-4 so it reaches both screen edges.
     return (
-      <div key={key} {...wrapperProps}>
+      <div key={key} {...wrapperProps} className="mb-3">
         {content}
+        <div className="-mx-4 mt-3 h-2" style={{ background: "var(--imc-surface-2)" }} />
       </div>
     );
   };
@@ -957,8 +1034,6 @@ function Home() {
           )}
 
           <div className="px-4">
-            <InstallPromptCard />
-
             {builderScore && activeJourneys.length === 0 && (
               <div className="mt-1">
                 <StreakCard
