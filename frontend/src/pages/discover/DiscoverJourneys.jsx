@@ -15,6 +15,16 @@ function DiscoverJourneys() {
   const [loading, setLoading] = useState(true);
   const [primaryInterest, setPrimaryInterest] = useState("");
   const [error, setError] = useState("");
+  // Header (back button + title) only makes sense sitting over the very
+  // first slide — once the viewer has scrolled past it, it just sits on top
+  // of whatever photo/video is playing, like every other reels UI. Hide it
+  // the moment the feed scrolls away from the top instead of leaving it
+  // pinned for the whole session.
+  const [hasScrolled, setHasScrolled] = useState(false);
+
+  const handleFeedScroll = (e) => {
+    setHasScrolled(e.target.scrollTop > 20);
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -41,7 +51,9 @@ function DiscoverJourneys() {
   return (
     <div className="min-h-screen" style={{ background: "var(--imc-bg)" }}>
       <header
-        className="fixed inset-x-0 top-0 z-30 mx-auto flex w-full max-w-[430px] items-center justify-between px-4 pb-3"
+        className={`fixed inset-x-0 top-0 z-30 mx-auto flex w-full max-w-[430px] items-center justify-between px-4 pb-3 transition-opacity duration-200 ${
+          hasScrolled ? "pointer-events-none opacity-0" : "opacity-100"
+        }`}
         style={{
           background: "linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)",
           // This header is `position: fixed`, so it sits at the literal
@@ -93,11 +105,20 @@ function DiscoverJourneys() {
         </div>
       ) : (
         <div
+          onScroll={handleFeedScroll}
           className="no-scrollbar mx-auto w-full max-w-[430px] snap-y snap-mandatory overflow-y-scroll"
           style={{ height: "100dvh" }}
         >
           {milestones.map((milestone) => (
-            <div key={milestone._id} className="snap-start" style={{ height: "100dvh" }}>
+            <div
+              key={milestone._id}
+              className="snap-start"
+              // scrollSnapStop forces the browser to land on THIS slide
+              // before continuing, even on a fast flick — without it, quick
+              // momentum scrolls can sail past one snap point straight into
+              // the next, which read as "scrolling 2 at once".
+              style={{ height: "100dvh", scrollSnapStop: "always" }}
+            >
               <JourneyReelSlide milestone={milestone} />
             </div>
           ))}
@@ -106,7 +127,7 @@ function DiscoverJourneys() {
               suggested journey (interest-matched ones ranked first, the rest
               of the public feed after), close the loop instead of just
               running out of slides, and nudge them to start their own. */}
-          <div className="snap-start" style={{ height: "100dvh" }}>
+          <div className="snap-start" style={{ height: "100dvh", scrollSnapStop: "always" }}>
             <EndOfFeedSlide
               primaryInterest={primaryInterest}
               onCreateJourney={() => navigate("/create-journey")}

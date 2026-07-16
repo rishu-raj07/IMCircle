@@ -11,12 +11,13 @@ import {
   CircleHelp,
   Lightbulb,
   Megaphone,
-  UserRound,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { createPost } from "../../api/postApi";
 import { currentUser } from "../../store/authStore";
 import { trackEvent } from "../../utils/analyticsTracker";
+import MentionSuggestions from "../../components/common/MentionSuggestions";
+import { getGenderAvatarIcon } from "../../utils/avatar";
 import {
   setStoredPermissionState,
   shouldAttemptPermission,
@@ -340,7 +341,11 @@ function CreatePost() {
                   className="h-full w-full object-cover"
                 />
               ) : (
-                <UserRound size={22} />
+                <img
+                  src={getGenderAvatarIcon(user)}
+                  alt={userName}
+                  className="h-full w-full object-cover"
+                />
               )}
             </div>
 
@@ -409,9 +414,11 @@ function CreatePost() {
             <textarea
               value={post}
               onChange={(e) => setPost(e.target.value.slice(0, MAX_TEXT))}
-              placeholder="What would you like to share?"
+              placeholder="What would you like to share? Try @mentioning someone or adding a #hashtag"
               className="min-h-[190px] w-full resize-none bg-transparent text-[15px] font-semibold leading-6 text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)]"
             />
+
+            <MentionSuggestions value={post} onInsert={(next) => setPost(next.slice(0, MAX_TEXT))} />
 
             <p className="mt-1 text-right text-[10px] font-bold text-[var(--imc-text-faint)]">
               {post.length}/{MAX_TEXT}

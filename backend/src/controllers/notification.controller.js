@@ -1,7 +1,7 @@
 import Notification from "../models/Notification.js";
 import { deriveTarget } from "../utils/notificationTarget.js";
 
-const populateFields = "fullName name username avatar headline tagline";
+const populateFields = "fullName name username avatar headline tagline gender";
 
 function shapeNotification(doc) {
   const raw = doc.toObject ? doc.toObject() : doc;

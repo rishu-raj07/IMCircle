@@ -110,7 +110,10 @@ function ProfileSetup() {
     lat: null,
     lng: null,
   });
-  const [gender, setGender] = useState("");
+  // Optional field — defaults to "Prefer not to say" instead of nothing
+  // selected, so a brand-new user always has a valid choice pre-picked and
+  // never has to actively decide just to move past this step.
+  const [gender, setGender] = useState("Prefer not to say");
   const [primaryInterest, setPrimaryInterest] = useState("");
 
   // Experience/education/skills are no longer edited on this page — they're
@@ -153,7 +156,7 @@ function ProfileSetup() {
         setDob(getDobInputValue(user?.dob));
         setTagline(user?.headline || user?.tagline || "");
         setLocation(getLocationValue(user?.location));
-        setGender(user?.gender || "");
+        setGender(user?.gender || "Prefer not to say");
         setPrimaryInterest(user?.primaryInterest || "");
         setExperience(normalizeArray(user?.experience));
         setEducation(normalizeArray(user?.education));
@@ -276,14 +279,7 @@ function ProfileSetup() {
         setError("Username must be 3-30 letters, numbers, or underscores");
         return;
       }
-      if (!dob.trim()) {
-        setError("Add your date of birth before continuing");
-        return;
-      }
-      if (!gender.trim()) {
-        setError("Select your gender before continuing");
-        return;
-      }
+      // Date of birth and gender are optional — no block here.
     }
 
     setSetupStep((current) => Math.min(3, current + 1));
@@ -306,8 +302,7 @@ function ProfileSetup() {
         "Username must be 3-30 characters: letters, numbers or underscore only"
       );
     }
-    if (!dob.trim()) return setError("Date of birth is required");
-    if (!gender.trim()) return setError("Gender is required");
+    // Date of birth and gender are optional — no block here.
     if (!location.city.trim()) return setError("Location is required");
     if (!primaryInterest.trim()) {
       return setError("Select an interest, or write your interest in the Other field");

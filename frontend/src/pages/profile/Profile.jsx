@@ -34,6 +34,7 @@ import EducationCard from "./EducationCard";
 import RankBadge from "../../components/badges/RankBadge";
 import StreakMilestoneCard from "../../components/badges/StreakMilestoneCard";
 import { getStreakBadgeTier } from "../../utils/badges";
+import { getMyReferralStats } from "../../api/referralApi";
 
 import { getMyProfile, updateProfile } from "../../api/profileApi";
 import { getUser as getCachedUser, setUser as setStoredUser } from "../../utils/storage";
@@ -42,7 +43,8 @@ import { getMyAnalyticsDashboard } from "../../api/analyticsApi";
 import { getMyJourneys } from "../../api/journeyApi";
 import { getMyBuilderScore } from "../../api/builderScoreApi";
 import { getMyCircles } from "../../api/circleApi";
-import { getAvatarUrl } from "../../utils/avatar";
+import { getAvatarUrl, getGenderAvatarIcon } from "../../utils/avatar";
+import { getJourneyCoverIcon, getCommunityCoverIcon } from "../../utils/media";
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
 const PUBLIC_APP_URL = (
@@ -208,6 +210,13 @@ function formatLocation(location) {
     .join(", ");
 }
 
+function formatJoinedDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
 function formatCount(value = 0) {
   // Clamp to 0 — stat counters should never render as negative even if
   // older/bad data drifted below zero server-side.
@@ -338,6 +347,7 @@ function Profile() {
   const [myCommunities, setMyCommunities] = useState([]);
   const [builderScore, setBuilderScore] = useState(null);
   const [shareModal, setShareModal] = useState(null);
+  const [referralStats, setReferralStats] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [avatarFailed, setAvatarFailed] = useState(false);
@@ -356,7 +366,9 @@ function Profile() {
     const shareData = {
       title: "IMCircle",
       text: "Join me on IMCircle and start building your journey in public.",
-      url: PUBLIC_APP_URL,
+      url: user?.username
+        ? `${PUBLIC_APP_URL}?ref=${encodeURIComponent(user.username)}`
+        : PUBLIC_APP_URL,
     };
 
     if (navigator.share) {
@@ -422,7 +434,7 @@ function Profile() {
       // could show nothing (including journeys) even right after posting.
       // /users/:userId/posts and /users/:userId/reposts are scoped
       // directly to this account instead.
-      const [analyticsRes, journeyRes, circleRes, scoreRes, postsRes, repostsRes] =
+      const [analyticsRes, journeyRes, circleRes, scoreRes, postsRes, repostsRes, referralRes] =
         await Promise.allSettled([
           getMyAnalyticsDashboard(),
           getMyJourneys(),
@@ -430,7 +442,10 @@ function Profile() {
           getMyBuilderScore(),
           myUserId ? getUserPostsById(myUserId) : Promise.resolve(null),
           myUserId ? getUserRepostsById(myUserId) : Promise.resolve(null),
+          getMyReferralStats(),
         ]);
+
+      setReferralStats(referralRes.status === "fulfilled" ? referralRes.value || null : null);
 
       if (analyticsRes.status === "fulfilled") {
         const analyticsData = analyticsRes.value;
@@ -554,7 +569,13 @@ function Profile() {
   const profilePath = user?.username
     ? `/profile/${encodeURIComponent(user.username)}`
     : `/profile/user/${getId(user)}`;
-  const profileUrl = `${PUBLIC_APP_URL}${profilePath}`;
+  // Own-profile share links are always referral links — every share of a
+  // profile is, by definition, this account inviting someone new, so the
+  // ?ref carries their own username automatically (see PART 23 of the
+  // growth spec: "the shared URL automatically includes ?ref=username").
+  const profileUrl = `${PUBLIC_APP_URL}${profilePath}${
+    user?.username ? `?ref=${encodeURIComponent(user.username)}` : ""
+  }`;
 
   const avatar = getImageUrl(getAvatarUrl(user));
 
@@ -676,9 +697,11 @@ function Profile() {
                       onError={() => setAvatarFailed(true)}
                     />
                   ) : (
-                    <div className="grid h-full w-full place-items-center bg-[#12141C] text-[36px] font-black text-[#EC9A1E]">
-                      {fullName.charAt(0).toUpperCase()}
-                    </div>
+                    <img
+                      src={getGenderAvatarIcon(user)}
+                      alt={fullName}
+                      className="h-full w-full object-cover"
+                    />
                   )}
 
                   <span className="absolute bottom-1 right-1 h-4 w-4 rounded-full border-2 border-[var(--imc-surface)] bg-[#059669]" />
@@ -725,6 +748,27 @@ function Profile() {
                   <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-[var(--imc-text-faint)]">
                     <Sparkles size={13} />
                     Exploring {user.primaryInterest}
+                  </p>
+                )}
+
+                {formatJoinedDate(user?.createdAt) && (
+                  <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-[var(--imc-text-faint)]">
+                    <CalendarDays size={13} />
+                    Joined {formatJoinedDate(user?.createdAt)}
+                  </p>
+                )}
+
+                {referralStats?.referredBy && (
+                  <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-[var(--imc-text-faint)]">
+                    <Users size={13} />
+                    Joined via {referralStats.referredBy.fullName || referralStats.referredBy.username}
+                  </p>
+                )}
+
+                {Number(referralStats?.referredCount) > 0 && (
+                  <p className="mt-1 flex items-center gap-1 text-[11px] font-black text-[var(--imc-indigo-text)]">
+                    <Users size={13} />
+                    Referred {referralStats.referredCount} Builder{referralStats.referredCount === 1 ? "" : "s"}
                   </p>
                 )}
               </div>
@@ -845,7 +889,9 @@ function Profile() {
                 visibleItems.map((item, index) => {
                   const isJourney = item.rawType === "journey";
                   const card = isJourney ? (
-                    <JourneyCard milestone={item.data} />
+                    <JourneyCard
+                      milestone={item.isRepost ? buildRepostCardPost(item) : item.data}
+                    />
                   ) : (
                     <PostCard
                       post={
@@ -983,7 +1029,7 @@ function Profile() {
                             />
                           ) : (
                             <div className="grid h-full w-full place-items-center">
-                              <Users size={22} className="text-[var(--imc-marigold)]" />
+                              <img src={getCommunityCoverIcon()} alt="" className="h-9 w-9 rounded-full object-cover" />
                             </div>
                           )}
                         </div>
@@ -1511,7 +1557,9 @@ function JourneyProfileCard({ journey, onView }) {
         {cover ? (
           <img src={cover} alt={journey.title} className="h-full w-full object-cover" />
         ) : (
-          <div className="imc-lattice h-full w-full bg-gradient-to-br from-[#12141C] via-[#2E2A8F] to-[#4338CA]" />
+          <div className="imc-lattice grid h-full w-full place-items-center bg-gradient-to-br from-[#12141C] via-[#2E2A8F] to-[#4338CA]">
+            <img src={getJourneyCoverIcon()} alt="" className="h-9 w-9 rounded-full object-cover" />
+          </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
         <span className={`absolute left-3 top-3 rounded-full px-2.5 py-1 text-[9px] font-black ${status === "Missed" ? "bg-[#D92D20] text-white" : status === "Achieved" ? "bg-[#059669] text-white" : "bg-white/90 text-[#4338CA]"}`}>

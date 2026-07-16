@@ -12,7 +12,7 @@ import {
 } from "../socket/socket.js";
 
 const userPopulateFields =
-  "fullName username avatar profileImage profilePicture image photo picture headline role occupation";
+  "fullName username avatar profileImage profilePicture image photo picture headline role occupation gender";
 
 const getPlainId = (value) => {
   if (!value) return "";

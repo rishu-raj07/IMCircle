@@ -29,6 +29,7 @@ import {
   getMySearchAnalytics,
 } from "../../api/analyticsApi";
 import { getMyProfile } from "../../api/profileApi";
+import { getGenderAvatarIcon } from "../../utils/avatar";
 
 function formatCount(value = 0) {
   const num = Number(value) || 0;
@@ -536,20 +537,12 @@ function Analytics() {
                         className="flex items-center gap-3"
                       >
                         <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-[var(--imc-surface-2)]">
-                          {event.follower?.avatar ? (
-                            <img
-                              src={event.follower.avatar}
-                              alt={event.follower.fullName || "Follower"}
-                              referrerPolicy="no-referrer"
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <div className="grid h-full w-full place-items-center text-[13px] font-black text-[var(--imc-indigo-text)]">
-                              {(event.follower?.fullName || "U")
-                                .charAt(0)
-                                .toUpperCase()}
-                            </div>
-                          )}
+                          <img
+                            src={event.follower?.avatar || getGenderAvatarIcon(event.follower)}
+                            alt={event.follower?.fullName || "Follower"}
+                            referrerPolicy="no-referrer"
+                            className="h-full w-full object-cover"
+                          />
                         </div>
 
                         <div className="min-w-0 flex-1">

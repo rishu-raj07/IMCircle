@@ -3,8 +3,9 @@ import User from "../models/User.js";
 import Notification from "../models/Notification.js";
 import { emitNotification } from "../socket/socket.js";
 import cloudinary from "../config/cloudinary.js";
+import { processContentText } from "../services/contentParsing.service.js";
 
-const authorFields = "fullName username avatar headline field role";
+const authorFields = "fullName username avatar headline field role gender";
 
 const createNotification = async ({
   recipient,
@@ -76,6 +77,14 @@ export const createPost = async (req, res) => {
     await User.findByIdAndUpdate(req.user._id, {
       $inc: { "stats.postsCount": 1 },
     });
+
+    processContentText({
+      text: content,
+      authorId: req.user._id,
+      contentType: "post",
+      contentId: post._id,
+      link: `/post/${post._id}`,
+    }).catch(() => {});
 
     const populatedPost = await Post.findById(post._id).populate(
       "author",

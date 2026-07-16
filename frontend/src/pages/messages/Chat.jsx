@@ -28,6 +28,7 @@ import {
 import api from "../../api/axios";
 import { socket } from "../../socket/socket";
 import { getSessionUser } from "../../utils/sessionUser";
+import { getGenderAvatarIcon } from "../../utils/avatar";
 import { trackEvent } from "../../utils/analyticsTracker";
 import {
   setStoredPermissionState,
@@ -173,9 +174,11 @@ function SmallAvatar({ user }) {
   }
 
   return (
-    <div className="grid h-8 w-8 place-items-center rounded-full border text-[var(--imc-text-muted)] ring-2 ring-[var(--imc-surface)]" style={{ background: "var(--imc-surface-2)", borderColor: "var(--imc-border)" }}>
-      <UserRound size={17} strokeWidth={1.7} />
-    </div>
+    <img
+      src={getGenderAvatarIcon(user)}
+      alt={getName(user)}
+      className="h-8 w-8 rounded-full object-cover ring-2 ring-white"
+    />
   );
 }
 
@@ -760,9 +763,11 @@ function Chat() {
                     width={96}
                   />
                 ) : (
-                  <div className="grid h-10 w-10 place-items-center rounded-full border text-[var(--imc-text-muted)]" style={{ background: "var(--imc-surface-2)", borderColor: "var(--imc-border)" }}>
-                    <UserRound size={20} strokeWidth={1.7} />
-                  </div>
+                  <img
+                    src={getGenderAvatarIcon(otherUser)}
+                    alt={getName(otherUser)}
+                    className="h-10 w-10 rounded-full object-cover"
+                  />
                 )}
 
                 {isOtherOnline && (

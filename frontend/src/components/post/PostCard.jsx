@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, GraduationCap, Mic } from "lucide-react";
+import { BadgeCheck, Eye, GraduationCap, Mic } from "lucide-react";
 
 import PostActions from "./PostActions";
 import PostMenu from "./PostMenu";
@@ -12,14 +12,15 @@ import ResponsivePostMedia from "../common/ResponsivePostMedia";
 import PostDetailOverlay from "../common/PostDetailOverlay";
 import CircleAction from "../common/CircleAction";
 import ProfileCompleteBadge from "../badges/ProfileCompleteBadge";
+import RichText from "../common/RichText";
 import { trackEvent } from "../../utils/analyticsTracker";
+import { formatRelativeTime } from "../../utils/relativeTime";
+import { getGenderAvatarIcon } from "../../utils/avatar";
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
 
 // Fixed brand hues (same in both themes). Structural colors (text, surfaces,
 // borders) read from the mode-aware CSS vars defined in index.css instead.
-const INK = "#12141C";
-const MARIGOLD = "#EC9A1E";
 const MARIGOLD_DARK = "var(--imc-marigold-text)";
 const POST_PURPOSE_LABELS = {
   general: "General",
@@ -31,10 +32,6 @@ const POST_PURPOSE_LABELS = {
 
 function getName(user) {
   return user?.fullName || user?.name || user?.username || "IMCircle Builder";
-}
-
-function getInitial(name) {
-  return name?.charAt(0)?.toUpperCase() || "B";
 }
 
 function getId(value) {
@@ -89,18 +86,18 @@ function getImageUrl(image) {
   return url;
 }
 
-function formatTime(date) {
-  if (!date) return "now";
-
-  const diff = Date.now() - new Date(date).getTime();
-  const mins = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (mins < 1) return "now";
-  if (mins < 60) return `${mins}m`;
-  if (hours < 24) return `${hours}h`;
-  return `${days}d`;
+// Delegates to the shared PART-12 formatter (utils/relativeTime.js) — kept
+// as a thin named wrapper so every call site in this file stays unchanged.
+// Falls back through a couple of alternate timestamp fields before giving
+// up, so a post whose `createdAt` didn't survive a particular API
+// projection still shows a real time instead of silently rendering
+// nothing (previously this line was squeezed onto the end of a
+// line-clamp-1 row after the occupation text, so a long job title would
+// truncate the timestamp out of view entirely — it now gets its own
+// dedicated, never-truncated slot in the header).
+function formatTime(post) {
+  const value = post?.createdAt || post?.updatedAt || post?.postedAt || post?.date;
+  return formatRelativeTime(value) || "now";
 }
 
 function formatCount(num = 0) {
@@ -258,17 +255,16 @@ function PostCard({ post = {}, type = "post", currentUser = null }) {
   return (
     <>
       <article
-        className="imc-enter overflow-hidden rounded-[16px] pb-3"
+        className="imc-enter -mx-4 overflow-hidden pb-3"
         style={{
           background: "var(--imc-surface)",
-          border: "1px solid var(--imc-border)",
         }}
       >
         <SocialProofBanner proof={post.circleProof} />
 
         <div className="px-3.5 pt-3">
           <div className="flex items-start justify-between gap-2.5">
-            <div className="flex min-w-0 gap-2.5">
+            <div className="flex min-w-0 flex-1 gap-2.5">
               <button
                 type="button"
                 onClick={openUserProfile}
@@ -286,78 +282,70 @@ function PostCard({ post = {}, type = "post", currentUser = null }) {
                     onError={() => setAvatarBroken(true)}
                   />
                 ) : (
-                  <div
-                    className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-[16px] font-black"
-                    style={{ background: INK, color: MARIGOLD }}
-                  >
-                    {getInitial(name)}
-                  </div>
+                  <img
+                    src={getGenderAvatarIcon(author)}
+                    alt={name}
+                    className="h-10 w-10 shrink-0 rounded-full object-cover"
+                  />
                 )}
               </button>
 
-              <div className="min-w-0 pt-0.5">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={openUserProfile}
-                    className="min-w-0 text-left active:scale-[0.99]"
-                  >
-                    <h2 className="truncate text-[14px] font-black" style={{ color: "var(--imc-text)" }}>
-                      {name}
-                    </h2>
-                  </button>
-
-                  {isProfileComplete && (
-                    <ProfileCompleteBadge name={name} size="sm" />
-                  )}
-
-                  {isMe && (
-                    <span className="text-[12px] font-bold" style={{ color: "var(--imc-text-muted)" }}>
-                      · You
-                    </span>
-                  )}
-
-                  {!isMe && authorId && (
-                    <CircleAction
-                      userId={authorId}
-                      isCircleMember={inCircle}
-                      isRequested={circleRequested}
-                      onStatusChange={(next) => {
-                        if (next === "pending") {
-                          trackEvent("circle_request_sent", {
-                            entityType: "user",
-                            entityId: authorId,
-                          }).catch(() => {});
-                        }
-                      }}
-                    />
-                  )}
-
-                  {type === "learning" && (
-                    <span
-                      className="rounded-full px-2 py-0.5 text-[9px] font-black uppercase"
-                      style={{ background: "var(--imc-marigold-soft)", color: MARIGOLD_DARK }}
+              <div className="min-w-0 flex-1 pt-0.5">
+                {/* Row 1: name + verified/complete badges, with the
+                    timestamp pinned to its own slot on the right so it is
+                    never pushed out of view by a long name or occupation
+                    (see the formatTime() comment above for the bug this
+                    fixes). */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={openUserProfile}
+                      className="min-w-0 text-left active:scale-[0.99]"
                     >
-                      Learning
-                    </span>
-                  )}
+                      <h2 className="truncate text-[14px] font-bold" style={{ color: "var(--imc-text)" }}>
+                        {username || name}
+                      </h2>
+                    </button>
 
-                  {type !== "learning" && purposeLabel ? (
-                    <span
-                      className="rounded-full px-2 py-0.5 text-[9px] font-black uppercase"
-                      style={{
-                        background: "var(--imc-marigold-soft)",
-                        color: MARIGOLD_DARK,
-                      }}
-                    >
-                      {purposeLabel}
-                    </span>
-                  ) : null}
+                    {author?.verification?.isVerified && (
+                      <BadgeCheck size={14} className="shrink-0" style={{ color: "var(--imc-indigo)" }} />
+                    )}
+
+                    {isProfileComplete && (
+                      <ProfileCompleteBadge name={name} size="sm" />
+                    )}
+
+                    {/* In Circle sits right next to the name now instead of
+                        a separate row further down the card. */}
+                    {!isMe && authorId && (
+                      <CircleAction
+                        userId={authorId}
+                        isCircleMember={inCircle}
+                        isRequested={circleRequested}
+                        size="xs"
+                        onStatusChange={(next) => {
+                          if (next === "pending") {
+                            trackEvent("circle_request_sent", {
+                              entityType: "user",
+                              entityId: authorId,
+                            }).catch(() => {});
+                          }
+                        }}
+                      />
+                    )}
+
+                    {isMe && (
+                      <span className="shrink-0 text-[12px] font-medium" style={{ color: "var(--imc-text-muted)" }}>
+                        · You
+                      </span>
+                    )}
+                  </div>
+
+                  <span className="shrink-0 text-[11px] font-medium" style={{ color: "var(--imc-text-muted)" }}>
+                    {formatTime(post)}
+                  </span>
                 </div>
-
-                <p className="mt-0.5 line-clamp-1 text-[12px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>
-                  {occupation} • {formatTime(post.createdAt)}
-                </p>
               </div>
             </div>
 
@@ -374,7 +362,7 @@ function PostCard({ post = {}, type = "post", currentUser = null }) {
               className="mt-4 rounded-[18px] px-4 py-3"
               style={{ background: "rgba(67,56,202,0.06)" }}
             >
-              <p className="text-[12px] font-black" style={{ color: "var(--imc-indigo-text)" }}>
+              <p className="text-[12px] font-bold" style={{ color: "var(--imc-indigo-text)" }}>
                 Your repost note
               </p>
               <p className="mt-1 whitespace-pre-line text-[13px] font-semibold leading-5" style={{ color: "var(--imc-text)" }}>
@@ -385,22 +373,22 @@ function PostCard({ post = {}, type = "post", currentUser = null }) {
 
           <div className="mt-2">
             <p
-              className={`whitespace-pre-line text-[13.5px] leading-5 ${
+              className={`whitespace-pre-line text-[13.5px] font-medium leading-5 ${
                 expanded ? "" : "line-clamp-4"
               }`}
               style={{ color: "var(--imc-text)" }}
             >
-              {content}
+              <RichText text={content} />
             </p>
 
             {content.length > 180 && (
               <button
                 type="button"
                 onClick={() => setExpanded((prev) => !prev)}
-                className="text-[12px] font-black"
-                style={{ color: "var(--imc-text-muted)" }}
+                className="text-[12px] font-bold"
+                style={{ color: "var(--imc-indigo-text)" }}
               >
-                {expanded ? "show less" : "... more"}
+                {expanded ? "Show less" : "Read more"}
               </button>
             )}
           </div>
@@ -416,7 +404,7 @@ function PostCard({ post = {}, type = "post", currentUser = null }) {
             >
               <div className="flex items-center gap-2">
                 <GraduationCap size={16} style={{ color: MARIGOLD_DARK }} />
-                <p className="text-[12px] font-black" style={{ color: MARIGOLD_DARK }}>
+                <p className="text-[12px] font-bold" style={{ color: MARIGOLD_DARK }}>
                   {post.title}
                 </p>
               </div>
@@ -424,7 +412,7 @@ function PostCard({ post = {}, type = "post", currentUser = null }) {
           )}
 
           <div className="flex items-center justify-between">
-            <span className="text-[12px] font-black" style={{ color: MARIGOLD_DARK }}>
+            <span className="text-[12px] font-bold" style={{ color: MARIGOLD_DARK }}>
               {tag}
             </span>
 
@@ -469,11 +457,20 @@ function PostMedia({ media, onOpen }) {
   const audioMedia = media.filter((item) => item.type === "audio");
 
   return (
-    <div className="mt-2 px-3.5">
+    <div className="mt-2">
+      {/* Media runs edge-to-edge (no horizontal padding, no rounded
+          corners) — the card's own rounded outline + border already frames
+          it, matching a flush full-bleed feed image instead of a photo
+          floating with margins inside the card. Voice notes stay padded
+          since they're a compact pill, not full-width media. */}
       <VisualMediaGrid media={visualMedia} onOpen={onOpen} />
-      {audioMedia.map((item) => (
-        <VoiceNote key={item.url} item={item} />
-      ))}
+      {audioMedia.length > 0 && (
+        <div className="px-3.5">
+          {audioMedia.map((item) => (
+            <VoiceNote key={item.url} item={item} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -488,13 +485,14 @@ function VisualMediaGrid({ media, onOpen }) {
         type={media[0].type}
         alt="Post media"
         onClick={() => onOpen(0)}
+        rounded="rounded-none"
       />
     );
   }
 
   if (media.length === 2) {
     return (
-      <div className="grid h-[220px] w-full grid-cols-2 gap-[2px] overflow-hidden rounded-[14px]" style={{ background: "var(--imc-surface-2)" }}>
+      <div className="grid h-[220px] w-full grid-cols-2 gap-[2px] overflow-hidden" style={{ background: "var(--imc-surface-2)" }}>
         {media.map((item, index) => (
           <MediaButton key={item.url} item={item} index={index} onOpen={onOpen} />
         ))}
@@ -503,7 +501,7 @@ function VisualMediaGrid({ media, onOpen }) {
   }
 
   return (
-    <div className="grid h-[220px] w-full grid-cols-2 gap-[2px] overflow-hidden rounded-[14px]" style={{ background: "var(--imc-surface-2)" }}>
+    <div className="grid h-[220px] w-full grid-cols-2 gap-[2px] overflow-hidden" style={{ background: "var(--imc-surface-2)" }}>
       <MediaButton item={media[0]} index={0} onOpen={onOpen} />
       <div className="grid grid-rows-2 gap-[2px]">
         <MediaButton item={media[1]} index={1} onOpen={onOpen} />

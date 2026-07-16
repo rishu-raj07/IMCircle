@@ -21,6 +21,7 @@ import {
   markNotificationRead,
 } from "../../api/notificationApi";
 import { createConversation } from "../../api/messageApi";
+import { getGenderAvatarIcon } from "../../utils/avatar";
 
 // Fixed brand hue (doesn't flip between themes, same convention as
 // PostCard.jsx's MARIGOLD). Everything else below reads a CSS variable
@@ -553,9 +554,9 @@ function NotificationCard({ item, loading, onClick, onOpenActor, onDelete }) {
         {loading ? (
           <Loader2 className="animate-spin" size={20} />
         ) : image ? (
-          <NotificationAvatar image={image} name={senderName} icon={Icon} />
+          <NotificationAvatar image={image} name={senderName} gender={getSender(item)?.gender} icon={Icon} />
         ) : senderName ? (
-          <NotificationAvatar image="" name={senderName} icon={Icon} />
+          <NotificationAvatar image="" name={senderName} gender={getSender(item)?.gender} icon={Icon} />
         ) : (
           <Icon size={21} />
         )}
@@ -597,7 +598,7 @@ function NotificationCard({ item, loading, onClick, onOpenActor, onDelete }) {
   );
 }
 
-function NotificationAvatar({ image, name, icon: Icon }) {
+function NotificationAvatar({ image, name, gender, icon: Icon }) {
   const [failed, setFailed] = useState(false);
 
   if (image && !failed) {
@@ -614,9 +615,11 @@ function NotificationAvatar({ image, name, icon: Icon }) {
 
   if (name) {
     return (
-      <span className="text-[13px] font-black">
-        {name.charAt(0).toUpperCase()}
-      </span>
+      <img
+        src={getGenderAvatarIcon(gender)}
+        alt={name}
+        className="h-full w-full object-cover"
+      />
     );
   }
 

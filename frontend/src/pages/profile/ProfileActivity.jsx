@@ -21,6 +21,7 @@ import BottomNav from "../../components/navigation/BottomNav";
 import { getMyProfile } from "../../api/profileApi";
 import { getUserPostsById, getUserRepostsById } from "../../api/userApi";
 import { getMyJourneys } from "../../api/journeyApi";
+import { getJourneyCoverIcon } from "../../utils/media";
 import RepostCard from "../../components/post/RepostCard";
 const TABS = ["All", "Posts", "Journey", "Reposts"];
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
@@ -401,13 +402,20 @@ function ProfileActivity() {
             <div className="px-3 pb-4">
               {visibleItems.map((item, index) => {
                 const isJourney = item.rawType === "journey";
+                // Same repostText/isRepostView shape PostCard/JourneyCard
+                // read to show their inline "Your repost note" box — this
+                // page was passing item.data straight through, so reposted
+                // items never showed a note even when the reposter left one.
+                const cardData = item.isRepost
+                  ? { ...item.data, repostText: item.repostText || "", isRepostView: true }
+                  : item.data;
                 const card = item.isJourneySummary ? (
                   <MissedJourneyCard journey={item.data} onOpen={() => navigate(`/journey/${item.data?._id}`)} />
                 ) : isJourney ? (
-                  <JourneyCard milestone={item.data} />
+                  <JourneyCard milestone={cardData} />
                 ) : (
                   <PostCard
-                    post={item.data}
+                    post={cardData}
                     type="post"
                     currentUser={user}
                   />
@@ -453,7 +461,9 @@ function MissedJourneyCard({ journey = {}, onOpen }) {
         {cover ? (
           <img src={cover} alt={journey.title || "Missed journey"} className="h-full w-full object-cover" />
         ) : (
-          <div className="imc-lattice h-full w-full bg-gradient-to-br from-[#12141C] via-[#2E2A8F] to-[#4338CA]" />
+          <div className="imc-lattice grid h-full w-full place-items-center bg-gradient-to-br from-[#12141C] via-[#2E2A8F] to-[#4338CA]">
+            <img src={getJourneyCoverIcon()} alt="" className="h-9 w-9 rounded-full object-cover" />
+          </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
         <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[9px] font-extrabold text-[#D92D20] shadow-sm">

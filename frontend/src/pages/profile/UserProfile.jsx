@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
+  CalendarDays,
   CirclePlus,
   Flag,
   Flame,
@@ -13,6 +14,7 @@ import {
   Sparkles,
   UserCheck,
   UserPlus,
+  Users,
   X,
 } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -51,7 +53,16 @@ import RankBadge from "../../components/badges/RankBadge";
 import ProfileCompleteBadge from "../../components/badges/ProfileCompleteBadge";
 import StreakMilestoneCard from "../../components/badges/StreakMilestoneCard";
 import { getStreakBadgeTier } from "../../utils/badges";
+import { getUserReferralCount } from "../../api/referralApi";
 import { useSEO } from "../../hooks/useSEO";
+import { getGenderAvatarIcon } from "../../utils/avatar";
+
+function formatJoinedDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
 
 const TABS = ["All", "Posts", "Journey", "Reposts"];
 const FEED_PAGE_SIZE = 5;
@@ -323,6 +334,7 @@ function UserProfile() {
   const [rankBadge, setRankBadge] = useState(null);
   const [signupRank, setSignupRank] = useState(null);
   const [builderScore, setBuilderScore] = useState(null);
+  const [referredCount, setReferredCount] = useState(0);
   const [journeys, setJourneys] = useState([]);
   const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -521,6 +533,13 @@ function UserProfile() {
             if (!cancelled) setJourneys(normalizeJourneys(journeyRes));
           } catch (error) {
             if (!cancelled) setJourneys([]);
+          }
+
+          try {
+            const referralRes = await getUserReferralCount(targetId);
+            if (!cancelled) setReferredCount(referralRes?.referredCount || 0);
+          } catch (error) {
+            if (!cancelled) setReferredCount(0);
           }
 
           // Scoped strictly to targetId (the profile being viewed) via
@@ -910,9 +929,11 @@ function UserProfile() {
                       onError={() => setAvatarFailed(true)}
                     />
                   ) : (
-                    <div className="grid h-full w-full place-items-center bg-[rgba(67,56,202,0.12)] text-[36px] font-black text-[var(--imc-indigo-text)]">
-                      {fullName.charAt(0).toUpperCase()}
-                    </div>
+                    <img
+                      src={getGenderAvatarIcon(profileUser)}
+                      alt={fullName}
+                      className="h-full w-full object-cover"
+                    />
                   )}
 
                   <span className="absolute bottom-1 right-1 h-4 w-4 rounded-full border-2 border-[var(--imc-surface)] bg-[#059669]" />
@@ -967,6 +988,20 @@ function UserProfile() {
                   <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-[var(--imc-text-faint)]">
                     <Sparkles size={13} />
                     Exploring {profileUser.primaryInterest}
+                  </p>
+                )}
+
+                {formatJoinedDate(profileUser.createdAt) && (
+                  <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-[var(--imc-text-faint)]">
+                    <CalendarDays size={13} />
+                    Joined {formatJoinedDate(profileUser.createdAt)}
+                  </p>
+                )}
+
+                {referredCount > 0 && (
+                  <p className="mt-1 flex items-center gap-1 text-[11px] font-black text-[var(--imc-indigo-text)]">
+                    <Users size={13} />
+                    Referred {referredCount} Builder{referredCount === 1 ? "" : "s"}
                   </p>
                 )}
               </div>
@@ -1140,7 +1175,9 @@ function UserProfile() {
                   const isJourney = item.rawType === "journey";
 
                   const card = isJourney ? (
-                    <JourneyCard milestone={item.data} />
+                    <JourneyCard
+                      milestone={item.isRepost ? buildRepostCardPost(item) : item.data}
+                    />
                   ) : (
                     <PostCard
                       post={item.isRepost ? buildRepostCardPost(item) : item.data}

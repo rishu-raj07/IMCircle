@@ -6,7 +6,7 @@ import JourneyMilestoneRepost from "../models/JourneyMilestoneRepost.js";
 import JourneyMilestoneComment from "../models/JourneyMilestoneComment.js";
 
 const userFields =
-  "fullName name username avatar profilePicture profileImage image photo photoURL picture headline role";
+  "fullName name username avatar profilePicture profileImage image photo photoURL picture headline role gender";
 
 const hasUser = (list, userId) =>
   Array.isArray(list) &&

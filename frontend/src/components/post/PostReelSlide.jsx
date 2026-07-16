@@ -16,6 +16,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import CommentSheet from "../common/CommentSheet";
 import RepostSheet from "../common/RepostSheet";
 import ImageLoader from "../common/ImageLoader";
+import { getGenderAvatarIcon } from "../../utils/avatar";
 
 import {
   likePost,
@@ -481,7 +482,11 @@ function PostReelSlide({ post = {}, type = "post", initialMediaIndex = 0 }) {
                   onError={() => setAvatarBroken(true)}
                 />
               ) : (
-                finalName.charAt(0).toUpperCase()
+                <img
+                  src={getGenderAvatarIcon(author)}
+                  alt={finalName}
+                  className="h-full w-full object-cover"
+                />
               )}
             </div>
           </button>

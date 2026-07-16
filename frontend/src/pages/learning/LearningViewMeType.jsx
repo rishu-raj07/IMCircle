@@ -17,6 +17,7 @@ import {
   getSingleLearning,
 } from "../../api/learningApi";
 import { trackEvent } from "../../utils/analyticsTracker";
+import { getGenderAvatarIcon } from "../../utils/avatar";
 
 const THOUGHT_PREVIEW_LENGTH = 50;
 
@@ -162,21 +163,12 @@ function PersonAvatar({ person, badge }) {
       className="relative h-12 w-12 shrink-0 rounded-2xl"
       style={{ background: "var(--imc-surface-2)" }}
     >
-      {avatar ? (
-        <img
-          src={avatar}
-          alt={getUserName(person)}
-          className="h-full w-full rounded-2xl object-cover"
-          referrerPolicy="no-referrer"
-        />
-      ) : (
-        <div
-          className="grid h-full w-full place-items-center rounded-2xl text-[15px] font-black"
-          style={{ background: "#12141C", color: "#EC9A1E" }}
-        >
-          {getUserName(person).charAt(0).toUpperCase()}
-        </div>
-      )}
+      <img
+        src={avatar || getGenderAvatarIcon(person)}
+        alt={getUserName(person)}
+        className="h-full w-full rounded-2xl object-cover"
+        referrerPolicy="no-referrer"
+      />
 
       {badge ? (
         <div

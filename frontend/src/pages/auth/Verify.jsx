@@ -7,6 +7,7 @@ import {
 } from "../../utils/storage";
 import { verifyMobileOtp, sendMobileOtp } from "../../api/authApi";
 import { saveLoginData } from "../../store/authStore";
+import { getReferralCode } from "../../utils/referral.js";
 
 const OTP_LENGTH = 6;
 
@@ -195,7 +196,7 @@ function Verify() {
     try {
       setResending(true);
 
-      const data = await sendMobileOtp({ mobile });
+      const data = await sendMobileOtp({ mobile, ref: getReferralCode() || undefined });
 
       if (data?.devOtp) {
         setDevOtp(data.devOtp);

@@ -6,6 +6,7 @@ import connectDB from "./config/db.js";
 import { initSocket } from "./socket/socket.js";
 import { startJourneyReminderJobs } from "./services/journeyReminder.service.js";
 import { startLearningExpiryJob } from "./services/learningExpiry.service.js";
+import { startSpotlightScheduler } from "./services/spotlightScheduler.service.js";
 // NOT a static import, on purpose: google.service.js statically imports
 // googleClients.js, whose top-level code reads process.env.GOOGLE_* once,
 // at module-evaluation time, into a frozen `const allowedGoogleClientIds`
@@ -99,6 +100,7 @@ initSocket(server);
 
 startJourneyReminderJobs();
 startLearningExpiryJob();
+startSpotlightScheduler();
 
 // Fire-and-forget: pre-warms Google's public cert cache so the first real
 // Google login doesn't pay for it (see warmGoogleCertCache's own comment).

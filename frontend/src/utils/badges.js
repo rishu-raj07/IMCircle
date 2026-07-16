@@ -68,3 +68,44 @@ export function getStreakBadgeTier(longestStreak = 0) {
   if (streak >= 50) return "copper";
   return null;
 }
+
+// Visual tier styling for the achievement Badge System (Part 3 of the
+// Growth OS spec) — mirrors STREAK_BADGE_META's "fixed metal gradient"
+// approach so every badge surface (profile grid, chip, Spotlight page)
+// reads consistently regardless of light/dark theme.
+export const BADGE_TIER_META = {
+  platinum: {
+    gradient: "linear-gradient(135deg, #E4E9FF 0%, #6D4AFF 55%, #4338CA 100%)",
+    ring: "#6D4AFF",
+  },
+  gold: {
+    gradient: "linear-gradient(135deg, #FFE7A0 0%, #EC9A1E 55%, #8A5A12 100%)",
+    ring: "#EC9A1E",
+  },
+  silver: {
+    gradient: "linear-gradient(135deg, #DCE1E8 0%, #8B93A1 55%, #5B626E 100%)",
+    ring: "#8B93A1",
+  },
+};
+
+// Icon names here are lucide-react component names as *strings* (matching
+// backend/src/constants/badgeCatalog.js's `icon` field one-to-one) so the
+// catalog metadata can travel over the API without shipping React
+// components through JSON. BadgeChip/UserBadgeGrid resolve the string to
+// an actual icon via this map.
+export const BADGE_ICON_NAMES = [
+  "Sparkles",
+  "Medal",
+  "Trophy",
+  "GraduationCap",
+  "Rocket",
+  "Flame",
+  "HeartHandshake",
+  "Star",
+  "BadgeCheck",
+  "PenSquare",
+  "Code2",
+  "Palette",
+  "BookOpen",
+  "TrendingUp",
+];

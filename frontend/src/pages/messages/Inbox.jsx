@@ -4,7 +4,8 @@ import {
   Search,
   Check,
   CheckCheck,
-  UserRound,
+  MessageCircle,
+  Ban,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -13,6 +14,8 @@ import api from "../../api/axios";
 import { socket } from "../../socket/socket";
 import { getSessionUser } from "../../utils/sessionUser";
 import ImageLoader from "../../components/common/ImageLoader";
+import { formatRelativeTime } from "../../utils/relativeTime";
+import { getGenderAvatarIcon } from "../../utils/avatar";
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
 
@@ -45,18 +48,10 @@ function getAvatarUrl(user) {
   return url;
 }
 
+// Delegates to the shared PART-12 formatter (utils/relativeTime.js) — kept
+// as a thin named wrapper so every call site in this file stays unchanged.
 function formatChatTime(date) {
-  if (!date) return "";
-
-  const diff = Date.now() - new Date(date).getTime();
-  const min = Math.floor(diff / 60000);
-  const hr = Math.floor(min / 60);
-  const day = Math.floor(hr / 24);
-
-  if (min < 1) return "now";
-  if (min < 60) return `${min}m`;
-  if (hr < 24) return `${hr}h`;
-  return `${day}d`;
+  return formatRelativeTime(date) || "now";
 }
 
 function getUnreadText(conversation) {
@@ -323,7 +318,10 @@ function Inbox() {
             </div>
           ) : filteredConversations.length === 0 ? (
             <div className="rounded-[24px] border border-dashed border-[rgba(18,20,28,0.14)] bg-[var(--imc-surface-2)] px-4 py-10 text-center">
-              <h2 className="text-[15px] font-black text-[var(--imc-text)]">
+              <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl" style={{ background: "var(--imc-surface)", color: "var(--imc-indigo-text)" }}>
+                {activeFilter === "Blocked" ? <Ban size={24} /> : <MessageCircle size={24} />}
+              </div>
+              <h2 className="mt-4 text-[15px] font-black text-[var(--imc-text)]">
                 {activeFilter === "Blocked" ? "No blocked chats" : "No messages yet"}
               </h2>
               <p className="mt-1 text-[12px] font-semibold text-[var(--imc-text-muted)]">
@@ -373,9 +371,11 @@ function Inbox() {
                           width={96}
                         />
                       ) : (
-                        <div className="grid h-[52px] w-[52px] place-items-center rounded-2xl border text-[var(--imc-text-muted)]" style={{ background: "var(--imc-surface-2)", borderColor: "var(--imc-border)" }}>
-                          <UserRound size={24} strokeWidth={1.7} />
-                        </div>
+                        <img
+                          src={getGenderAvatarIcon(otherUser)}
+                          alt={getName(otherUser)}
+                          className="h-[52px] w-[52px] rounded-2xl object-cover"
+                        />
                       )}
 
                       {isOnline && (

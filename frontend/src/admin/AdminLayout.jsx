@@ -8,6 +8,8 @@ import {
   BadgeCheck,
   Users,
   GalleryVerticalEnd,
+  Sparkles,
+  Award,
 } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAdminAuth } from "./context/AdminAuthContext";
@@ -16,6 +18,8 @@ const links = [
   { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/admin/users", label: "Users", icon: Users },
   { to: "/admin/content", label: "Content", icon: GalleryVerticalEnd },
+  { to: "/admin/spotlight", label: "Spotlight", icon: Sparkles },
+  { to: "/admin/badges", label: "Badges", icon: Award },
   { to: "/admin/reports", label: "Reports", icon: FileWarning },
   { to: "/admin/verification", label: "Verification", icon: BadgeCheck },
   { to: "/admin/analytics", label: "Analytics", icon: BarChart3 },
@@ -24,7 +28,7 @@ const links = [
 
 function AdminNav({ mobile = false }) {
   return (
-    <nav className={mobile ? "grid grid-cols-7 gap-1" : "space-y-1"}>
+    <nav className={mobile ? "grid grid-cols-5 gap-1" : "space-y-1"}>
       {links.map(({ to, label, icon: Icon }) => (
         <NavLink
           key={to}

@@ -514,6 +514,19 @@ const userSchema = new mongoose.Schema(
       },
     ],
 
+    // Growth OS referral engine — set once, at account-creation time, from
+    // the `ref` (referrer's username) carried through signup by
+    // frontend/src/utils/referral.js. Never changes after creation. Kept
+    // as a plain ObjectId ref (not a denormalized count) so "Referred N
+    // Builders" on a profile is always a live, accurate
+    // User.countDocuments({ referredBy: theirId }) rather than a counter
+    // that can drift.
+    referredBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
     builderScore: {
       total: {
         type: Number,

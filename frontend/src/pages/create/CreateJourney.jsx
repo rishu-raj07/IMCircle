@@ -10,6 +10,7 @@ import {
   AlertCircle,
   Loader2,
   RefreshCw,
+  Check,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -352,7 +353,7 @@ function CreateJourney() {
           </button>
 
           <div className="min-w-0 flex-1">
-            <h1 className="text-[18px] font-black text-[var(--imc-text)]">Start Journey</h1>
+            <h1 className="text-[19px] font-black tracking-tight text-[var(--imc-text)]">Start Journey</h1>
             <p className="text-[10.5px] font-semibold text-[var(--imc-text-muted)]">Turn daily progress into a story</p>
           </div>
 
@@ -360,7 +361,8 @@ function CreateJourney() {
             type="button"
             disabled={loading || activeJourneyCount >= 3}
             onClick={handleSubmit}
-            className="flex h-10 min-w-[68px] items-center justify-center rounded-full bg-[#4338CA] px-4 text-[12px] font-black text-white active:scale-95 disabled:opacity-50"
+            className="flex h-10 min-w-[76px] items-center justify-center rounded-full px-4 text-[12px] font-black text-white shadow-[0_6px_16px_rgba(67,56,202,0.35)] active:scale-95 disabled:opacity-50 disabled:shadow-none"
+            style={{ background: "linear-gradient(135deg, var(--imc-indigo), var(--imc-indigo-dark))" }}
           >
             {loading ? <Loader2 size={16} className="animate-spin" /> : "Start"}
           </button>
@@ -382,21 +384,47 @@ function CreateJourney() {
         )}
 
         <div>
-          <div className="relative h-36 overflow-hidden rounded-[24px] bg-[var(--imc-surface)]" style={{ border: "1px solid var(--imc-border)" }}>
+          <div
+            className="relative h-44 overflow-hidden rounded-[28px]"
+            style={
+              coverPreview
+                ? { background: "var(--imc-surface)" }
+                : {
+                    background:
+                      "linear-gradient(135deg, var(--imc-action-soft), var(--imc-marigold-soft))",
+                    boxShadow: "0 8px 24px rgba(18,20,28,0.06)",
+                  }
+            }
+          >
             {coverPreview ? (
-              <img
-                src={coverPreview}
-                alt="Journey cover"
-                className="h-full w-full object-cover"
-              />
+              <>
+                <img
+                  src={coverPreview}
+                  alt="Journey cover"
+                  className="h-full w-full object-cover"
+                />
+                {/* Bottom scrim so the Change/Remove controls stay legible
+                    over any photo, the same way a story/reel editor treats
+                    its own cover picker. */}
+                <div
+                  className="pointer-events-none absolute inset-x-0 bottom-0 h-16"
+                  style={{ background: "linear-gradient(to top, rgba(0,0,0,0.45), transparent)" }}
+                />
+              </>
             ) : (
               <div className="flex h-full items-center justify-center">
                 <div className="text-center">
-                  <div className="mx-auto grid h-11 w-11 place-items-center rounded-2xl bg-[var(--imc-indigo-soft)] text-[var(--imc-indigo-text)]">
-                    <Flame size={21} />
+                  <div
+                    className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-[var(--imc-surface)] text-[var(--imc-indigo-text)]"
+                    style={{ boxShadow: "0 6px 16px rgba(18,20,28,0.10)" }}
+                  >
+                    <Flame size={24} />
                   </div>
-                  <p className="mt-2 text-[11px] font-black text-[var(--imc-text)]">
+                  <p className="mt-3 text-[13px] font-black text-[var(--imc-text)]">
                     Add a journey cover
+                  </p>
+                  <p className="mt-0.5 text-[10.5px] font-semibold text-[var(--imc-text-muted)]">
+                    Make it recognizable in the feed
                   </p>
                 </div>
               </div>
@@ -405,17 +433,18 @@ function CreateJourney() {
             <button
               type="button"
               onClick={() => coverRef.current?.click()}
-              className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-full bg-[#171923] px-3 py-2 text-[10px] font-black text-white active:scale-95"
+              className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] font-black text-white backdrop-blur-md active:scale-95"
+              style={{ background: "rgba(18,20,28,0.55)" }}
             >
               <ImagePlus size={14} />
-              {coverPreview ? "Change" : "Cover"}
+              {coverPreview ? "Change" : "Add cover"}
             </button>
 
             {coverPreview && (
               <button
                 type="button"
                 onClick={removeCoverImage}
-                className="absolute left-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-black/60 text-white active:scale-95"
+                className="absolute left-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-black/60 text-white backdrop-blur-md active:scale-95"
                 aria-label="Remove cover"
               >
                 <X size={15} />
@@ -431,31 +460,42 @@ function CreateJourney() {
             />
           </div>
 
-          <div className="mt-4 rounded-[24px] bg-[var(--imc-surface)] p-4" style={{ border: "1px solid var(--imc-border)" }}>
+          <div className="mt-4 rounded-[24px] bg-[var(--imc-surface)] p-4" style={{ boxShadow: "0 6px 20px rgba(18,20,28,0.05)" }}>
             <div className="flex items-center justify-between gap-3 rounded-[16px] bg-[var(--imc-indigo-soft)] p-3">
               <div className="min-w-0">
-                <p className="text-[11px] font-black text-[var(--imc-text)]">
-                  Day {todayDay} of {targetDays} &middot; {progress}%
+                <p className="text-[12.5px] font-black text-[var(--imc-text)]">
+                  Day {todayDay} of {targetDays}
                 </p>
                 <p className="mt-0.5 truncate text-[11px] font-bold text-[var(--imc-text-muted)]">
                   Deadline: {deadlineText}
                 </p>
-
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--imc-border)]">
-                  <div
-                    className="h-full rounded-full bg-[#4338CA]"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
               </div>
 
-              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[var(--imc-surface)] text-[var(--imc-indigo-text)]">
-                <Flame size={20} />
+              {/* Progress ring instead of a flat bar + separate icon box —
+                  reads at a glance like a fitness-app stat, not a form
+                  field. */}
+              <div className="relative grid h-12 w-12 shrink-0 place-items-center">
+                <svg viewBox="0 0 36 36" className="h-12 w-12 -rotate-90">
+                  <circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--imc-border)" strokeWidth="3" />
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="15.5"
+                    fill="none"
+                    stroke="var(--imc-indigo)"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeDasharray={`${(progress / 100) * 97.4}, 97.4`}
+                  />
+                </svg>
+                <span className="absolute text-[10px] font-black text-[var(--imc-indigo-text)]">{progress}%</span>
               </div>
             </div>
 
             <div className="mt-5">
-              <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.08em] text-[var(--imc-text-muted)]">Journey name</label>
+              <label className="mb-2 flex items-center gap-1.5 text-[12.5px] font-black text-[var(--imc-text)]">
+                Journey name
+              </label>
               <input
                 value={journeyTitle}
                 onChange={(e) => setJourneyTitle(e.target.value)}
@@ -465,7 +505,9 @@ function CreateJourney() {
             </div>
 
             <div className="mt-4">
-              <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.08em] text-[var(--imc-text-muted)]">About this journey</label>
+              <label className="mb-2 flex items-center gap-1.5 text-[12.5px] font-black text-[var(--imc-text)]">
+                About this journey
+              </label>
               <textarea
                 value={about}
                 onChange={(e) => setAbout(e.target.value.slice(0, MAX_ABOUT))}
@@ -487,23 +529,32 @@ function CreateJourney() {
               </div>
 
               <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
-                {dayOptions.map((days) => (
-                  <button
-                    key={days}
-                    type="button"
-                    onClick={() => {
-                      setTargetDays(days);
-                      setCalendarDate("");
-                    }}
-                    className={`shrink-0 rounded-full px-3.5 py-2 text-[12px] font-black active:scale-95 ${
-                      targetDays === days
-                        ? "bg-[#4338CA] text-white"
-                        : "bg-[var(--imc-surface-2)] text-[var(--imc-text-muted)]"
-                    }`}
-                  >
-                    {days} Days
-                  </button>
-                ))}
+                {dayOptions.map((days) => {
+                  const active = targetDays === days;
+                  return (
+                    <button
+                      key={days}
+                      type="button"
+                      onClick={() => {
+                        setTargetDays(days);
+                        setCalendarDate("");
+                      }}
+                      className="flex shrink-0 items-center gap-1 rounded-full px-3.5 py-2 text-[12px] font-black active:scale-95"
+                      style={
+                        active
+                          ? {
+                              background: "linear-gradient(135deg, var(--imc-indigo), var(--imc-indigo-dark))",
+                              color: "#fff",
+                              boxShadow: "0 4px 12px rgba(67,56,202,0.28)",
+                            }
+                          : { background: "var(--imc-surface-2)", color: "var(--imc-text-muted)" }
+                      }
+                    >
+                      {active && <Check size={12} />}
+                      {days} Days
+                    </button>
+                  );
+                })}
               </div>
 
               <div className="relative mt-3 flex items-center gap-3 rounded-[15px] bg-[var(--imc-surface-2)] px-3.5 py-3">
@@ -518,7 +569,7 @@ function CreateJourney() {
                   type="button"
                   onClick={openCalendar}
                   className="shrink-0 rounded-full bg-[var(--imc-surface)] px-3 py-2 text-[9.5px] font-black text-[var(--imc-indigo-text)] active:scale-95"
-                  style={{ border: "1px solid var(--imc-border)" }}
+                  style={{ boxShadow: "0 2px 6px rgba(18,20,28,0.08)" }}
                 >
                   {selectedCalendarLabel}
                 </button>
@@ -550,10 +601,15 @@ function CreateJourney() {
 
           </div>
 
-          <div className="mt-4 rounded-[24px] bg-[var(--imc-surface)] p-4" style={{ border: "1px solid var(--imc-border)" }}>
-              <div className="mb-3">
-                <p className="text-[14px] font-black text-[var(--imc-text)]">Day 1 update</p>
-                <p className="mt-0.5 text-[10px] font-semibold text-[var(--imc-text-muted)]">Add your first real progress entry</p>
+          <div className="mt-4 rounded-[24px] bg-[var(--imc-surface)] p-4" style={{ boxShadow: "0 6px 20px rgba(18,20,28,0.05)" }}>
+              <div className="mb-3 flex items-center gap-2.5">
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--imc-indigo-soft)] text-[var(--imc-indigo-text)]">
+                  <Flame size={17} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[14px] font-black text-[var(--imc-text)]">Share Day 1</p>
+                  <p className="text-[10px] font-semibold text-[var(--imc-text-muted)]">Your first real progress entry</p>
+                </div>
               </div>
 
               <textarea
@@ -568,7 +624,7 @@ function CreateJourney() {
               </p>
 
               {imagePreview ? (
-                <div className="relative mt-2 overflow-hidden rounded-2xl border border-[var(--imc-border)]">
+                <div className="relative mt-2 overflow-hidden rounded-2xl" style={{ boxShadow: "0 4px 14px rgba(18,20,28,0.08)" }}>
                   <img
                     src={imagePreview}
                     alt="Journey progress"
@@ -588,7 +644,8 @@ function CreateJourney() {
                   type="button"
                   onClick={openLiveCamera}
                   disabled={cameraStarting}
-                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-[15px] border border-dashed border-[#4338CA]/30 bg-[var(--imc-indigo-soft)] px-4 py-3.5 text-[11px] font-black text-[var(--imc-indigo-text)] active:scale-[0.98]"
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-[15px] px-4 py-3.5 text-[12px] font-black text-white shadow-[0_6px_16px_rgba(67,56,202,0.3)] active:scale-[0.98] disabled:opacity-70"
+                  style={{ background: "linear-gradient(135deg, var(--imc-indigo), var(--imc-indigo-dark))" }}
                 >
                   {cameraStarting ? <Loader2 size={17} className="animate-spin" /> : <Camera size={17} />}
                   {cameraStarting ? "Opening camera..." : "Capture Live Progress Photo"}
@@ -596,17 +653,15 @@ function CreateJourney() {
               )}
 
             <div className="mt-4 border-t border-[var(--imc-border)] pt-4">
-              <div className="mb-2 flex items-center gap-2 text-[12.5px] font-black text-[var(--imc-text)]">
-                <Trophy size={15} />
-                Milestone (optional)
+              <div className="relative">
+                <Trophy size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--imc-marigold-text)]" />
+                <input
+                  value={milestone}
+                  onChange={(e) => setMilestone(e.target.value)}
+                  placeholder="Milestone (optional) — first client, 5km run..."
+                  className="w-full rounded-full bg-[var(--imc-surface-2)] py-2.5 pl-10 pr-3.5 text-[13px] font-semibold text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)]"
+                />
               </div>
-
-              <input
-                value={milestone}
-                onChange={(e) => setMilestone(e.target.value)}
-                placeholder="First client, 5km run, Day 10 completed"
-                className="w-full rounded-2xl bg-[var(--imc-surface-2)] px-3.5 py-2.5 text-[13px] font-semibold text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)]"
-              />
             </div>
           </div>
         </div>

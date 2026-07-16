@@ -11,6 +11,7 @@ import Notification from "../models/Notification.js";
 import { emitNotification } from "../socket/socket.js";
 import { addBuilderScore } from "../services/builderScore.service.js";
 import { deleteExpiredLearnings } from "../services/learningExpiry.service.js";
+import { processContentText } from "../services/contentParsing.service.js";
 
 // Shared by repostLearning/shareLearning — lets the original learning's
 // owner know someone shared their learning, same best-effort/non-blocking
@@ -184,7 +185,7 @@ const populateLearning = (query) => {
 };
 
 const userSelect =
-  "fullName name username avatar photo profileImage profilePicture picture headline tagline role";
+  "fullName name username avatar photo profileImage profilePicture picture headline tagline role gender";
 
 const serializeActivityUser = (user) => {
   const value = user?.toObject ? user.toObject() : user || {};
@@ -272,6 +273,14 @@ export const createLearning = async (req, res) => {
       referenceId: learning._id,
       referenceModel: "Learning",
     });
+
+    processContentText({
+      text: `${title} ${content}`,
+      authorId: req.user._id,
+      contentType: "learning",
+      contentId: learning._id,
+      link: `/learning-view/${learning._id}`,
+    }).catch(() => {});
 
     const populatedLearning = await populateLearning(
       Learning.findById(learning._id)

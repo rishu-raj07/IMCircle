@@ -8,15 +8,13 @@ import CircleAction from "./CircleAction";
 import ImageLoader from "./ImageLoader";
 import PostActions from "../post/PostActions";
 import PostMenu from "../post/PostMenu";
+import { formatRelativeTime } from "../../utils/relativeTime";
+import { getGenderAvatarIcon } from "../../utils/avatar";
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
 
 function getName(user) {
   return user?.fullName || user?.name || user?.username || "IMCircle Builder";
-}
-
-function getInitial(name) {
-  return name?.charAt(0)?.toUpperCase() || "B";
 }
 
 function getImageUrl(image) {
@@ -38,18 +36,10 @@ function getImageUrl(image) {
   return url;
 }
 
+// Delegates to the shared PART-12 formatter (utils/relativeTime.js) — kept
+// as a thin named wrapper so every call site in this file stays unchanged.
 function formatTime(date) {
-  if (!date) return "now";
-
-  const diff = Date.now() - new Date(date).getTime();
-  const mins = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (mins < 1) return "now";
-  if (mins < 60) return `${mins}m`;
-  if (hours < 24) return `${hours}h`;
-  return `${days}d`;
+  return formatRelativeTime(date) || "now";
 }
 
 // Instagram-style "open post" view: profile header on top, the full,
@@ -140,9 +130,11 @@ function PostDetailOverlay({ post = {}, type = "post", currentUser = null, initi
                 onError={() => setAvatarBroken(true)}
               />
             ) : (
-              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-[16px] font-black" style={{ background: "#12141C", color: "#EC9A1E" }}>
-                {getInitial(name)}
-              </div>
+              <img
+                src={getGenderAvatarIcon(author)}
+                alt={name}
+                className="h-10 w-10 shrink-0 rounded-full object-cover"
+              />
             )}
 
             <div className="min-w-0">

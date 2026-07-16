@@ -7,7 +7,7 @@ import Notification from "../models/Notification.js";
 import cloudinary from "../config/cloudinary.js";
 import { emitNotification } from "../socket/socket.js";
 
-const userFields = "fullName name username avatar headline";
+const userFields = "fullName name username avatar headline gender";
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "😢"];
 
 // Only these fields are ever settable by the author directly on edit —

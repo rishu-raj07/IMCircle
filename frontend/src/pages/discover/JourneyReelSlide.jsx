@@ -18,6 +18,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import CommentSheet from "../../components/common/CommentSheet";
 import RepostSheet from "../../components/common/RepostSheet";
 import ImageLoader from "../../components/common/ImageLoader";
+import { getGenderAvatarIcon } from "../../utils/avatar";
+import { getJourneyCoverIcon } from "../../utils/media";
 
 import {
   likeMilestone,
@@ -48,6 +50,12 @@ function formatCount(num = 0) {
 
 function getName(user) {
   return user?.fullName || user?.name || user?.username || "Builder";
+}
+
+// Username, no "@" — same convention as every other card in the app
+// (PostCard/JourneyCard show username instead of display name).
+function getUsername(user) {
+  return user?.username || user?.fullName || user?.name || "Builder";
 }
 
 function normalizeImageUrl(url) {
@@ -155,9 +163,6 @@ function JourneyReelSlide({ milestone = {} }) {
     milestone.text ||
     milestone.description ||
     "Shared a new journey update.";
-
-  const creatorTagline = (creator?.headline || "").trim();
-  const journeyAbout = (journey?.description || "").trim();
 
   const targetDays =
     journey.targetDays || journey.totalDays || milestone.targetDays || 100;
@@ -466,7 +471,13 @@ function JourneyReelSlide({ milestone = {} }) {
           />
         )
       ) : (
-        <div className="imc-lattice absolute inset-0" style={{ background: "var(--imc-bg)" }} />
+        <div className="imc-lattice absolute inset-0" style={{ background: "var(--imc-bg)" }}>
+          <img
+            src={getJourneyCoverIcon()}
+            alt=""
+            className="absolute inset-0 m-auto h-16 w-16 rounded-full object-cover opacity-90"
+          />
+        </div>
       )}
 
       {mediaType === "video" && bgImage && (
@@ -511,7 +522,7 @@ function JourneyReelSlide({ milestone = {} }) {
       </AnimatePresence>
 
       {/* Right action rail */}
-      <div className="absolute right-3 flex flex-col items-center gap-4" style={{ bottom: 160 }}>
+      <div className="absolute right-3 flex flex-col items-center gap-4" style={{ bottom: 110 }}>
         <RailAction icon={Heart} count={likes} active={liked} onClick={handleLike} variant="like" />
         <RailAction icon={MessageCircle} count={replies} onClick={() => setShowReplies(true)} />
         <RailAction
@@ -543,12 +554,24 @@ function JourneyReelSlide({ milestone = {} }) {
                       alt={finalName}
                       eager
                       width={96}
+                      variant="avatar"
                       wrapperClassName="h-full w-full rounded-full"
                       className="h-full w-full object-cover"
+                      // Without this, ImageLoader's own loading/failed state
+                      // shows a plain generic UserRound icon instead of the
+                      // gender-appropriate fallback, which is what actually
+                      // made the avatar look "not visible" — this is the
+                      // real fix, in addition to the outer avatarBroken swap
+                      // below for when there's no avatar URL at all.
+                      fallbackSrc={getGenderAvatarIcon(creator)}
                       onError={() => setAvatarBroken(true)}
                     />
                   ) : (
-                    finalName.charAt(0).toUpperCase()
+                    <img
+                      src={getGenderAvatarIcon(creator)}
+                      alt={finalName}
+                      className="h-full w-full object-cover"
+                    />
                   )}
                 </div>
               </div>
@@ -558,7 +581,7 @@ function JourneyReelSlide({ milestone = {} }) {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <button type="button" onClick={openCreatorProfile} className="min-w-0 active:scale-[0.98]">
-                <span className="truncate text-[13px] font-black text-white">{finalName}</span>
+                <span className="truncate text-[13px] font-semibold text-white">{getUsername(creator)}</span>
               </button>
 
               {/* Follows the CREATOR's account — distinct from the "Follow
@@ -566,7 +589,7 @@ function JourneyReelSlide({ milestone = {} }) {
               {!isOwnJourney && (
                 <button
                   onClick={handleFollowUser}
-                  className="h-8 shrink-0 rounded-full border border-white/35 px-3 text-[10px] font-black text-white active:scale-95"
+                  className="h-8 shrink-0 rounded-full border border-white/35 px-3 text-[10px] font-bold text-white active:scale-95"
                   style={
                     userFollowing
                       ? { background: "rgba(255,255,255,0.16)" }
@@ -580,30 +603,33 @@ function JourneyReelSlide({ milestone = {} }) {
                 </button>
               )}
             </div>
-
-            {creatorTagline && (
-              <p className="truncate text-[11px] font-semibold text-white/75">
-                {creatorTagline}
-              </p>
-            )}
           </div>
         </div>
 
-        <div className="mt-2 flex items-center gap-2">
-          <span className="flex min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1" style={{ background: "rgba(255,255,255,0.16)" }}>
-            <Flame size={11} style={{ color: "#EC9A1E" }} />
-            <span className="truncate text-[11px] font-black text-white">
+        {/* pl-11 = avatar width (h-9 = 36px) + the gap-2 next to it (8px)
+            above, so this row's text starts directly under the username
+            instead of flush with the screen edge — the two rows read as one
+            aligned block instead of a jagged left edge. */}
+        <div className="mt-1.5 flex min-w-0 items-center gap-2 pl-11">
+          {/* Plain text instead of a filled pill/chip — one less solid
+              background block stacked under the username row keeps this
+              from reading as two duplicate "identity" rows. */}
+          <span className="flex min-w-0 items-center gap-1">
+            <Flame size={12} style={{ color: "#EC9A1E" }} />
+            <span className="truncate text-[12px] font-semibold text-white/90">
               {finalTitle}
             </span>
           </span>
 
           {/* Follows the journey's own update feed — shown any time the
               viewer hasn't already followed it, independent of whether they
-              follow the creator's account above. */}
+              follow the creator's account above. Sized and styled to match
+              the account Follow button above exactly, instead of a slightly
+              smaller icon/shorter height. */}
           {!isOwnJourney && (
             <button
               onClick={handleFollow}
-              className="h-8 shrink-0 rounded-full border border-white/35 px-3 text-[10px] font-black text-white active:scale-95"
+              className="h-8 shrink-0 rounded-full border border-white/35 px-3 text-[10px] font-bold text-white active:scale-95"
               style={
                 following
                   ? { background: "rgba(255,255,255,0.16)" }
@@ -611,31 +637,28 @@ function JourneyReelSlide({ milestone = {} }) {
               }
             >
               <span className="flex items-center gap-1">
-                {following ? <Check size={10} /> : <UserPlus size={10} />}
+                {following ? <Check size={11} /> : <UserPlus size={11} />}
                 {following ? "Following" : "Follow Journey"}
               </span>
             </button>
           )}
         </div>
 
-        {journeyAbout && (
-          <p className="mt-1 line-clamp-2 text-[11.5px] font-semibold leading-4 text-white/75">
-            {journeyAbout}
-          </p>
-        )}
-
-        <p className="mt-2 line-clamp-2 text-[13px] font-semibold leading-5 text-white">
+        {/* Journey description dropped here — the update caption below
+            already carries the same context, and a reel view only needs one
+            line of text, not two stacked paragraphs. */}
+        <p className="mt-2 line-clamp-1 text-[13px] font-semibold leading-5 text-white">
           {finalText}
         </p>
 
         <div className="mt-2.5 flex items-center justify-between">
-          <p className="text-[10px] font-extrabold text-white/75">
+          <p className="text-[10px] font-semibold text-white/75">
             Day {finalDay} of {targetDays} · {progress}%
           </p>
 
           <button
             onClick={handleViewJourney}
-            className="flex items-center gap-1 text-[11px] font-black text-white active:scale-95"
+            className="flex items-center gap-1 text-[11px] font-bold text-white active:scale-95"
           >
             View journey
             <ArrowRight size={13} />

@@ -1,6 +1,7 @@
 import { Repeat2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import CircleAction from "../common/CircleAction";
+import { getGenderAvatarIcon } from "../../utils/avatar";
 
 function getStoredUser() {
   const keys = ["user", "bharat_user", "authUser", "currentUser"];
@@ -17,17 +18,8 @@ function getStoredUser() {
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
 
-// Fixed brand hues (same in both themes). Structural colors read from the
-// mode-aware CSS vars defined in index.css instead.
-const INK = "#12141C";
-const MARIGOLD = "#EC9A1E";
-
 function getName(user) {
   return user?.fullName || user?.name || user?.username || "IMCircle Builder";
-}
-
-function getInitial(name) {
-  return name?.charAt(0)?.toUpperCase() || "B";
 }
 
 function getHeadline(user) {
@@ -146,22 +138,13 @@ function RepostCard({
             onClick={openUserProfile}
             className="shrink-0 active:scale-95"
           >
-            {avatarUrl ? (
-              <img
-                src={avatarUrl}
-                alt={name}
-                referrerPolicy="no-referrer"
-                className="h-12 w-12 rounded-full object-cover ring-2"
-                style={{ "--tw-ring-color": "var(--imc-surface)" }}
-              />
-            ) : (
-              <div
-                className="grid h-12 w-12 place-items-center rounded-full text-[18px] font-black"
-                style={{ background: INK, color: MARIGOLD }}
-              >
-                {getInitial(name)}
-              </div>
-            )}
+            <img
+              src={avatarUrl || getGenderAvatarIcon(user)}
+              alt={name}
+              referrerPolicy="no-referrer"
+              className="h-12 w-12 rounded-full object-cover ring-2"
+              style={{ "--tw-ring-color": "var(--imc-surface)" }}
+            />
           </button>
 
           <div className="min-w-0 flex-1 pt-0.5">
@@ -204,7 +187,14 @@ function RepostCard({
         )}
       </div>
 
-      <div className="mx-4 mt-4 overflow-hidden rounded-[18px]" style={{ background: "var(--imc-surface)", border: "1px solid var(--imc-border)" }}>
+      {/* PostCard/JourneyCard both use a -mx-4 breakout at their root,
+          expecting a px-4 parent to bleed against. mx-4 alone (no padding)
+          left nothing for that breakout to cancel against, so the child card
+          overflowed 16px past this box's edges and got clipped by
+          overflow-hidden — cropping the header/avatar and image. px-4 here
+          gives the breakout something to cancel, so the child lands flush
+          against this box's own rounded edge instead. */}
+      <div className="mx-4 mt-4 overflow-hidden rounded-[18px] px-4" style={{ background: "var(--imc-surface)", border: "1px solid var(--imc-border)" }}>
         {children}
       </div>
     </article>

@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 import { Send, X, ArrowLeft, MoreHorizontal, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { getSessionUser } from "../../utils/sessionUser";
+import { formatRelativeTime } from "../../utils/relativeTime";
+import { getGenderAvatarIcon } from "../../utils/avatar";
 
 function getUser(comment) {
   if (comment?.user && typeof comment.user === "object") return comment.user;
@@ -36,21 +38,10 @@ function getAvatar(user) {
   );
 }
 
-function getInitial(name) {
-  return name?.charAt(0)?.toUpperCase() || "B";
-}
-
+// Delegates to the shared PART-12 formatter (utils/relativeTime.js) — kept
+// as a thin named wrapper so every call site in this file stays unchanged.
 function formatTime(date) {
-  if (!date) return "now";
-  const diff = Date.now() - new Date(date).getTime();
-  const mins = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (mins < 1) return "now";
-  if (mins < 60) return `${mins}m`;
-  if (hours < 24) return `${hours}h`;
-  return `${days}d`;
+  return formatRelativeTime(date) || "now";
 }
 
 function Avatar({ user, onClick }) {
@@ -64,19 +55,13 @@ function Avatar({ user, onClick }) {
       onClick={onClick}
       className="shrink-0 active:scale-95"
     >
-      {avatar && !failed ? (
-        <img
-          src={avatar}
-          alt={name}
-          referrerPolicy="no-referrer"
-          onError={() => setFailed(true)}
-          className="h-10 w-10 rounded-full bg-[var(--imc-surface-2)] object-cover ring-2 ring-[var(--imc-surface)]"
-        />
-      ) : (
-        <div className="grid h-10 w-10 place-items-center rounded-full bg-[#12141C] text-[13px] font-black text-[#EC9A1E] ring-2 ring-[var(--imc-surface)]">
-          {getInitial(name)}
-        </div>
-      )}
+      <img
+        src={avatar && !failed ? avatar : getGenderAvatarIcon(user)}
+        alt={name}
+        referrerPolicy="no-referrer"
+        onError={() => avatar && !failed && setFailed(true)}
+        className="h-10 w-10 rounded-full bg-[var(--imc-surface-2)] object-cover ring-2 ring-[var(--imc-surface)]"
+      />
     </button>
   );
 }

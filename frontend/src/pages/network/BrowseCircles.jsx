@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Loader2, Sparkles, Users } from "lucide-react";
+import { ArrowLeft, Loader2, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import BottomNav from "../../components/navigation/BottomNav";
+import { getCommunityCoverIcon } from "../../utils/media";
 
 import {
   getBrowseCircles,
@@ -303,7 +304,7 @@ function BrowseCircleCard({ circle, joined, inviteOnly, requested, loading, onOp
             />
           ) : (
             <div className="grid h-full w-full place-items-center">
-              <Sparkles size={20} style={{ color: MARIGOLD }} />
+              <img src={getCommunityCoverIcon()} alt="" className="h-9 w-9 rounded-full object-cover" />
             </div>
           )}
 

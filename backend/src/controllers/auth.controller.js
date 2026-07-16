@@ -9,6 +9,7 @@ import { sendOtpSms, verifyOtpSms } from "../services/msg91.service.js";
 import { verifyGoogleCredential } from "../services/google.service.js";
 import { ensureUserIndexes } from "../services/userIndex.service.js";
 import { startTimer } from "../utils/perfTimer.js";
+import { resolveReferrerId } from "../utils/referral.js";
 
 // --- Google Play review OTP bypass -----------------------------------
 // The Play Store review team's automated/manual test devices can't
@@ -130,7 +131,7 @@ const sendSecureAuthResponse = async (req, res, user, statusCode, message, timer
 
 export const sendMobileOtp = async (req, res) => {
   try {
-    const { mobile } = req.body;
+    const { mobile, ref } = req.body;
 
     if (!mobile || !/^[6-9]\d{9}$/.test(mobile)) {
       return res.status(400).json({
@@ -142,11 +143,16 @@ export const sendMobileOtp = async (req, res) => {
     let user = await User.findOne({ mobile });
 
     if (!user) {
+      // Resolved once, up front — this account doesn't exist yet, so
+      // there's no "is this a returning user" branch to worry about.
+      const referredBy = await resolveReferrerId(ref).catch(() => null);
+
       try {
         user = await User.create({
           fullName: "BN User",
           mobile,
           verification: { mobile: false },
+          referredBy,
         });
       } catch (error) {
         if (error?.code !== 11000 || error?.keyPattern?.email !== 1) {
@@ -159,6 +165,7 @@ export const sendMobileOtp = async (req, res) => {
           fullName: "BN User",
           mobile,
           verification: { mobile: false },
+          referredBy,
         });
       }
     }
@@ -300,7 +307,7 @@ export const googleLogin = async (req, res) => {
   const timer = startTimer("auth.googleLogin");
 
   try {
-    const { credential } = req.body;
+    const { credential, ref } = req.body;
 
     const payload = await verifyGoogleCredential(credential);
     timer.step("verify_google_token");
@@ -329,6 +336,8 @@ export const googleLogin = async (req, res) => {
     timer.step("user_lookup");
 
     if (!user) {
+      const referredBy = await resolveReferrerId(ref).catch(() => null);
+
       user = await User.create({
         fullName,
         email,
@@ -338,6 +347,7 @@ export const googleLogin = async (req, res) => {
           email: true,
           mobile: false,
         },
+        referredBy,
       });
       timer.step("user_create");
     } else {
@@ -467,7 +477,7 @@ export const refreshToken = async (req, res) => {
 };
 
 export const register = async (req, res) => {
-  const { fullName, email, password } = req.body;
+  const { fullName, email, password, ref } = req.body;
 
   const existingUser = await User.findOne({ email });
 
@@ -479,11 +489,13 @@ export const register = async (req, res) => {
   }
 
   const otp = createOtp();
+  const referredBy = await resolveReferrerId(ref).catch(() => null);
 
   const user = await User.create({
     fullName,
     email,
     password,
+    referredBy,
     otp: {
       code: hashOtp(otp),
       expiresAt: Date.now() + 10 * 60 * 1000,

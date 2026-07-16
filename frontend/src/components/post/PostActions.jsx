@@ -317,7 +317,7 @@ function PostActions({ post = {}, type = "post" }) {
 
   return (
     <>
-      <div className="mt-3 flex items-center justify-between border-t border-[var(--imc-border)] pt-2">
+      <div className="mt-2.5 flex items-center gap-7 border-t border-[var(--imc-border)] pt-2.5">
         <Action icon={Heart} count={likes} active={liked} onClick={handleLike} tone="like" />
 
         <Action
@@ -339,9 +339,9 @@ function PostActions({ post = {}, type = "post" }) {
 
         <button
           onClick={handleShare}
-          className="grid h-10 min-w-10 place-items-center rounded-full border border-[var(--imc-border)] bg-[var(--imc-surface)] px-3 text-[var(--imc-text-muted)] active:scale-95"
+          className="ml-auto grid h-10 w-10 place-items-center rounded-full text-[var(--imc-text-muted)] active:scale-95"
         >
-          <Send size={18} />
+          <Send size={19} />
         </button>
       </div>
 
@@ -387,38 +387,24 @@ function PostActions({ post = {}, type = "post" }) {
 // does everywhere else (Instagram, Twitter/X, etc.), so `tone="like"` swaps
 // in the app's danger/red token for just this one action while repost/save
 // keep the normal indigo chip style.
+// Flat icon + count, no border/background chip — reads as a plain action
+// row (comment/repost/upvote style) rather than a row of buttons, with just
+// the icon (and text, when active) picking up color to show state.
 function Action({ icon: Icon, count, active, label, onClick, tone }) {
   const isLike = tone === "like";
+  const activeColor = isLike ? "var(--imc-danger)" : "var(--imc-indigo-text)";
 
   return (
     <button
       onClick={onClick}
-      className="flex h-10 min-w-10 items-center justify-center gap-1 rounded-full border px-3 text-[12px] font-black active:scale-95"
-      style={{
-        borderColor: active
-          ? isLike
-            ? "rgba(217,45,32,0.38)"
-            : "rgba(67,56,202,0.42)"
-          : "var(--imc-border)",
-        background: active
-          ? isLike
-            ? "rgba(217,45,32,0.12)"
-            : "rgba(67,56,202,0.12)"
-          : "var(--imc-surface)",
-        color: active
-          ? isLike
-            ? "var(--imc-danger)"
-            : "var(--imc-indigo-text)"
-          : "var(--imc-text-muted)",
-      }}
+      className="flex items-center gap-1.5 text-[12.5px] font-semibold active:scale-95"
+      style={{ color: active ? activeColor : "var(--imc-text-muted)" }}
     >
-      <Icon size={18} fill={active ? "currentColor" : "none"} />
-      {typeof count === "number" && count > 0 ? (
-        <span>
-          {formatCount(count)}
-          {label ? ` ${label}` : ""}
-        </span>
-      ) : null}
+      <Icon size={17} fill={active ? "currentColor" : "none"} />
+      <span>
+        {formatCount(count)}
+        {label ? ` ${label}` : ""}
+      </span>
     </button>
   );
 }

@@ -47,6 +47,8 @@ import {
 // from followJourney/unfollowJourney above.
 import { followUserById, unfollowUserById } from "../../api/userApi";
 import { useSEO } from "../../hooks/useSEO";
+import { getGenderAvatarIcon } from "../../utils/avatar";
+import { getJourneyCoverIcon } from "../../utils/media";
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
 const dayOptions = [7, 14, 21, 30, 50, 75, 100, 180, 365];
@@ -403,7 +405,7 @@ function JourneyProfile() {
             ) : (
               <div className="imc-lattice flex h-full items-center justify-center">
                 <div className="text-center">
-                  <Flame className="mx-auto" style={{ color: "var(--imc-indigo)" }} size={34} />
+                  <img src={getJourneyCoverIcon()} alt="" className="mx-auto h-11 w-11 rounded-full object-cover" />
                   <p className="mt-2 text-[11px] font-black uppercase tracking-[0.18em]" style={{ color: "var(--imc-indigo)" }}>
                     ImCircle Journey
                   </p>
@@ -492,7 +494,11 @@ function JourneyProfile() {
                           onError={() => setAvatarBroken(true)}
                         />
                       ) : (
-                        getName(creator).charAt(0).toUpperCase()
+                        <img
+                          src={getGenderAvatarIcon(creator)}
+                          alt={getName(creator)}
+                          className="h-full w-full object-cover"
+                        />
                       )}
                     </div>
                   </div>

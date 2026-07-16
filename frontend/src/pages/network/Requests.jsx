@@ -7,12 +7,12 @@ import {
   Loader2,
   MapPin,
   Search,
-  Sparkles,
   Users,
   X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import ProfileAvatar from "../../components/common/Avatar";
+import { getCommunityCoverIcon } from "../../utils/media";
 
 import {
   acceptCircleRequest,
@@ -403,7 +403,7 @@ function CircleCard({ circle, joined, requested, loading, onOpen, onAction }) {
     <article className="overflow-hidden rounded-[19px] bg-[var(--imc-surface)]" style={{ border: `1px solid ${LINE}` }}>
       <button type="button" onClick={onOpen} className="block w-full text-left">
         <div className="relative h-[82px] bg-[linear-gradient(135deg,rgba(67,56,202,0.14),rgba(236,154,30,0.18))]">
-          {cover ? <img src={cover} alt={circle?.name || "Circle"} className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center"><Sparkles size={22} style={{ color: MARIGOLD }} /></div>}
+          {cover ? <img src={cover} alt={circle?.name || "Circle"} className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center"><img src={getCommunityCoverIcon()} alt="" className="h-8 w-8 rounded-full object-cover" /></div>}
           {inviteOnly && <span className="absolute left-2 top-2 rounded-full bg-white/90 px-2 py-1 text-[8px] font-black" style={{ color: INDIGO }}>Invite only</span>}
         </div>
         <div className="px-3 pt-2.5">

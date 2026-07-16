@@ -21,6 +21,8 @@ const Analytics = lazy(() => import("../pages/activity/Analytics"));
 const MyProjects = lazy(() => import("../pages/activity/MyProjects"));
 const Home = lazy(() => import("../pages/home/Home"));
 const DiscoverJourneys = lazy(() => import("../pages/discover/DiscoverJourneys"));
+const Spotlight = lazy(() => import("../pages/spotlight/Spotlight"));
+const HashtagFeed = lazy(() => import("../pages/hashtag/HashtagFeed"));
 const CreatePost = lazy(() => import("../pages/create/CreatePost"));
 const CreateLearning = lazy(() => import("../pages/create/CreateLearning"));
 const CreateJourney = lazy(() => import("../pages/create/CreateJourney"));
@@ -126,6 +128,24 @@ export default function AppRoutes() {
         element={
           <Private>
             <DiscoverJourneys />
+          </Private>
+        }
+      />
+
+      <Route
+        path="/spotlight"
+        element={
+          <Private>
+            <Spotlight />
+          </Private>
+        }
+      />
+
+      <Route
+        path="/hashtag/:tag"
+        element={
+          <Private>
+            <HashtagFeed />
           </Private>
         }
       />

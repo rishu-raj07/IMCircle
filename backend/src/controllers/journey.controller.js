@@ -10,11 +10,12 @@ import JourneyMilestoneSave from "../models/JourneyMilestoneSave.js";
 import cloudinary from "../config/cloudinary.js";
 import { addBuilderScore } from "../services/builderScore.service.js";
 import { sendMail } from "../utils/mailer.js";
+import { processContentText } from "../services/contentParsing.service.js";
 
 const REPORT_EMAIL = process.env.REPORT_NOTIFY_EMAIL || "report@imcircle.com";
 
 const userFields =
-  "fullName name username avatar profilePicture profileImage image photo photoURL picture googlePicture headline role";
+  "fullName name username avatar profilePicture profileImage image photo photoURL picture googlePicture headline role gender";
 
 // Rough keyword sets for each `User.primaryInterest` option, used to give a
 // personalization boost to journeys whose title/description/tags mention
@@ -404,6 +405,14 @@ export const createMilestone = async (req, res) => {
       referenceId: milestone._id,
       referenceModel: "JourneyMilestone",
     });
+
+    processContentText({
+      text: `${cleanTitle} ${milestone.description || ""}`,
+      authorId: req.user._id,
+      contentType: "journey_milestone",
+      contentId: milestone._id,
+      link: `/journey/${journey._id}`,
+    }).catch(() => {});
 
     const populatedMilestone = await JourneyMilestone.findById(milestone._id)
       .populate("creator", userFields)

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 import { getBlockedUsers, unblockUserById } from "../../api/userApi";
 import BottomNav from "../../components/navigation/BottomNav";
+import { getGenderAvatarIcon } from "../../utils/avatar";
 
 function getName(user) {
   return user?.fullName || user?.name || user?.username || "User";
@@ -88,15 +89,11 @@ function BlockedAccounts() {
                 className="flex items-center gap-3 border-b border-[var(--imc-border)] py-3.5"
               >
                 <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-full bg-[rgba(67,56,202,0.12)] text-[15px] font-black text-[var(--imc-indigo-text)]">
-                  {user.avatar ? (
-                    <img
-                      src={user.avatar}
-                      alt={getName(user)}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    getName(user).charAt(0).toUpperCase()
-                  )}
+                  <img
+                    src={user.avatar || getGenderAvatarIcon(user)}
+                    alt={getName(user)}
+                    className="h-full w-full object-cover"
+                  />
                 </div>
 
                 <div className="min-w-0 flex-1">

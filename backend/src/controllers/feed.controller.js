@@ -18,8 +18,8 @@ import FeedView from "../models/FeedView.js";
 import CircleRequest from "../models/CircleRequest.js";
 
 const authorFields =
-  "fullName name username avatar profilePicture profileImage photo photoURL picture headline role field primaryInterest location followers following circle blockedUsers isProfileCompleted profileCompletionPercent";
-const commenterFields = "fullName username avatar profilePicture profileImage";
+  "fullName name username avatar profilePicture profileImage photo photoURL picture headline role field primaryInterest location followers following circle blockedUsers isProfileCompleted profileCompletionPercent gender";
+const commenterFields = "fullName username avatar profilePicture profileImage gender";
 
 const FEED_WEIGHTS = {
   circleBoost: 50,
@@ -136,6 +136,7 @@ const buildCircleProof = (comments = [], circleSet, viewerId) => {
       username: user?.username || "",
       avatar: user?.avatar || user?.profilePicture || user?.profileImage || "",
       commentedAt: comment.createdAt,
+      text: comment.text || "",
     });
   }
 
@@ -147,6 +148,10 @@ const buildCircleProof = (comments = [], circleSet, viewerId) => {
     avatars: relevant.slice(0, 3),
     othersCount: relevant.length - 1,
     totalCount: relevant.length,
+    // The circle member's actual comment text, so the feed banner can show
+    // it inline in the same card instead of just "X commented" with no
+    // content.
+    commentText: relevant[0].text || "",
   };
 };
 

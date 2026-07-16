@@ -57,3 +57,12 @@ export const getImageUrl = (media, variant = "feed") => getMediaUrl(media, varia
 export const getAvatarUrl = (user) => getMediaUrl(user?.avatar, "profile");
 
 export const getCoverUrl = (user) => getMediaUrl(user?.coverImage, "cover");
+
+// Branded placeholders shown wherever a journey or community/circle has no
+// cover photo uploaded, instead of a plain generic icon (Flame/Sparkles/
+// Users, previously different at almost every call site). These two files
+// live in /public (frontend/public/journey-icon.png,
+// frontend/public/community-icon.png), same as the gender avatar icons —
+// referenced as root-relative paths.
+export const getJourneyCoverIcon = () => "/journey-icon.png";
+export const getCommunityCoverIcon = () => "/community-icon.png";

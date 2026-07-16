@@ -56,9 +56,17 @@
   /* to look correct in both modes should read from these instead of the    */
   /* raw brand tokens for backgrounds/text/borders.                        */
   /* ---------------------------------------------------------------------- */
-  --imc-bg: #ffffff;
+  /* --imc-bg is deliberately a soft neutral gray, NOT white, in light mode —
+     it's the "gap" canvas that shows between feed cards (--imc-surface,
+     still pure white) so each card reads as a distinct, separated tile
+     instead of blending flush into the page the way two identical whites
+     do. Same pattern LinkedIn/Twitter/Instagram web all use. Dark mode
+     already had this contrast (bg #101114 vs surface #18191e below); light
+     mode previously didn't (both were #ffffff), which is what made cards
+     hard to tell apart. */
+  --imc-bg: #f1f2f5;
   --imc-surface: #ffffff;
-  --imc-surface-2: #ffffff;
+  --imc-surface-2: #f7f7f9;
   --imc-surface-strong: #12141c;
   --imc-surface-strong-border: transparent;
   --imc-on-surface-strong: #ffffff;
@@ -71,6 +79,14 @@
   --imc-action-border: rgba(67, 56, 202, 0.2);
   --imc-marigold-text: #8a5a12;
   --imc-marigold-soft: rgba(236, 154, 30, 0.14);
+  /* Several screens (CreateJourney, CreatePost, JourneyProfile, Profile,
+     Network, Requests...) reference `--imc-indigo-soft` expecting an
+     indigo-tinted badge background, but that token was never actually
+     defined anywhere — those backgrounds were silently rendering as
+     transparent this whole time. `--imc-action-soft` is the real "indigo,
+     soft" pair (see --imc-action-border for its border half), so alias it
+     here rather than touch every call site. */
+  --imc-indigo-soft: var(--imc-action-soft);
 
   /* Scoped to the Learning reader only (Learning View redesign) — a warm
      cream surface distinct from the neutral --imc-bg used app-wide.
@@ -109,6 +125,7 @@
   --imc-action-border: rgba(255, 255, 255, 0.18);
   --imc-marigold-text: #f4b84a;
   --imc-marigold-soft: rgba(236, 154, 30, 0.12);
+  --imc-indigo-soft: var(--imc-action-soft);
 
   --imc-reel-scrim-rgb: 18, 20, 28;
   --imc-reel-chip-bg: rgba(255, 255, 255, 0.14);

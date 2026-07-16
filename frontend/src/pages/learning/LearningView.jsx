@@ -31,6 +31,7 @@ import LearningActionBar from "../../components/learning/LearningActionBar";
 import { getOptimizedImageUrl } from "../../utils/mediaOptimization";
 import { trackEvent } from "../../utils/analyticsTracker";
 import { useSEO } from "../../hooks/useSEO";
+import { getGenderAvatarIcon } from "../../utils/avatar";
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
 const MAX_THOUGHT_LENGTH = 200;
@@ -922,18 +923,12 @@ export default function LearningView() {
             <div className="flex min-w-0 flex-1 items-center gap-2.5">
               <div className="imc-ring grid h-[42px] w-[42px] shrink-0 place-items-center rounded-full p-[2px]">
                 <div className="grid h-full w-full place-items-center overflow-hidden rounded-full bg-[var(--imc-surface)]">
-                  {authorAvatar ? (
-                    <img
-                      src={authorAvatar}
-                      alt={authorName}
-                      referrerPolicy="no-referrer"
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-[13px] font-black text-[var(--imc-marigold-dark)]">
-                      {authorName.charAt(0).toUpperCase()}
-                    </span>
-                  )}
+                  <img
+                    src={authorAvatar || getGenderAvatarIcon(author)}
+                    alt={authorName}
+                    referrerPolicy="no-referrer"
+                    className="h-full w-full object-cover"
+                  />
                 </div>
               </div>
 
@@ -1192,21 +1187,12 @@ export default function LearningView() {
                             className="flex w-full items-center gap-3 text-left active:scale-[0.99]"
                           >
                             <div className="relative h-11 w-11 shrink-0 rounded-full ring-2 ring-[var(--imc-surface)]">
-                              {avatar ? (
-                                <img
-                                  src={avatar}
-                                  alt={getPersonName(person)}
-                                  referrerPolicy="no-referrer"
-                                  className="h-full w-full rounded-full object-cover"
-                                />
-                              ) : (
-                                <div
-                                  className="grid h-full w-full place-items-center rounded-full text-[14px] font-black"
-                                  style={{ background: "#12141C", color: "#EC9A1E" }}
-                                >
-                                  {getPersonName(person).charAt(0).toUpperCase()}
-                                </div>
-                              )}
+                              <img
+                                src={avatar || getGenderAvatarIcon(person)}
+                                alt={getPersonName(person)}
+                                referrerPolicy="no-referrer"
+                                className="h-full w-full rounded-full object-cover"
+                              />
 
                               {activityTab === "likes" && person?.liked ? (
                                 <span className="absolute -bottom-1 -right-1 grid h-5 w-5 place-items-center rounded-full border-2 border-[var(--imc-surface)] bg-[var(--imc-surface)]">

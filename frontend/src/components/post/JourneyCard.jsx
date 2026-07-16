@@ -1,4 +1,5 @@
 import { memo, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Eye,
   Heart,
@@ -12,6 +13,8 @@ import {
   Flame,
   CalendarDays,
   Target,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 
 import CommentSheet from "../common/CommentSheet";
@@ -26,6 +29,7 @@ import ProfileCompleteBadge from "../badges/ProfileCompleteBadge";
 import JourneyMenu from "./JourneyMenu";
 import JourneyMilestoneDetail from "./JourneyMilestoneDetail";
 import { shareLink } from "../../utils/shareLink";
+import { formatRelativeTime as formatSharedRelativeTime } from "../../utils/relativeTime";
 
 import {
   likeMilestone,
@@ -44,6 +48,8 @@ import {
 // actions: one near the title for the journey, one near the creator's
 // name for the person (via the shared CircleAction component).
 import { trackEvent } from "../../utils/analyticsTracker";
+import { getGenderAvatarIcon } from "../../utils/avatar";
+import { getJourneyCoverIcon } from "../../utils/media";
 import { useNavigate } from "react-router-dom";
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
@@ -55,29 +61,22 @@ const INK = "#12141C";
 const MARIGOLD = "#EC9A1E";
 const MARIGOLD_DARK = "var(--imc-marigold-text)";
 const INDIGO = "#4338CA";
+// A very faint wash of the brand indigo over the card's surface — not a
+// "colored" card, just enough of a shade that a Journey card reads
+// differently from a plain white Post card at a glance while scrolling the
+// feed. Kept as a literal low-alpha overlay (rather than a flat color) so it
+// blends naturally with whatever page background sits behind it in either
+// theme.
+const JOURNEY_TINT = "rgba(67, 56, 202, 0.035)";
 
+// Delegates to the shared PART-12 formatter (utils/relativeTime.js) — kept
+// as a thin named wrapper (matching PostCard.jsx/CommentSheet.jsx's pattern)
+// so the one call site below stays unchanged. This used to have its own
+// separate logic that fell back to an absolute "26 Jun" date past 7 days;
+// the shared formatter now stays relative indefinitely (days -> months ->
+// years), which is what fixes that.
 function formatRelativeTime(value) {
-  if (!value) return "";
-
-  const date = new Date(value);
-  const diffMs = Date.now() - date.getTime();
-  if (Number.isNaN(diffMs) || diffMs < 0) return "";
-
-  const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes}m ago`;
-
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-
-  try {
-    return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-  } catch {
-    return "";
-  }
+  return formatSharedRelativeTime(value);
 }
 
 function formatCount(num = 0) {
@@ -89,6 +88,33 @@ function formatCount(num = 0) {
 
 function getName(user) {
   return user?.fullName || user?.name || user?.username || "Builder";
+}
+
+function cleanText(value) {
+  if (!value || typeof value !== "string") return "";
+  if (value === "[object Object]") return "";
+  return value;
+}
+
+// Same shape/lookup order as PostCard.jsx's getRepostText — kept as its own
+// copy here (rather than a shared import) since milestone.myRepost/repost
+// use the same field names as post.myRepost/repost but live on a different
+// model. Only matters when milestone.isRepostView is true, set by whichever
+// screen renders a reposted journey (see Profile.jsx's repost transform).
+function getRepostText(milestone) {
+  return cleanText(
+    milestone?.repostText ||
+      milestone?.repostCaption ||
+      milestone?.quoteText ||
+      milestone?.quote ||
+      milestone?.caption ||
+      milestone?.myRepost?.caption ||
+      milestone?.myRepost?.text ||
+      milestone?.myRepost?.thought ||
+      milestone?.repost?.text ||
+      milestone?.repost?.caption ||
+      ""
+  );
 }
 
 function normalizeImageUrl(url) {
@@ -198,6 +224,8 @@ function JourneyCard({ milestone = {} }) {
     milestone.description ||
     "Shared a new journey update.";
 
+  const repostText = getRepostText(milestone);
+
   // The journey's "About" text (distinct from finalText above, which is
   // this specific milestone's update caption) — this is what the card
   // shows with a 50-char preview + "read more" toggle.
@@ -259,6 +287,10 @@ function JourneyCard({ milestone = {} }) {
   const [showRepost, setShowRepost] = useState(false);
   const [showViews, setShowViews] = useState(false);
   const [showReel, setShowReel] = useState(false);
+  // Replaces the old always-visible "Why it was missed" card — now a
+  // compact chip up top that opens this bottom sheet on demand, saving
+  // vertical space while keeping the exact same underlying data/logic.
+  const [showMissedSheet, setShowMissedSheet] = useState(false);
 
   useEffect(() => {
     setLikes(milestone.likesCount || milestone.likes?.length || 0);
@@ -426,93 +458,92 @@ function JourneyCard({ milestone = {} }) {
 
   if (journeyDeleted) return null;
 
+  const statusChip = isJourneyInactive
+    ? isMissed
+      ? { label: "Journey Missed", icon: AlertTriangle, onClick: () => setShowMissedSheet(true) }
+      : { label: "Completed", icon: Check, onClick: () => setShowReel(true) }
+    : { label: `Day ${finalDay}`, icon: Flame, onClick: () => setShowReel(true), marigold: true };
+
   return (
     <>
-      <article className="imc-enter">
-        <SocialProofBanner proof={milestone.circleProof} />
+      <article className="imc-enter -mx-4">
+        <SocialProofBanner proof={milestone.circleProof} background={JOURNEY_TINT} />
 
         <div
           className="overflow-hidden"
           style={{
-            background: "var(--imc-surface)",
-            border: "1px solid var(--imc-border)",
+            background: JOURNEY_TINT,
           }}
         >
           <div
-            className="relative z-20 px-3 py-2.5"
-            style={{ background: "var(--imc-surface)" }}
+            className="relative z-20 px-3.5 pt-3 pb-2.5"
+            style={{ background: JOURNEY_TINT }}
           >
-            {/* Creator header: avatar, name + verified badge + account
-                Follow button (inline), @handle, timestamp + menu. */}
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-2">
-                <button type="button" onClick={openCreatorProfile} className="shrink-0 active:scale-95">
-                  <div className="h-9 w-9 overflow-hidden rounded-full" style={{ background: "var(--imc-surface-2)" }}>
-                    {avatar && !avatarBroken ? (
-                      <ImageLoader
-                        src={avatar}
-                        alt={finalName}
-                        className="h-full w-full object-cover"
-                        wrapperClassName="h-full w-full rounded-full"
-                        width={96}
-                        onError={() => setAvatarBroken(true)}
-                      />
-                    ) : (
-                      <div
-                        className="grid h-full w-full place-items-center text-[13px] font-black"
-                        style={{ color: "var(--imc-text)" }}
-                      >
-                        {finalName.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-                </button>
+            {/* Compressed creator header: avatar, name (+ badges) on the
+                left, timestamp + three-dot menu pinned top-right. No
+                @handle line — just the name. */}
+            <div className="flex items-start gap-2.5">
+              <button type="button" onClick={openCreatorProfile} className="shrink-0 active:scale-95">
+                <div className="h-10 w-10 overflow-hidden rounded-full" style={{ background: "var(--imc-surface-2)" }}>
+                  {avatar && !avatarBroken ? (
+                    <ImageLoader
+                      src={avatar}
+                      alt={finalName}
+                      className="h-full w-full object-cover"
+                      wrapperClassName="h-full w-full rounded-full"
+                      width={96}
+                      onError={() => setAvatarBroken(true)}
+                    />
+                  ) : (
+                    <img
+                      src={getGenderAvatarIcon(creator)}
+                      alt={finalName}
+                      className="h-full w-full object-cover"
+                    />
+                  )}
+                </div>
+              </button>
 
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={openCreatorProfile}
-                      className="flex min-w-0 items-center gap-1 text-left active:scale-[0.98]"
-                    >
-                      <p className="truncate text-[13px] font-black" style={{ color: "var(--imc-text)" }}>
-                        {finalName}
-                      </p>
-                      {isMe && (
-                        <span className="shrink-0 text-[11px] font-bold" style={{ color: "var(--imc-text-muted)" }}>
-                          · You
-                        </span>
-                      )}
-                      {isProfileComplete && (
-                        <ProfileCompleteBadge name={finalName} size="sm" />
-                      )}
-                    </button>
-
-                    {/* Circle-requests the CREATOR's account — distinct from
-                        the "Follow Journey" button next to the title below. */}
-                    {!isOwnJourney && creatorId && (
-                      <CircleAction
-                        userId={creatorId}
-                        isCircleMember={inCreatorCircle}
-                        isRequested={creatorCircleRequested}
-                        size="xs"
-                      />
-                    )}
-                  </div>
-                  {creator?.username && (
-                    <p className="truncate text-[10px] font-bold" style={{ color: "var(--imc-text-muted)" }}>
-                      @{creator.username}
+              <div className="min-w-0 flex-1 pt-0.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={openCreatorProfile}
+                    className="flex min-w-0 items-center gap-1 text-left active:scale-[0.98]"
+                  >
+                    <p className="truncate text-[14px] font-bold" style={{ color: "var(--imc-text)" }}>
+                      {creator?.username || finalName}
                     </p>
+                    {isMe && (
+                      <span className="shrink-0 text-[11px] font-medium" style={{ color: "var(--imc-text-muted)" }}>
+                        · You
+                      </span>
+                    )}
+                    {isProfileComplete && (
+                      <ProfileCompleteBadge name={finalName} size="sm" />
+                    )}
+                  </button>
+
+                  {/* Circle-requests the CREATOR's account — distinct from
+                      the "Follow Journey" chip further below. */}
+                  {!isOwnJourney && creatorId && (
+                    <CircleAction
+                      userId={creatorId}
+                      isCircleMember={inCreatorCircle}
+                      isRequested={creatorCircleRequested}
+                      size="xs"
+                    />
                   )}
                 </div>
               </div>
 
               <div className="flex shrink-0 items-center gap-1.5">
-                {milestone.createdAt && (
-                  <p className="text-[10px] font-bold" style={{ color: "var(--imc-text-muted)" }}>
-                    {formatRelativeTime(milestone.createdAt)}
-                  </p>
-                )}
+                {/* Falls back to updatedAt so a milestone whose createdAt
+                    didn't survive a particular API projection still shows a
+                    real time instead of this slot silently disappearing. */}
+                <p className="text-[11px] font-medium" style={{ color: "var(--imc-text-muted)" }}>
+                  {formatRelativeTime(milestone.createdAt || milestone.updatedAt) || "now"}
+                </p>
                 <JourneyMenu
                   journeyId={journeyId}
                   isMine={isOwnJourney}
@@ -521,77 +552,108 @@ function JourneyCard({ milestone = {} }) {
               </div>
             </div>
 
-            {/* Journey title + the journey-updates Follow button. */}
-            <div className="mt-1.5 flex items-center gap-2">
-              <h2 className="line-clamp-1 min-w-0 text-[14px] font-black leading-5" style={{ color: "var(--imc-text)" }}>
+            {/* Mirrors PostCard's "Your repost note" box — only renders
+                when this milestone is being shown as a repost (see
+                milestone.isRepostView, set by the profile screens' repost
+                transform), so a plain journey card is unaffected. */}
+            {milestone?.isRepostView && repostText && (
+              <div
+                className="mt-3 rounded-[18px] px-4 py-3"
+                style={{ background: "rgba(67,56,202,0.06)" }}
+              >
+                <p className="text-[12px] font-bold" style={{ color: "var(--imc-indigo-text)" }}>
+                  Your repost note
+                </p>
+                <p className="mt-1 whitespace-pre-line text-[13px] font-semibold leading-5" style={{ color: "var(--imc-text)" }}>
+                  {repostText}
+                </p>
+              </div>
+            )}
+
+            {/* Journey title — large but clean, one line, semibold (not
+                the heaviest weight in the card; that's reserved for the
+                name above and key numbers below). Description underneath in
+                lighter, regular-weight type, only when it exists. */}
+            <div className="mt-1.5">
+              <h2 className="truncate text-[16px] font-semibold leading-5" style={{ color: "var(--imc-text)" }}>
                 {finalTitle}
               </h2>
+
+              {aboutText && (
+                <p className="mt-1 text-[12.5px] font-normal leading-5" style={{ color: "var(--imc-text-muted)" }}>
+                  {descExpanded ? aboutText : aboutPreview}
+                  {aboutText.length > 50 && (
+                    <button
+                      type="button"
+                      onClick={() => setDescExpanded((prev) => !prev)}
+                      className="ml-1 font-semibold"
+                      style={{ color: "var(--imc-indigo-text)" }}
+                    >
+                      {descExpanded ? "Show less" : "more"}
+                    </button>
+                  )}
+                </p>
+              )}
+            </div>
+
+            {/* Status chips — a 2-second scan of where this journey stands.
+                Neutral gray for a paused journey (never alarming red); tap
+                opens the missed-day detail as a bottom sheet instead of a
+                permanent, space-hogging card. Follow Journey lives here too
+                as a chip instead of crowding the title line. */}
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+              {/* Tapping either chip opens the same journey-detail popup as
+                  tapping the hero image — the paused chip is the one
+                  exception, since that one specifically explains why the
+                  journey stalled. */}
+              <button
+                type="button"
+                onClick={statusChip.onClick}
+                className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[10.5px] font-semibold active:scale-95"
+                style={
+                  statusChip.marigold
+                    ? { background: "var(--imc-marigold-soft)", color: MARIGOLD_DARK }
+                    : { background: "var(--imc-surface-2)", color: "var(--imc-text-muted)" }
+                }
+              >
+                <statusChip.icon size={11} />
+                {statusChip.label}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowReel(true)}
+                className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[10.5px] font-semibold active:scale-95"
+                style={{ background: "var(--imc-action-soft)", color: "var(--imc-indigo-text)" }}
+              >
+                <Target size={11} />
+                {progress}% Complete
+              </button>
 
               {!isOwnJourney && !isJourneyInactive && (
                 <button
                   type="button"
                   onClick={handleFollow}
-                  className="shrink-0 min-h-8 rounded-full border px-3 py-1.5 text-[10px] font-bold transition active:scale-95"
+                  className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[10.5px] font-semibold transition active:scale-95"
                   style={
                     following
-                      ? {
-                          background: "var(--imc-surface-2)",
-                          borderColor: "var(--imc-border)",
-                          color: "var(--imc-text-muted)",
-                        }
-                      : {
-                          background: "var(--imc-action-soft)",
-                          borderColor: "var(--imc-action-border)",
-                          color: "var(--imc-indigo-text)",
-                        }
+                      ? { background: "var(--imc-surface-2)", color: "var(--imc-text-muted)" }
+                      : { background: "var(--imc-action-soft)", color: "var(--imc-indigo-text)" }
                   }
                 >
-                  <span className="flex items-center gap-1">
-                    {following ? <Check size={11} /> : <UserPlus size={11} />}
-                    {following ? "Following" : "Follow Journey"}
-                  </span>
+                  {following ? <Check size={11} /> : <UserPlus size={11} />}
+                  {following ? "Following" : "Follow Journey"}
                 </button>
               )}
-
-              {isJourneyInactive && (
-                <span className="shrink-0 rounded-full border border-[rgba(217,45,32,0.2)] bg-[rgba(217,45,32,0.1)] px-2 py-0.5 text-[9px] font-black text-[var(--imc-danger)]">
-                  {isMissed ? "Missed this journey" : "Completed"}
-                </span>
-              )}
             </div>
-
-            {/* About this journey — 50-char preview, expandable up to the
-                100-char cap enforced on the create/edit forms. */}
-            {aboutText && (
-              <div className="mt-1">
-                <p className="text-[11.5px] font-semibold leading-4" style={{ color: "var(--imc-text)" }}>
-                  {descExpanded ? aboutText : aboutPreview}
-                </p>
-                {aboutText.length > 50 && (
-                  <button
-                    type="button"
-                    onClick={() => setDescExpanded((prev) => !prev)}
-                    className="text-[10.5px] font-black"
-                    style={{ color: "var(--imc-indigo-text)" }}
-                  >
-                    {descExpanded ? "Show less" : "...read more"}
-                  </button>
-                )}
-              </div>
-            )}
-
-            {isMissed && (
-              <div className="mt-2 rounded-2xl border border-[rgba(67,56,202,0.18)] bg-[var(--imc-indigo-soft)] px-3 py-2.5">
-                <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[var(--imc-indigo-text)]">
-                  {journey.finalNote ? "Creator's final note" : "Why it was missed"}
-                </p>
-                <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-[11.5px] font-semibold leading-5 text-[var(--imc-text)]">
-                  {missedNote || "The creator has not added a final reflection yet."}
-                </p>
-              </div>
-            )}
           </div>
 
+          {/* Hero image — full width, edge-to-edge, no cropping (portrait
+              stays portrait, landscape stays landscape via
+              ResponsivePostMedia's own aspect-ratio logic). The floating %
+              bubble that used to sit on top of it is gone; progress now
+              lives in the thin bar directly underneath, connected instead
+              of disconnected. */}
           {firstImage ? (
             <ResponsivePostMedia
               src={firstImage}
@@ -599,35 +661,10 @@ function JourneyCard({ milestone = {} }) {
               onClick={() => setShowReel(true)}
               rounded="rounded-none"
             >
-              <div
-                className="absolute left-2.5 top-2.5 flex items-center gap-1 rounded-full px-2.5 py-1 text-[9px] font-black text-white"
-                style={{ background: "rgba(18,20,28,0.62)", backdropFilter: "blur(6px)" }}
-              >
-                <Flame size={11} style={{ color: MARIGOLD }} />
-                Day {finalDay}
-              </div>
-
-              <div
-                className="absolute right-2.5 top-2.5 grid h-14 w-14 place-items-center rounded-full"
-                style={{
-                  background: `conic-gradient(${INDIGO} ${progress * 3.6}deg, rgba(255,255,255,0.35) 0deg)`,
-                }}
-              >
-                <div
-                  className="grid h-[46px] w-[46px] place-items-center rounded-full text-center"
-                  style={{ background: "rgba(18,20,28,0.72)", backdropFilter: "blur(6px)" }}
-                >
-                  <div>
-                    <p className="text-[12px] font-black leading-3 text-white">{progress}%</p>
-                    <p className="text-[6px] font-black uppercase leading-none text-white/75">Completed</p>
-                  </div>
-                </div>
-              </div>
-
               {milestone.achievement && (
                 <div
-                  className="absolute bottom-2.5 left-2.5 inline-flex max-w-[calc(100%-20px)] items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-black"
-                  style={{ background: "rgba(18,20,28,0.62)", color: MARIGOLD, backdropFilter: "blur(6px)" }}
+                  className="absolute bottom-2.5 left-2.5 inline-flex max-w-[calc(100%-20px)] items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-bold"
+                  style={{ background: "rgba(18,20,28,0.55)", color: MARIGOLD, backdropFilter: "blur(6px)" }}
                 >
                   <Trophy size={12} />
                   <span className="truncate">{milestone.achievement}</span>
@@ -643,7 +680,7 @@ function JourneyCard({ milestone = {} }) {
                 className="flex items-center gap-1.5 rounded-full px-3 py-1"
                 style={{ background: "var(--imc-surface)", border: "1px solid var(--imc-border)" }}
               >
-                <Flame size={12} style={{ color: MARIGOLD }} />
+                <img src={getJourneyCoverIcon()} alt="" className="h-3.5 w-3.5 rounded-full object-cover" />
                 <span className="text-[10px] font-bold" style={{ color: "var(--imc-text-muted)" }}>
                   No proof photo yet
                 </span>
@@ -651,10 +688,23 @@ function JourneyCard({ milestone = {} }) {
             </div>
           )}
 
-          <div className="px-3 py-2">
+          <div className="px-3.5 pt-3">
+            {/* Thin progress bar — replaces the old floating conic-gradient
+                circle. Sits right under the image so progress reads as part
+                of the journey, not a badge stuck on top of it. */}
+            <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "var(--imc-surface-2)" }}>
+              <div
+                className="h-full rounded-full transition-[width] duration-500 ease-out"
+                style={{ width: `${progress}%`, background: INDIGO }}
+              />
+            </div>
+            <p className="mt-1.5 text-[11px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>
+              {progress}% Completed
+            </p>
+
             {milestone.achievement && !firstImage && (
               <div
-                className="mb-1.5 inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-black"
+                className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-bold"
                 style={{ background: "var(--imc-marigold-soft)", color: MARIGOLD_DARK }}
               >
                 <Trophy size={12} />
@@ -662,40 +712,43 @@ function JourneyCard({ milestone = {} }) {
               </div>
             )}
 
-            <div className="flex items-center justify-between gap-2 rounded-xl px-2.5 py-1.5" style={{ background: "var(--imc-surface-2)" }}>
+            {/* Journey statistics — icons + equal spacing, no boxed
+                background, just a clean plain row so it doesn't read as
+                "another card inside the card". */}
+            <div className="mt-3 flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                <CalendarDays size={12} style={{ color: "var(--imc-indigo-text)" }} />
-                <p className="text-[10.5px] font-black" style={{ color: "var(--imc-text)" }}>
+                <CalendarDays size={13} style={{ color: "var(--imc-indigo-text)" }} />
+                <p className="text-[11px] font-semibold" style={{ color: "var(--imc-text)" }}>
                   {targetDays} Days
                 </p>
               </div>
 
               <div className="flex items-center gap-1.5">
-                <Flame size={12} style={{ color: MARIGOLD_DARK }} />
-                <p className="text-[10.5px] font-black" style={{ color: "var(--imc-text)" }}>
+                <Flame size={13} style={{ color: MARIGOLD_DARK }} />
+                <p className="text-[11px] font-semibold" style={{ color: "var(--imc-text)" }}>
                   Day {finalDay}
                 </p>
               </div>
 
               <div className="flex items-center gap-1.5">
-                <Target size={12} style={{ color: "var(--imc-indigo-text)" }} />
-                <p className="text-[10.5px] font-black" style={{ color: "var(--imc-text)" }}>
+                <Target size={13} style={{ color: "var(--imc-indigo-text)" }} />
+                <p className="text-[11px] font-semibold" style={{ color: "var(--imc-text)" }}>
                   {progress}%
                 </p>
               </div>
 
               <button
                 onClick={() => setShowViews(true)}
-                className="flex items-center gap-1 text-[10px] font-bold active:scale-95"
+                className="flex items-center gap-1 text-[11px] font-semibold active:scale-95"
                 style={{ color: "var(--imc-text-muted)" }}
               >
-                <Eye size={12} />
+                <Eye size={13} />
                 <span>{formatCount(impressions)}</span>
               </button>
             </div>
 
             <div
-              className="mt-1.5 flex items-center justify-between pt-1.5"
+              className="mt-2.5 flex items-center gap-7 pt-2.5"
               style={{ borderTop: "1px solid var(--imc-border)" }}
             >
               <Action
@@ -725,10 +778,10 @@ function JourneyCard({ milestone = {} }) {
 
               <button
                 onClick={handleShare}
-                className="rounded-full p-1.5 active:scale-95"
+                className="ml-auto grid h-10 w-10 place-items-center rounded-full active:scale-95"
                 style={{ color: "var(--imc-text-muted)" }}
               >
-                <Send size={16} />
+                <Send size={18} />
               </button>
             </div>
 
@@ -738,19 +791,32 @@ function JourneyCard({ milestone = {} }) {
               onOpen={() => setShowReplies(true)}
             />
 
+            {/* Clean inline CTA — plain text + arrow, no button chrome — so
+                it reads as part of the same continuous card. */}
             <button
               onClick={handleViewJourney}
-              className="mt-2 flex w-full items-center justify-between gap-2 rounded-[14px] px-3 py-2 active:scale-[0.98]"
-              style={{ background: "var(--imc-surface-2)", border: "1px solid var(--imc-border)" }}
+              className="mt-1.5 flex w-full items-center justify-between gap-2 pb-1 pt-2 active:opacity-70"
+              style={{ borderTop: "1px solid var(--imc-border)" }}
             >
-              <span className="text-[11px] font-black" style={{ color: "var(--imc-indigo-text)" }}>
-                View full journey · {progress}% complete
+              <span className="text-[11.5px] font-semibold" style={{ color: "var(--imc-indigo-text)" }}>
+                View Full Journey
               </span>
               <ArrowRight size={14} style={{ color: "var(--imc-indigo-text)" }} />
             </button>
           </div>
         </div>
       </article>
+
+      <MissedJourneySheet
+        open={showMissedSheet}
+        onClose={() => setShowMissedSheet(false)}
+        title={journey.finalNote ? "Creator's final note" : "Journey missed"}
+        note={missedNote || "No update was posted, so this journey was missed automatically."}
+        onContinue={() => {
+          setShowMissedSheet(false);
+          handleViewJourney();
+        }}
+      />
 
       <CommentSheet
         open={showReplies}
@@ -802,36 +868,78 @@ function JourneyCard({ milestone = {} }) {
 // turning indigo doesn't read as "liked" the way red universally does
 // (Instagram, Twitter/X, etc.), so `tone="like"` swaps in the danger/red
 // token for just this one action while repost/save keep the indigo style.
+// Flat icon + count (no border/background chip) — matches PostActions.jsx's
+// row so Post and Journey cards read as one consistent design language.
 function Action({ icon: Icon, count, active, onClick, tone }) {
   const isLike = tone === "like";
+  const activeColor = isLike ? "var(--imc-danger)" : "var(--imc-indigo-text)";
 
   return (
     <button
       onClick={onClick}
-      className="flex h-8 min-w-8 items-center justify-center gap-1 rounded-full border px-2 text-[11px] font-black active:scale-95"
-      style={{
-        borderColor: active
-          ? isLike
-            ? "rgba(217,45,32,0.38)"
-            : "rgba(67,56,202,0.42)"
-          : "var(--imc-border)",
-        background: active
-          ? isLike
-            ? "rgba(217,45,32,0.12)"
-            : "rgba(67,56,202,0.12)"
-          : "var(--imc-surface)",
-        color: active
-          ? isLike
-            ? "var(--imc-danger)"
-            : "var(--imc-indigo-text)"
-          : "var(--imc-text-muted)",
-      }}
+      className="flex items-center gap-1.5 text-[12.5px] font-semibold active:scale-95"
+      style={{ color: active ? activeColor : "var(--imc-text-muted)" }}
     >
-      <Icon size={16} fill={active ? "currentColor" : "none"} />
-      {typeof count === "number" && count > 0 && (
-        <span>{formatCount(count)}</span>
-      )}
+      <Icon size={19} fill={active ? "currentColor" : "none"} />
+      <span>{formatCount(count)}</span>
     </button>
+  );
+}
+
+// Bottom sheet for the "Journey Missed" chip — replaces the old always-on
+// "Why it was missed" card. Same data (journey.finalNote /
+// journey.uncompletedReason), just revealed on demand so the card itself
+// stays short. Mirrors the existing ViewInfoSheet.jsx portal pattern so it
+// behaves consistently with the app's other bottom sheets (fade + slide up
+// via CSS transition, tap-outside-to-dismiss backdrop).
+function MissedJourneySheet({ open, onClose, title, note, onContinue }) {
+  if (!open) return null;
+  if (typeof document === "undefined" || !document.body) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[130] flex items-end justify-center bg-black/35"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-[430px] rounded-t-[30px] bg-[var(--imc-surface)] p-5 pb-7 shadow-2xl imc-enter"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-2xl" style={{ background: "var(--imc-surface-2)", color: "var(--imc-text-muted)" }}>
+              <AlertTriangle size={18} />
+            </div>
+            <h3 className="text-[16px] font-bold" style={{ color: "var(--imc-text)" }}>
+              {title}
+            </h3>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="grid h-9 w-9 place-items-center rounded-full"
+            style={{ background: "var(--imc-surface-2)", color: "var(--imc-text-muted)" }}
+            aria-label="Close"
+          >
+            <X size={17} />
+          </button>
+        </div>
+
+        <p className="text-[13.5px] leading-6" style={{ color: "var(--imc-text-muted)" }}>
+          {note}
+        </p>
+
+        <button
+          type="button"
+          onClick={onContinue}
+          className="mt-5 flex min-h-[44px] w-full items-center justify-center rounded-full text-[13px] font-semibold active:scale-[0.98]"
+          style={{ background: "var(--imc-indigo)", color: "#fff" }}
+        >
+          Continue Journey
+        </button>
+      </div>
+    </div>,
+    document.body
   );
 }
 

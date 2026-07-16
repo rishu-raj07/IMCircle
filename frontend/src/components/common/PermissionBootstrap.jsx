@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { Camera, Contact, Loader2, Mic, X } from "lucide-react";
+import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 
 import { matchContacts } from "../../api/userApi";
@@ -25,7 +24,7 @@ function getContactPhones(contact) {
   return phones.map(normalizeContactPhone).filter(Boolean);
 }
 
-function canShowPrompt(pathname) {
+function canRequestPermissions(pathname) {
   return !(
     pathname.startsWith("/admin") ||
     pathname === "/login" ||
@@ -34,29 +33,49 @@ function canShowPrompt(pathname) {
   );
 }
 
+// This used to show a custom "Connect IMCircle" bottom-sheet first, with its
+// own "Allow permissions" button the person had to tap before the real
+// browser/OS permission dialog even appeared — an extra in-app step in front
+// of a native prompt. Removed: this component now renders nothing and just
+// triggers the native prompts (camera/mic via getUserMedia, contacts via the
+// Contact Picker API) directly, the same way any native app would ask,
+// once the person lands on a real screen post-login.
+//
+// Note: the Contact Picker API requires a genuine user gesture in some
+// browsers (Chrome enforces "transient activation"), so calling it here
+// outside a click can be silently rejected in those browsers — it degrades
+// to the same "denied" outcome as before with no visible error, it just
+// can't force that particular native prompt open without a tap to anchor
+// it to. Camera/mic (getUserMedia) has no such restriction and always
+// prompts natively.
 export default function PermissionBootstrap() {
   const location = useLocation();
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!canShowPrompt(location.pathname)) return;
+    if (!canRequestPermissions(location.pathname)) return;
     if (localStorage.getItem(PROMPT_KEY) === "true") return;
 
-    const id = window.setTimeout(() => setOpen(true), 450);
-    return () => window.clearTimeout(id);
+    let cancelled = false;
+
+    const id = window.setTimeout(async () => {
+      if (cancelled) return;
+      await requestPermissions();
+    }, 450);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
-  const closeWithStatus = (status) => {
+  const finish = (status) => {
     localStorage.setItem(PROMPT_KEY, "true");
     localStorage.setItem(STATUS_KEY, status);
     window.dispatchEvent(new Event("imcircle-permissions-updated"));
-    setOpen(false);
   };
 
-  const handleAllow = async () => {
-    setLoading(true);
-
+  const requestPermissions = async () => {
     try {
       if (navigator.mediaDevices?.getUserMedia) {
         try {
@@ -77,7 +96,7 @@ export default function PermissionBootstrap() {
       }
 
       if (!navigator.contacts?.select) {
-        closeWithStatus("denied");
+        finish("denied");
         return;
       }
 
@@ -96,62 +115,11 @@ export default function PermissionBootstrap() {
         localStorage.setItem(CONTACT_MATCHES_KEY, JSON.stringify(res?.matches || []));
       }
 
-      closeWithStatus("allowed");
+      finish("allowed");
     } catch {
-      closeWithStatus("denied");
-    } finally {
-      setLoading(false);
+      finish("denied");
     }
   };
 
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/45 px-4 sm:items-center">
-      <div className="w-full max-w-[390px] rounded-t-[28px] bg-[var(--imc-surface)] p-5 shadow-2xl sm:rounded-[28px]">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-[17px] font-black text-[var(--imc-text)]">
-              Connect IMCircle
-            </h2>
-            <p className="mt-1 text-[12px] font-bold leading-5 text-[var(--imc-text-muted)]">
-              Allow contacts, camera/media and microphone so IMCircle can find people you know and keep creation tools ready.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => closeWithStatus("denied")}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--imc-surface-2)] text-[var(--imc-text)]"
-          >
-            <X size={17} />
-          </button>
-        </div>
-
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          <PermissionTile icon={Contact} label="Contacts" />
-          <PermissionTile icon={Camera} label="Media" />
-          <PermissionTile icon={Mic} label="Mic" />
-        </div>
-
-        <button
-          type="button"
-          onClick={handleAllow}
-          disabled={loading}
-          className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#4338CA] text-[13px] font-black text-white disabled:opacity-60"
-        >
-          {loading && <Loader2 size={16} className="animate-spin" />}
-          {loading ? "Requesting..." : "Allow permissions"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function PermissionTile({ icon: Icon, label }) {
-  return (
-    <div className="grid place-items-center rounded-2xl bg-[var(--imc-surface-2)] px-2 py-3 text-center">
-      <Icon size={18} className="text-[#4338CA]" />
-      <span className="mt-1 text-[10px] font-black text-[var(--imc-text-muted)]">{label}</span>
-    </div>
-  );
+  return null;
 }

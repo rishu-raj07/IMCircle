@@ -13,12 +13,15 @@ import {
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import BottomNav from "../../components/navigation/BottomNav";
+import TrendingHashtags from "../../components/common/TrendingHashtags";
 import { getCircleMembers, getCircles, getMyCircles } from "../../api/circleApi";
 import { getJourneyDiscoverFeed } from "../../api/journeyApi";
 import { searchEverything } from "../../api/searchApi";
 import { getUserSuggestions } from "../../api/userApi";
 import { trackEvent } from "../../utils/analyticsTracker";
 import { trackSearchEvent } from "../../api/analyticsApi";
+import { getGenderAvatarIcon } from "../../utils/avatar";
+import { getJourneyCoverIcon, getCommunityCoverIcon } from "../../utils/media";
 
 const INK = "#12141C";
 const PAPER = "#F8F4EA";
@@ -470,21 +473,27 @@ function Search() {
                 </button>
               ))}
             </div>
-          ) : !query.trim() && journeyBuilders.length > 0 ? (
-            <section>
-              <div className="mb-3 flex items-center gap-2">
-                <span className="grid h-8 w-8 place-items-center rounded-xl" style={{ background: "var(--imc-action-soft)", color: "var(--imc-indigo-text)" }}><Sparkles size={16} /></span>
-                <div>
-                  <h2 className="text-[14px] font-black" style={{ color: "var(--imc-text)" }}>Builders on a journey</h2>
-                  <p className="text-[10px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>People sharing progress in public</p>
-                </div>
-              </div>
-              <div className="space-y-2">
-                {journeyBuilders.map((item) => (
-                  <JourneyBuilderRecommendation key={`${getId(item.creator)}:${getId(item.journey)}`} item={item} navigate={navigate} />
-                ))}
-              </div>
-            </section>
+          ) : !query.trim() ? (
+            <>
+              <TrendingHashtags />
+
+              {journeyBuilders.length > 0 && (
+                <section>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="grid h-8 w-8 place-items-center rounded-xl" style={{ background: "var(--imc-action-soft)", color: "var(--imc-indigo-text)" }}><Sparkles size={16} /></span>
+                    <div>
+                      <h2 className="text-[14px] font-black" style={{ color: "var(--imc-text)" }}>Builders on a journey</h2>
+                      <p className="text-[10px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>People sharing progress in public</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {journeyBuilders.map((item) => (
+                      <JourneyBuilderRecommendation key={`${getId(item.creator)}:${getId(item.journey)}`} item={item} navigate={navigate} />
+                    ))}
+                  </div>
+                </section>
+              )}
+            </>
           ) : (
             query.trim() && (
               <div className="rounded-[24px] bg-[var(--imc-surface)] p-6 text-center" style={{ border: "1px solid var(--imc-border)" }}>
@@ -533,6 +542,8 @@ function ResultImage({ item, large = false }) {
     >
       {image ? (
         <img src={image} alt={data?.name || data?.title || "Result"} className="h-full w-full object-cover" />
+      ) : item.type === "circle" ? (
+        <img src={getCommunityCoverIcon()} alt="" className="h-full w-full object-cover" />
       ) : (
         <Icon size={large ? 34 : 21} />
       )}
@@ -598,7 +609,11 @@ function JourneyBuilderRecommendation({ item, navigate }) {
         className="flex w-full items-center gap-2.5 px-3 py-3 text-left"
       >
         <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full" style={{ background: "var(--imc-surface-2)", color: "var(--imc-indigo-text)" }}>
-          {avatar ? <SafeImage src={avatar} fallback={<User size={19} />} className="h-full w-full object-cover" /> : <User size={19} />}
+          <SafeImage
+            src={avatar}
+            fallback={<img src={getGenderAvatarIcon(creator)} alt="" className="h-full w-full object-cover" />}
+            className="h-full w-full object-cover"
+          />
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[12px] font-black" style={{ color: "var(--imc-text)" }}>{getName(creator)}</p>
@@ -608,7 +623,15 @@ function JourneyBuilderRecommendation({ item, navigate }) {
       </button>
       <button type="button" onClick={() => navigate(`/journey/${journeyId}`)} className="flex w-full gap-3 border-t p-3 text-left" style={{ borderColor: "var(--imc-border)" }}>
         <div className="grid h-16 w-20 shrink-0 place-items-center overflow-hidden rounded-[14px]" style={{ background: "var(--imc-action-soft)", color: "var(--imc-indigo-text)" }}>
-          {cover ? <SafeImage src={cover} fallback={<Sparkles size={20} />} className="h-full w-full object-cover" /> : <Sparkles size={20} />}
+          {cover ? (
+            <SafeImage
+              src={cover}
+              fallback={<img src={getJourneyCoverIcon()} alt="" className="h-8 w-8 rounded-full object-cover" />}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <img src={getJourneyCoverIcon()} alt="" className="h-8 w-8 rounded-full object-cover" />
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[12px] font-black" style={{ color: "var(--imc-text)" }}>{journey?.title || "Building in public"}</p>

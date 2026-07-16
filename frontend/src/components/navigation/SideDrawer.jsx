@@ -7,7 +7,7 @@ import {
   MessageSquare,
   Settings,
   ShieldCheck,
-  User,
+  Sparkles,
   Users,
   X,
 } from "lucide-react";
@@ -16,6 +16,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { getMyProfile } from "../../api/profileApi";
 import { getConversations } from "../../api/messageApi";
 import { getNotifications } from "../../api/notificationApi";
+import { getGenderAvatarIcon } from "../../utils/avatar";
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
 
@@ -168,11 +169,11 @@ function SideDrawer({ isOpen, onClose }) {
               className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-full"
               style={{ background: "rgba(67,56,202,0.14)" }}
             >
-              {avatar ? (
-                <img src={avatar} alt={getUserName(me)} className="h-full w-full object-cover" />
-              ) : (
-                <User size={28} style={{ color: "var(--imc-indigo-text)" }} />
-              )}
+              <img
+                src={avatar || getGenderAvatarIcon(me)}
+                alt={getUserName(me)}
+                className="h-full w-full object-cover"
+              />
               <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 bg-[#059669]" style={{ borderColor: "var(--imc-surface)" }} />
             </div>
 
@@ -210,6 +211,14 @@ function SideDrawer({ isOpen, onClose }) {
               icon={<Users size={20} />}
               label="Network"
               onClick={() => goTo("/network")}
+            />
+
+            <DrawerItem
+              active={isActive("/spotlight")}
+              icon={<Sparkles size={20} />}
+              label="Spotlight"
+              smallBadge="New"
+              onClick={() => goTo("/spotlight")}
             />
 
             <DrawerItem

@@ -1,8 +1,7 @@
 import { MessageCircle } from "lucide-react";
+import { getGenderAvatarIcon } from "../../utils/avatar";
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
-const INK = "#12141C";
-const MARIGOLD = "#EC9A1E";
 
 function normalizeImageUrl(url) {
   if (!url || typeof url !== "string") return "";
@@ -46,10 +45,10 @@ function ReplyPreview({ count = 0, topComment, onOpen }) {
       <button
         type="button"
         onClick={onOpen}
-        className="mt-2 flex items-center gap-1.5 text-[12px] font-bold active:scale-95"
+        className="mt-2 flex items-center gap-2 text-[13px] font-bold active:scale-95"
         style={{ color: "var(--imc-text-muted)" }}
       >
-        <MessageCircle size={15} />
+        <MessageCircle size={18} />
         Reply
       </button>
     );
@@ -62,7 +61,7 @@ function ReplyPreview({ count = 0, topComment, onOpen }) {
     <button
       type="button"
       onClick={onOpen}
-      className="mt-2 flex w-full items-start gap-2 text-left active:scale-[0.99]"
+      className="mt-2 flex w-full items-start gap-2.5 text-left active:scale-[0.99]"
     >
       <div
         className="mt-0.5 w-[2px] shrink-0 self-stretch rounded-full"
@@ -70,23 +69,16 @@ function ReplyPreview({ count = 0, topComment, onOpen }) {
       />
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <div
-            className="grid h-4 w-4 shrink-0 place-items-center overflow-hidden rounded-full text-[7px] font-black"
-            style={{ background: INK, color: MARIGOLD }}
-          >
-            {avatarUrl ? (
-              <img
-                src={avatarUrl}
-                alt={name}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              name.charAt(0).toUpperCase()
-            )}
+        <div className="flex items-center gap-2">
+          <div className="h-5 w-5 shrink-0 overflow-hidden rounded-full">
+            <img
+              src={avatarUrl || getGenderAvatarIcon(topComment.user)}
+              alt={name}
+              className="h-full w-full object-cover"
+            />
           </div>
           <span
-            className="truncate text-[11px] font-black"
+            className="truncate text-[12px] font-black"
             style={{ color: "var(--imc-text)" }}
           >
             {name}
@@ -94,14 +86,14 @@ function ReplyPreview({ count = 0, topComment, onOpen }) {
         </div>
 
         <p
-          className="mt-0.5 line-clamp-1 text-[12px] font-semibold"
+          className="mt-1 line-clamp-1 text-[12.5px] font-semibold"
           style={{ color: "var(--imc-text-muted)" }}
         >
           {topComment.text}
         </p>
 
         <span
-          className="mt-0.5 inline-block text-[11px] font-bold"
+          className="mt-1 inline-block text-[12px] font-bold"
           style={{ color: "var(--imc-indigo-text)" }}
         >
           View all {formatCount(count)} {count === 1 ? "reply" : "replies"}

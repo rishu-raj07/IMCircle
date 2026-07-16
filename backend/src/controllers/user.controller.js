@@ -14,10 +14,10 @@ import { sendOtpSms, verifyOtpSms } from "../services/msg91.service.js";
 import { repairMissingProfileMedia } from "../utils/profileMediaRepair.js";
 
 const activityAuthorFields =
-  "fullName username avatar profileImage profilePicture photo picture headline role field verification";
+  "fullName username avatar profileImage profilePicture photo picture headline role field verification gender";
 
 const publicUserFields =
-  "fullName username avatar coverImage headline bio field role skills location preferences stats followers following circle createdAt primaryInterest experience education";
+  "fullName username avatar coverImage headline bio field role skills location preferences stats followers following circle createdAt primaryInterest experience education gender";
 
 const isSameId = (a, b) => String(a) === String(b);
 

@@ -476,7 +476,7 @@ function BasicInfo({
 
         <div className={step === 2 ? "" : "hidden"}>
           <label className="mb-2 block text-[12px] font-bold text-[var(--imc-text-muted)]">
-            Date of Birth <span className="text-red-500">*</span>
+            Date of Birth <span className="font-medium text-[var(--imc-text-faint)]">(optional)</span>
           </label>
 
           <div className="relative" onClick={openDobPicker}>
@@ -516,7 +516,7 @@ function BasicInfo({
 
         <div className={step === 2 ? "" : "hidden"}>
           <label className="mb-2 block text-[12px] font-bold text-[var(--imc-text-muted)]">
-            Gender <span className="text-red-500">*</span>
+            Gender <span className="font-medium text-[var(--imc-text-faint)]">(optional)</span>
           </label>
 
           <div className="grid grid-cols-2 gap-3">

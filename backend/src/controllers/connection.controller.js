@@ -5,7 +5,7 @@ import FollowerEvent from "../models/FollowerEvent.js";
 import { emitNotification } from "../socket/socket.js";
 
 const publicUserFields =
-  "fullName username avatar headline field role location stats";
+  "fullName username avatar headline field role location stats gender";
 
 export const sendCircleRequest = async (req, res) => {
   try {

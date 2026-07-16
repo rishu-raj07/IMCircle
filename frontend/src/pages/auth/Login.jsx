@@ -7,6 +7,7 @@ import { googleLogin, sendMobileOtp } from "../../api/authApi";
 import { saveLoginData } from "../../store/authStore";
 import { setPendingRegister } from "../../utils/storage";
 import { perfMark } from "../../utils/perfLog.js";
+import { getReferralCode } from "../../utils/referral.js";
 
 function Login() {
   const [mobile, setMobile] = useState("");
@@ -29,7 +30,7 @@ function Login() {
     try {
       setLoading(true);
 
-      const data = await sendMobileOtp({ mobile });
+      const data = await sendMobileOtp({ mobile, ref: getReferralCode() || undefined });
 
       setPendingRegister({
         mobile,
@@ -57,6 +58,7 @@ function Login() {
         perfMark("backend_auth_google_request_start");
         const data = await googleLogin({
           credential: credentialResponse.credential,
+          ref: getReferralCode() || undefined,
         });
         perfMark("backend_auth_google_response_received");
 

@@ -43,6 +43,14 @@ import adminContentRoutes from "./routes/adminContent.routes.js";
 import adminReportsRoutes from "./routes/adminReports.routes.js";
 import adminAnalyticsRoutes from "./routes/adminAnalytics.routes.js";
 import adminVerificationRoutes from "./routes/adminVerification.routes.js";
+import badgeRoutes from "./routes/badge.routes.js";
+import spotlightRoutes from "./routes/spotlight.routes.js";
+import adminSpotlightRoutes from "./routes/adminSpotlight.routes.js";
+import adminBadgeRoutes from "./routes/adminBadge.routes.js";
+import referralRoutes from "./routes/referral.routes.js";
+import ogRoutes from "./routes/og.routes.js";
+import hashtagRoutes from "./routes/hashtag.routes.js";
+import linkPreviewRoutes from "./routes/linkPreview.routes.js";
 const app = express();
 
 app.set("trust proxy", 1);
@@ -117,6 +125,14 @@ app.use("/api/admin/content", adminContentRoutes);
 app.use("/api/admin/reports", adminReportsRoutes);
 app.use("/api/admin/analytics", adminAnalyticsRoutes);
 app.use("/api/admin/verification-requests", adminVerificationRoutes);
+app.use("/api/badges", badgeRoutes);
+app.use("/api/spotlight", spotlightRoutes);
+app.use("/api/admin/spotlight", adminSpotlightRoutes);
+app.use("/api/admin/badges", adminBadgeRoutes);
+app.use("/api/referrals", referralRoutes);
+app.use("/api/og", ogRoutes);
+app.use("/api/hashtags", hashtagRoutes);
+app.use("/api/link-preview", linkPreviewRoutes);
 app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
     return res.status(400).json({

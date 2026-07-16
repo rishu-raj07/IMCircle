@@ -7,7 +7,13 @@ import App from "./App.jsx";
 import { ThemeProvider } from "./store/themeStore.jsx";
 import { APP_PLATFORM, GOOGLE_CLIENT_ID, IS_ANDROID, IS_IOS } from "./config/platform.js";
 import { perfMark } from "./utils/perfLog.js";
+import { captureReferralCode } from "./utils/referral.js";
 import "./index.css";
+
+// Capture ?ref=<username> before anything else — a share link can land on
+// any route (a profile, a deep link, /login), and by the time a signup
+// happens it's usually several navigations later.
+captureReferralCode();
 
 const IS_NATIVE = IS_ANDROID || IS_IOS;
 

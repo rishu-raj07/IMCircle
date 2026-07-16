@@ -14,6 +14,11 @@ function ImageLoader({
   width = 700,
   eager = false,
   variant = "image",
+  // Gender-appropriate placeholder (see utils/avatar.js's
+  // getGenderAvatarIcon) — callers rendering an avatar pass this so a
+  // broken/missing photo swaps to that instead of the generic UserRound
+  // icon. Left empty for non-avatar media, which keeps the old behavior.
+  fallbackSrc = "",
   onError,
   ...props
 }) {
@@ -61,7 +66,7 @@ function ImageLoader({
     return () => observer.disconnect();
   }, [eager, visible]);
 
-  const finalSrc = failed ? getPlaceholderImage() : retrySrc || optimizedSrc;
+  const finalSrc = failed ? fallbackSrc || getPlaceholderImage() : retrySrc || optimizedSrc;
   const isAvatar =
     variant === "avatar" ||
     Number(width) <= 128 ||
@@ -79,7 +84,11 @@ function ImageLoader({
 
       {(!loaded || failed || !visible) && isAvatar && (
         <span className="absolute inset-0 grid place-items-center bg-[var(--imc-surface-2)] text-[var(--imc-text-faint)]">
-          <UserRound size={18} />
+          {fallbackSrc ? (
+            <img src={fallbackSrc} alt={alt} className="h-full w-full object-cover" />
+          ) : (
+            <UserRound size={18} />
+          )}
         </span>
       )}
 

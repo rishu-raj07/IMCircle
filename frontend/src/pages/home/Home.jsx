@@ -2,11 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   Check,
-  Flame,
   Loader2,
   PenSquare,
   Plus,
-  UserRound,
+  Sparkles,
   UserPlus,
   UserCheck,
 } from "lucide-react";
@@ -29,6 +28,8 @@ import { getUserSuggestions } from "../../api/userApi";
 import { getMyBuilderScore } from "../../api/builderScoreApi";
 import { getMyJourneys } from "../../api/journeyApi";
 import { getMyLearnings } from "../../api/learningApi";
+import { getGenderAvatarIcon } from "../../utils/avatar";
+import { getJourneyCoverIcon } from "../../utils/media";
 import {
   getSentCircleRequests,
   getReceivedCircleRequests,
@@ -36,6 +37,7 @@ import {
   acceptCircleRequest,
 } from "../../api/circleRequestApi";
 import { trackEvent } from "../../utils/analyticsTracker";
+import { balanceFeedRhythm } from "../../utils/feedRhythm";
 import { useSEO } from "../../hooks/useSEO";
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
@@ -187,10 +189,6 @@ function isSameLocalDay(dateA, dateB = new Date()) {
   return first.toDateString() === second.toDateString();
 }
 
-function getInitial(user) {
-  return getUserName(user).charAt(0).toUpperCase();
-}
-
 function getImageUrl(image) {
   if (!image) return "";
 
@@ -339,6 +337,7 @@ function Home() {
 
   const composeNavigatingRef = useRef(false);
   const pullStartYRef = useRef(null);
+  const pullTriggeredRef = useRef(false);
   const seenInSessionRef = useRef(new Set());
   const visibleTimersRef = useRef(new Map());
   const sentinelRef = useRef(null);
@@ -351,7 +350,7 @@ function Home() {
   );
 
   const learningItems = items.filter((item) => item?.type === "learning");
-  const feedItems = items.filter((item) => item?.type !== "learning");
+  const feedItems = balanceFeedRhythm(items.filter((item) => item?.type !== "learning"));
   const journeysNeedingUpdate = activeJourneys.filter(
     (journey) =>
       !Boolean(journey?.todayUpdateDone) &&
@@ -681,20 +680,51 @@ function Home() {
   };
 
   const handleTouchStart = (e) => {
-    if (window.scrollY === 0) {
-      pullStartYRef.current = e.touches[0].clientY;
-    }
+    // Only arm the gesture if it STARTS at the very top — captured once
+    // here, not re-checked on every move.
+    pullStartYRef.current = window.scrollY <= 0 ? e.touches[0].clientY : null;
+    pullTriggeredRef.current = false;
   };
 
   const handleTouchMove = (e) => {
-    if (!pullStartYRef.current || window.scrollY !== 0 || isLoading) return;
+    if (pullStartYRef.current == null || isLoading || pullTriggeredRef.current) return;
+
     const distance = e.touches[0].clientY - pullStartYRef.current;
-    if (distance > 80) setIsRefreshing(true);
+
+    // Re-checking window.scrollY here (as this used to) broke the gesture:
+    // once the finger pulls past the top, iOS/Chrome's native elastic
+    // overscroll bounce nudges scrollY away from exactly 0 (sometimes
+    // negative) mid-drag, so the old `window.scrollY !== 0` check would
+    // bail out the instant the pull actually started — the page still
+    // visibly bounced (that's the browser's native overscroll, not this
+    // code), but isRefreshing never got set, so nothing ever reloaded.
+    // Tracking only the start point + how far the finger has moved since
+    // avoids depending on scrollY while the gesture is in flight.
+    if (distance < 0) {
+      // Finger moved back above where the pull started — no longer a
+      // pull-to-refresh, stop tracking so a plain scroll afterward isn't
+      // misread as one.
+      pullStartYRef.current = null;
+      return;
+    }
+
+    // Fire the refresh right here, on the move itself, instead of waiting
+    // for touchend — on real mobile browsers, once the native elastic
+    // overscroll takes over a pull-down gesture, the browser can settle the
+    // touch with `touchcancel` instead of `touchend`, so a handler that only
+    // lived on touchend could silently never run. Triggering as soon as the
+    // threshold is crossed removes that dependency; the triggered ref keeps
+    // this from firing more than once per gesture.
+    if (distance > 80) {
+      pullTriggeredRef.current = true;
+      setIsRefreshing(true);
+      handleRefresh();
+    }
   };
 
-  const handleTouchEnd = () => {
-    if (isRefreshing && !isLoading) handleRefresh();
+  const endPull = () => {
     pullStartYRef.current = null;
+    pullTriggeredRef.current = false;
   };
 
   const openLearning = (learning, storyAuthorIds = []) => {
@@ -809,12 +839,11 @@ function Home() {
                     width={96}
                   />
                 ) : (
-                  <div
-                    className="grid h-[46px] w-[46px] place-items-center rounded-full"
-                    style={{ background: "var(--imc-surface-2)", color: "var(--imc-text-muted)" }}
-                  >
-                    <UserRound size={23} strokeWidth={1.8} />
-                  </div>
+                  <img
+                    src={getGenderAvatarIcon(me)}
+                    alt="My Learning"
+                    className="h-[46px] w-[46px] rounded-full object-cover"
+                  />
                 )}
               </div>
 
@@ -874,12 +903,11 @@ function Home() {
                         width={96}
                       />
                     ) : (
-                      <div
-                        className="grid h-[46px] w-[46px] place-items-center rounded-full"
-                        style={{ background: "var(--imc-surface-2)", color: "var(--imc-text-muted)" }}
-                      >
-                        <UserRound size={23} strokeWidth={1.8} />
-                      </div>
+                      <img
+                        src={getGenderAvatarIcon(user)}
+                        alt={getUserName(user)}
+                        className="h-[46px] w-[46px] rounded-full object-cover"
+                      />
                     )}
                   </div>
                 </div>
@@ -921,12 +949,11 @@ function Home() {
                         width={96}
                       />
                     ) : (
-                      <div
-                        className="grid h-[46px] w-[46px] place-items-center rounded-full"
-                        style={{ background: "var(--imc-surface-2)", color: "var(--imc-text-muted)" }}
-                      >
-                        <UserRound size={23} strokeWidth={1.8} />
-                      </div>
+                      <img
+                        src={getGenderAvatarIcon(user)}
+                        alt={getUserName(user)}
+                        className="h-[46px] w-[46px] rounded-full object-cover"
+                      />
                     )}
                   </button>
 
@@ -997,14 +1024,12 @@ function Home() {
     // React 19 disallows spreading an object that contains `key` into JSX
     // (it must be passed as a direct, literal prop) — pass it explicitly
     // here instead of inside wrapperProps.
-    // A full-bleed gray gap below every feed item (LinkedIn-style) makes it
-    // unmistakable where one post ends and the next begins — clearer than a
-    // hairline border, and it breaks out of the page's px-4 padding via
-    // -mx-4 so it reaches both screen edges.
+    // Cards are borderless and full-bleed now, so the page's gray
+    // background (--imc-bg) peeking through this small margin is enough
+    // to separate one card from the next — no extra gray strip needed.
     return (
-      <div key={key} {...wrapperProps} className="mb-3">
+      <div key={key} {...wrapperProps} className="mb-2">
         {content}
-        <div className="-mx-4 mt-3 h-2" style={{ background: "var(--imc-surface-2)" }} />
       </div>
     );
   };
@@ -1014,45 +1039,54 @@ function Home() {
       <div
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
+        onTouchEnd={endPull}
+        onTouchCancel={endPull}
         className="relative min-h-screen w-full max-w-[430px] overflow-hidden pb-24"
         style={{ background: "var(--imc-bg)" }}
       >
         <BrandStyles />
 
         <div className="relative">
-          <div className="px-3 pt-2">
-            <TopHeader
-              onStreakClick={() => setShowStreakShare(true)}
-            />
-          </div>
-
-          {(isRefreshing || isFetchingMore) && (
-            <div className="py-2 text-center text-[11px] font-black" style={{ color: "var(--imc-indigo-text)" }}>
-              {isRefreshing ? "Refreshing feed..." : "Loading more..."}
+          {/* A very faint wash of the brand indigo behind just the header +
+              journey prompt block — the area above the stories/avatars row
+              — so it reads as a subtly distinct top section, not a heavy
+              redesign. */}
+          <div className="rounded-b-[24px]" style={{ background: "rgba(67, 56, 202, 0.02)" }}>
+            <div className="px-3 pt-1">
+              <TopHeader
+                onStreakClick={() => setShowStreakShare(true)}
+              />
             </div>
-          )}
 
-          <div className="px-4">
-            {builderScore && activeJourneys.length === 0 && (
-              <div className="mt-1">
-                <StreakCard
-                  builderScore={builderScore}
-                  compact
-                  variant="prompt"
-                  hasActiveJourney={false}
-                  onPrimaryAction={() => navigate("/create-journey")}
-                />
+            {(isRefreshing || isFetchingMore) && (
+              <div className="py-2 text-center text-[11px] font-black" style={{ color: "var(--imc-indigo-text)" }}>
+                {isRefreshing ? "Refreshing feed..." : "Loading more..."}
               </div>
             )}
 
-            {builderScore && journeysNeedingUpdate.length > 0 && (
-              <JourneyUpdatePrompt
-                journeys={journeysNeedingUpdate}
-                onUpdate={(journeyId) => navigate(`/journey/${journeyId}/update`)}
-              />
-            )}
+            <div className="px-4 pb-1">
+              {builderScore && activeJourneys.length === 0 && (
+                <div className="mt-1">
+                  <StreakCard
+                    builderScore={builderScore}
+                    compact
+                    variant="prompt"
+                    hasActiveJourney={false}
+                    onPrimaryAction={() => navigate("/create-journey")}
+                  />
+                </div>
+              )}
 
+              {builderScore && journeysNeedingUpdate.length > 0 && (
+                <JourneyUpdatePrompt
+                  journeys={journeysNeedingUpdate}
+                  onUpdate={(journeyId) => navigate(`/journey/${journeyId}/update`)}
+                />
+              )}
+            </div>
+          </div>
+
+          <div className="px-4">
             {renderLearningCircles()}
 
             <div className="-mx-4 mt-3 flex items-center gap-8 border-b px-4" style={{ borderColor: "var(--imc-border)" }}>
@@ -1065,6 +1099,19 @@ function Home() {
                   {tab.active && <span className="absolute inset-x-0 -bottom-px h-[2px] rounded-full" style={{ background: "var(--imc-indigo)" }} />}
                 </button>
               ))}
+
+              {/* Spotlight isn't a feed filter like the two tabs above — it's
+                  its own page (frontend/src/pages/spotlight/Spotlight.jsx),
+                  so this entry navigates there instead of calling changeTab. */}
+              <button
+                type="button"
+                onClick={() => navigate("/spotlight")}
+                className="relative flex min-w-[64px] items-center gap-1 pb-3 text-[10px] font-semibold"
+                style={{ color: "var(--imc-indigo-text)" }}
+              >
+                <Sparkles size={12} />
+                Spotlight
+              </button>
             </div>
 
           </div>
@@ -1111,9 +1158,11 @@ function Home() {
                             {avatarUrl ? (
                               <ImageLoader src={avatarUrl} alt={getUserName(user)} className="h-10 w-10 rounded-full object-cover" wrapperClassName="h-10 w-10 rounded-full" width={80} />
                             ) : (
-                              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full" style={{ background: "var(--imc-surface)", color: "var(--imc-text-muted)" }}>
-                                <UserRound size={20} />
-                              </span>
+                              <img
+                                src={getGenderAvatarIcon(user)}
+                                alt={getUserName(user)}
+                                className="h-10 w-10 shrink-0 rounded-full object-cover"
+                              />
                             )}
                             <span className="min-w-0">
                               <span className="block truncate text-[12px] font-black" style={{ color: "var(--imc-text)" }}>{getUserName(user)}</span>
@@ -1133,9 +1182,15 @@ function Home() {
                   </button>
                 </section>
               ) : (
-                <div className="rounded-[22px] p-5 text-center" style={{ background: "var(--imc-surface)", border: "1px solid var(--imc-border)" }}>
-                  <p className="text-[15px] font-black" style={{ color: "var(--imc-text)" }}>No feed yet</p>
+                <div className="rounded-[22px] p-6 text-center" style={{ background: "var(--imc-surface)", border: "1px solid var(--imc-border)" }}>
+                  <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl" style={{ background: "var(--imc-surface-2)", color: "var(--imc-indigo-text)" }}>
+                    <PenSquare size={24} />
+                  </div>
+                  <p className="mt-4 text-[15px] font-black" style={{ color: "var(--imc-text)" }}>No feed yet</p>
                   <p className="mt-1 text-[12px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>Follow builders or share your first update.</p>
+                  <button type="button" onClick={() => navigate("/create-post")} className="mt-4 h-10 rounded-2xl px-5 text-[12px] font-black text-white" style={{ background: "var(--imc-indigo)" }}>
+                    Share an update
+                  </button>
                 </div>
               )
             )}
@@ -1303,7 +1358,7 @@ function JourneyUpdatePrompt({ journeys, onUpdate }) {
                 {cover ? (
                   <ImageLoader src={cover} alt="" className="h-full w-full object-cover" wrapperClassName="h-full w-full" width={120} />
                 ) : (
-                  <Flame size={16} />
+                  <img src={getJourneyCoverIcon()} alt="" className="h-4 w-4 rounded-full object-cover" />
                 )}
               </div>
               <div className="min-w-0 flex-1">

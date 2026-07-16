@@ -29,14 +29,14 @@ export const globalSearch = async (req, res) => {
             { location: searchRegex },
           ],
         })
-          .select("fullName name avatar headline role location skills")
+          .select("fullName name avatar headline role location skills gender")
           .limit(10),
 
         Post.find({
           isDeleted: false,
           content: searchRegex,
         })
-          .populate("author", "fullName name avatar headline")
+          .populate("author", "fullName name avatar headline gender")
           .sort({ createdAt: -1 })
           .limit(10),
 
@@ -48,7 +48,7 @@ export const globalSearch = async (req, res) => {
             { tags: searchRegex },
           ],
         })
-          .populate("creator", "fullName name avatar headline")
+          .populate("creator", "fullName name avatar headline gender")
           .sort({ createdAt: -1 })
           .limit(10),
 
@@ -62,7 +62,7 @@ export const globalSearch = async (req, res) => {
             { skills: searchRegex },
           ],
         })
-          .populate("creator", "fullName name avatar headline")
+          .populate("creator", "fullName name avatar headline gender")
           .sort({ createdAt: -1 })
           .limit(10),
 
@@ -75,7 +75,7 @@ export const globalSearch = async (req, res) => {
             { tags: searchRegex },
           ],
         })
-          .populate("creator", "fullName name avatar headline")
+          .populate("creator", "fullName name avatar headline gender")
           .sort({ createdAt: -1 })
           .limit(10),
 
@@ -87,7 +87,7 @@ export const globalSearch = async (req, res) => {
             { tags: searchRegex },
           ],
         })
-          .populate("creator", "fullName name avatar headline")
+          .populate("creator", "fullName name avatar headline gender")
           .sort({ membersCount: -1, createdAt: -1 })
           .limit(10),
       ]);

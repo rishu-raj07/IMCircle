@@ -39,6 +39,7 @@ import {
 import { getUserSuggestions } from "../../api/userApi";
 import { getMyProfile } from "../../api/profileApi";
 import { getJourneyDiscoverFeed } from "../../api/journeyApi";
+import { getJourneyCoverIcon, getCommunityCoverIcon } from "../../utils/media";
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
 
@@ -730,6 +731,7 @@ export default function Network() {
               </section>
             ) : (
               <EmptyCard
+                icon={Users}
                 title="No circle requests"
                 text="New permission requests will appear here."
               />
@@ -813,6 +815,7 @@ export default function Network() {
               </>
             ) : (
               <EmptyCard
+                icon={UserPlus}
                 title="No suggestions yet"
                 text="People who match your skills and interests will show up here."
               />
@@ -872,8 +875,11 @@ export default function Network() {
               </>
             ) : (
               <EmptyCard
+                icon={Users}
                 title="No circles yet"
-                text="Create or join a circle and it will appear here."
+                text="Invite your first Circle or discover one to join."
+                actionLabel="Browse circles"
+                onAction={() => navigate("/circles/browse")}
               />
             )}
 
@@ -913,6 +919,7 @@ export default function Network() {
               </section>
             ) : (
               <EmptyCard
+                icon={Sparkles}
                 title="No circles to suggest yet"
                 text="Circles will appear here as people start creating and joining them."
               />
@@ -1198,7 +1205,7 @@ function CircleCard({ circle, joined, inviteOnly, requested, loading, onJoin }) 
           />
         ) : (
           <div className="grid h-full w-full place-items-center">
-            <Sparkles size={24} style={{ color: MARIGOLD }} />
+            <img src={getCommunityCoverIcon()} alt="" className="h-9 w-9 rounded-full object-cover" />
           </div>
         )}
 
@@ -1268,7 +1275,7 @@ function CircleInviteCard({ invite, loading, onJoin, onDismiss }) {
               className="h-full w-full object-cover"
             />
           ) : (
-            <Users size={22} style={{ color: MARIGOLD }} />
+            <img src={getCommunityCoverIcon()} alt="" className="h-8 w-8 rounded-full object-cover" />
           )}
         </div>
 
@@ -1452,7 +1459,9 @@ function BuildingInPublicCard({ milestone, onOpen, isOwner = false, isCircleMemb
         {cover ? (
           <img src={cover} alt={journey?.title || "Journey"} className="absolute inset-0 h-full w-full object-cover" />
         ) : (
-          <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, rgba(67,56,202,0.5), rgba(18,20,28,0.85))" }} />
+          <div className="absolute inset-0 grid place-items-center" style={{ background: "linear-gradient(135deg, rgba(67,56,202,0.5), rgba(18,20,28,0.85))" }}>
+            <img src={getJourneyCoverIcon()} alt="" className="h-8 w-8 rounded-full object-cover" />
+          </div>
         )}
 
         <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(18,20,28,0.1) 0%, rgba(18,20,28,0.85) 100%)" }} />
@@ -1518,7 +1527,7 @@ function CommunityGridCard({ circle, joined, inviteOnly, requested, loading, onJ
         {cover ? (
           <img src={cover} alt={circle?.name || "Circle"} className="h-full w-full object-cover" />
         ) : (
-          <Sparkles size={18} style={{ color: MARIGOLD }} />
+          <img src={getCommunityCoverIcon()} alt="" className="h-6 w-6 rounded-full object-cover" />
         )}
       </div>
 
@@ -1581,18 +1590,28 @@ function Avatar({ user, size = 56, ringed = false }) {
   );
 }
 
-function EmptyCard({ title, text }) {
+function EmptyCard({ title, text, icon: Icon, actionLabel, onAction }) {
   return (
     <div
       className="rounded-[22px] bg-[var(--imc-surface)] p-5 text-center shadow-[0_10px_26px_rgba(18,20,28,0.03)]"
       style={{ border: `1px solid ${LINE}` }}
     >
+      {Icon && (
+        <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl" style={{ background: "var(--imc-surface-2)", color: "var(--imc-indigo-text)" }}>
+          <Icon size={22} />
+        </div>
+      )}
       <p className="text-[14px] font-black" style={{ color: INK }}>
         {title}
       </p>
       <p className="mt-1 text-[11px] font-bold" style={{ color: MUTED }}>
         {text}
       </p>
+      {actionLabel && onAction && (
+        <button type="button" onClick={onAction} className="mt-3 h-9 rounded-full px-4 text-[11px] font-black" style={{ background: "var(--imc-indigo-tint)", color: "var(--imc-indigo-text)" }}>
+          {actionLabel}
+        </button>
+      )}
     </div>
   );
 }

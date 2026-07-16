@@ -132,7 +132,7 @@ function TopHeader({ onStreakClick }) {
 
   return (
     <>
-      <header className="flex h-[80px] items-center justify-between px-1 pt-2">
+      <header className="flex h-[60px] items-center justify-between px-1">
         <button
           onClick={() => setDrawerOpen(true)}
           className="grid h-11 w-11 shrink-0 place-items-center rounded-full active:scale-95"

@@ -34,6 +34,24 @@ export function getInitial(name = "") {
   return trimmed ? trimmed.charAt(0).toUpperCase() : "";
 }
 
+// Gender-appropriate placeholder — used wherever a user has no uploaded
+// photo, in place of the old generic UserRound icon / initial-letter
+// circle. "Other", "Prefer not to say", and anything missing/unrecognized
+// all share the same neutral icon; only "Male"/"Female" get their own.
+// These three files live in /public (frontend/public/user-icon-*.png), so
+// they're referenced as root-relative paths, same as favicon/logo.
+export function getGenderAvatarIcon(source) {
+  const gender = String(
+    (typeof source === "string" ? source : source?.gender) || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  if (gender === "male") return "/user-icon-men.png";
+  if (gender === "female") return "/user-icon-women.png";
+  return "/user-icon-prefernottosay.png";
+}
+
 export function getDisplayName(source) {
   return (
     source?.fullName ||

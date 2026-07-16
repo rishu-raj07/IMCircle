@@ -16,7 +16,6 @@ import {
   Trash2,
   UserMinus,
   UserPlus,
-  UsersRound,
   X,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -43,6 +42,8 @@ import {
 } from "../../api/circleApi";
 import { getUserSuggestions, searchUsers } from "../../api/userApi";
 import { getMyCircleList } from "../../api/connectionApi";
+import { getGenderAvatarIcon } from "../../utils/avatar";
+import { getCommunityCoverIcon } from "../../utils/media";
 
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "😢"];
 
@@ -993,7 +994,12 @@ function CircleAvatar({ circle, size = 72 }) {
       {cover ? (
         <img src={cover} alt={circle?.name || "Circle"} className="h-full w-full object-cover" />
       ) : (
-        <UsersRound size={size * 0.46} />
+        <img
+          src={getCommunityCoverIcon()}
+          alt=""
+          className="h-full w-full rounded-full object-cover"
+          style={{ padding: size * 0.18 }}
+        />
       )}
     </div>
   );
@@ -1022,11 +1028,11 @@ function UserAvatar({ user, size = 42 }) {
       className="grid shrink-0 place-items-center overflow-hidden rounded-full text-[13px] font-black"
       style={{ width: dim, height: dim, background: INK, color: MARIGOLD }}
     >
-      {image ? (
-        <img src={image} alt={getUserName(user)} className="h-full w-full object-cover" />
-      ) : (
-        getUserName(user).charAt(0).toUpperCase()
-      )}
+      <img
+        src={image || getGenderAvatarIcon(user)}
+        alt={getUserName(user)}
+        className="h-full w-full object-cover"
+      />
     </div>
   );
 }

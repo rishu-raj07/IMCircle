@@ -4,7 +4,7 @@ import Notification from "../models/Notification.js";
 import { emitNotification } from "../socket/socket.js";
 
 const publicUserFields =
-  "fullName name username avatar profileImage profilePicture picture photo photoURL image coverImage headline bio field role primaryInterest skills interests location preferences stats followers following circle createdAt";
+  "fullName name username avatar profileImage profilePicture picture photo photoURL image coverImage headline bio field role primaryInterest skills interests location preferences stats followers following circle createdAt gender";
 
 const getId = (value) => String(value);
 

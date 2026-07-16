@@ -20,6 +20,7 @@ import ResponsivePostMedia from "../common/ResponsivePostMedia";
 import MediaLightbox from "../common/MediaLightbox";
 import CircleAction from "../common/CircleAction";
 import JourneyMenu from "./JourneyMenu";
+import { getGenderAvatarIcon } from "../../utils/avatar";
 
 import {
   likeMilestone,
@@ -33,6 +34,7 @@ import {
   followJourney,
   unfollowJourney,
 } from "../../api/journeyApi";
+import { formatRelativeTime } from "../../utils/relativeTime";
 
 function formatCount(num = 0) {
   const value = Number(num) || 0;
@@ -68,16 +70,10 @@ function getId(value) {
   return value?._id?.toString?.() || value?.id?.toString?.() || "";
 }
 
+// Delegates to the shared PART-12 formatter (utils/relativeTime.js) — kept
+// as a thin named wrapper so every call site in this file stays unchanged.
 function formatTime(date) {
-  if (!date) return "now";
-  const diff = Date.now() - new Date(date).getTime();
-  const mins = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-  if (mins < 1) return "now";
-  if (mins < 60) return `${mins}m`;
-  if (hours < 24) return `${hours}h`;
-  return `${days}d`;
+  return formatRelativeTime(date) || "now";
 }
 
 // Instagram-post-style "open milestone" view for JourneyCard's tap-through
@@ -244,9 +240,11 @@ function JourneyMilestoneDetail({ milestone = {}, onClose, onDeleted }) {
                 onError={() => setAvatarBroken(true)}
               />
             ) : (
-              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-[16px] font-black" style={{ background: "#12141C", color: "#EC9A1E" }}>
-                {finalName.charAt(0).toUpperCase()}
-              </div>
+              <img
+                src={getGenderAvatarIcon(creator)}
+                alt={finalName}
+                className="h-10 w-10 shrink-0 rounded-full object-cover"
+              />
             )}
 
             <div className="min-w-0">
