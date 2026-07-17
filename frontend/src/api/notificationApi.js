@@ -2,12 +2,12 @@ import api from "./axios";
 
 const notificationPaths = ["/notifications"];
 
-export const getNotifications = async () => {
+export const getNotifications = async ({ page = 1, limit = 20 } = {}) => {
   let lastError;
 
   for (const path of notificationPaths) {
     try {
-      const res = await api.get(path);
+      const res = await api.get(path, { params: { page, limit } });
       return res.data;
     } catch (error) {
       lastError = error;
@@ -17,13 +17,13 @@ export const getNotifications = async () => {
   throw lastError;
 };
 
-export const getFreshNotifications = async () => {
+export const getFreshNotifications = async ({ page = 1, limit = 20 } = {}) => {
   let lastError;
 
   for (const path of notificationPaths) {
     try {
       const res = await api.get(path, {
-        params: { _ts: Date.now() },
+        params: { page, limit, _ts: Date.now() },
         headers: {
           "Cache-Control": "no-cache",
           Pragma: "no-cache",
@@ -35,9 +35,14 @@ export const getFreshNotifications = async () => {
     }
   }
 
-  return getNotifications().catch(() => {
+  return getNotifications({ page, limit }).catch(() => {
     throw lastError;
   });
+};
+
+export const getUnreadNotificationCount = async () => {
+  const res = await api.get("/notifications/unread-count");
+  return res.data;
 };
 
 export const markNotificationRead = async (notificationId) => {

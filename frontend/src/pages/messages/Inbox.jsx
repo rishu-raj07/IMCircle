@@ -296,7 +296,7 @@ function Inbox() {
         </div>
 
         <main className="px-4 pt-4">
-          <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
+          <div className="no-scrollbar mb-4 flex gap-2 overflow-x-auto pb-1">
             {["All", "Unread", "Blocked", "Opportunities", "Network"].map((item) => (
               <button
                 key={item}

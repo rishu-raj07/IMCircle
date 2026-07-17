@@ -3,6 +3,7 @@ import UserBadge from "../models/UserBadge.js";
 import BuilderScore from "../models/BuilderScore.js";
 import { getSignupRankBadge } from "../utils/badges.js";
 import { BADGE_CATALOG, isValidBadgeKey } from "../constants/badgeCatalog.js";
+import notificationService from "./notification.service.js";
 
 // Idempotent — awarding a badge a user already has is a no-op, not an
 // error, so callers (auto-evaluation, Spotlight generation, admin actions)
@@ -13,7 +14,10 @@ export async function awardBadge(userId, badgeKey, opts = {}) {
   const { source = "auto", weekKey = "", awardedBy = null, note = "" } = opts;
 
   try {
-    return await UserBadge.findOneAndUpdate(
+    // rawResult so we can tell "just inserted" apart from "already had it" —
+    // the notification below must only fire on a genuinely new award, not
+    // every time evaluateAutoBadges() re-checks an already-earned badge.
+    const result = await UserBadge.findOneAndUpdate(
       { user: userId, badgeKey },
       {
         $setOnInsert: {
@@ -26,8 +30,35 @@ export async function awardBadge(userId, badgeKey, opts = {}) {
           awardedAt: new Date(),
         },
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: true, new: true, setDefaultsOnInsert: true, rawResult: true }
     );
+
+    const badge = result?.value;
+    const wasNewlyAwarded = Boolean(result?.lastErrorObject?.upserted);
+
+    if (wasNewlyAwarded && badge) {
+      const catalogEntry = BADGE_CATALOG.find((item) => item.key === badgeKey);
+      const badgeName = catalogEntry?.name || catalogEntry?.label || "a new badge";
+
+      // The actor here IS the recipient (badges are awarded to you, not by
+      // another user acting on you) — notificationService's self-action
+      // guard would normally block that, so awardedBy (an admin) is used as
+      // the actor when present, otherwise the system itself.
+      notificationService
+        .create({
+          recipientId: userId,
+          actorId: awardedBy || userId,
+          type: "badge",
+          entityType: "badge",
+          entityId: badge._id,
+          metadata: { badgeKey },
+          message: `You earned the "${badgeName}" badge`,
+          allowSelf: true,
+        })
+        .catch(() => {});
+    }
+
+    return badge;
   } catch (error) {
     // Duplicate-key race under concurrent evaluation — the badge exists
     // either way, so this is safe to swallow.

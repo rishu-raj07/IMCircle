@@ -5,6 +5,8 @@ import { useNavigate } from "react-router-dom";
 import { getSessionUser } from "../../utils/sessionUser";
 import { formatRelativeTime } from "../../utils/relativeTime";
 import { getGenderAvatarIcon } from "../../utils/avatar";
+import MentionSuggestions from "./MentionSuggestions";
+import RichText from "./RichText";
 
 function getUser(comment) {
   if (comment?.user && typeof comment.user === "object") return comment.user;
@@ -340,7 +342,7 @@ function CommentSheet({
                     @{replyUsername}
                   </span>
                 )}
-                {comment.text || comment.content || comment.message}
+                <RichText text={comment.text || comment.content || comment.message || ""} />
               </p>
             </div>
 
@@ -500,6 +502,8 @@ function CommentSheet({
               <Send size={18} />
             </button>
           </div>
+
+          <MentionSuggestions value={text} onInsert={(next) => setText(next.slice(0, 1000))} />
 
           <div className="mt-1 text-right text-[11px] font-bold text-[var(--imc-text-muted)]">
             {text.length}/1000

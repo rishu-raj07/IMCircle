@@ -626,11 +626,11 @@ function JourneyBuilderRecommendation({ item, navigate }) {
           {cover ? (
             <SafeImage
               src={cover}
-              fallback={<img src={getJourneyCoverIcon()} alt="" className="h-8 w-8 rounded-full object-cover" />}
+              fallback={<img src={getJourneyCoverIcon()} alt="" className="h-14 w-14 rounded-full object-cover" />}
               className="h-full w-full object-cover"
             />
           ) : (
-            <img src={getJourneyCoverIcon()} alt="" className="h-8 w-8 rounded-full object-cover" />
+            <img src={getJourneyCoverIcon()} alt="" className="h-14 w-14 rounded-full object-cover" />
           )}
         </div>
         <div className="min-w-0 flex-1">

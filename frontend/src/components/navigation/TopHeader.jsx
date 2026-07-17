@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import SideDrawer from "./SideDrawer";
 import { getConversations } from "../../api/messageApi";
 import { getMyBuilderScore } from "../../api/builderScoreApi";
+import { getUnreadNotificationCount } from "../../api/notificationApi";
 import { socket } from "../../socket/socket";
 import { getSessionUser } from "../../utils/sessionUser";
 
@@ -43,6 +44,7 @@ function TopHeader({ onStreakClick }) {
   const [unreadChatIds, setUnreadChatIds] = useState(
     () => safeJsonParse(localStorage.getItem(UNREAD_CHAT_CACHE_KEY)) || []
   );
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
   const currentUserId = getUserId(me);
   const unreadChatCount = unreadChatIds.length;
@@ -99,6 +101,25 @@ function TopHeader({ onStreakClick }) {
   }, [currentUserId]);
 
   useEffect(() => {
+    const loadUnreadNotifCount = async () => {
+      if (!currentUserId) return;
+
+      try {
+        const res = await getUnreadNotificationCount();
+        setUnreadNotifCount(res?.unreadCount || 0);
+      } catch {
+        // best-effort — non-critical
+      }
+    };
+
+    loadUnreadNotifCount();
+    // Refetch on every route change — covers the case where the user just
+    // came back from /notifications (which marks things read on open) or
+    // wherever else read-state might have changed, without needing a full
+    // page reload.
+  }, [currentUserId, location.pathname]);
+
+  useEffect(() => {
     if (!currentUserId) return;
 
     socket.connect();
@@ -124,11 +145,23 @@ function TopHeader({ onStreakClick }) {
       );
     });
 
+    // Live badge update the instant a like/comment/follow/etc notification
+    // is created — see emitNotification() in the backend socket layer,
+    // which only ever emits to this user's own room, so nothing extra to
+    // filter here. Skipped while already on the Notifications page itself
+    // (that page keeps its own list in sync and marks-as-read on open, so
+    // bumping this badge in the background there would fight with it).
+    socket.on("new_notification", () => {
+      if (location.pathname === "/notifications") return;
+      setUnreadNotifCount((prev) => prev + 1);
+    });
+
     return () => {
       socket.off("receive_message");
       socket.off("message_seen_update");
+      socket.off("new_notification");
     };
-  }, [currentUserId]);
+  }, [currentUserId, location.pathname]);
 
   return (
     <>
@@ -209,17 +242,24 @@ function TopHeader({ onStreakClick }) {
           </button>
 
           <button
-            onClick={() => navigate("/notifications")}
+            onClick={() => {
+              setUnreadNotifCount(0);
+              navigate("/notifications");
+            }}
             className="relative grid h-11 w-11 place-items-center rounded-full active:scale-95"
             style={{
               color: "var(--imc-text)",
             }}
           >
             <Bell size={20} />
-            <span
-              className="absolute right-2.5 top-2.5 h-2.5 w-2.5 rounded-full ring-2"
-              style={{ background: MARIGOLD, "--tw-ring-color": "var(--imc-surface)" }}
-            />
+            {unreadNotifCount > 0 && (
+              <span
+                className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[10px] font-black text-white ring-2"
+                style={{ background: MARIGOLD, "--tw-ring-color": "var(--imc-surface)" }}
+              >
+                {formatBadgeCount(unreadNotifCount)}
+              </span>
+            )}
           </button>
 
         </div>

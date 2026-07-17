@@ -201,9 +201,21 @@ function normalizeJourneys(data) {
   return Array.isArray(journeys) ? journeys : [];
 }
 
+// Returns "" (not a fake default like "India") when there's genuinely no
+// location — matches UserProfile.jsx's getLocationText pattern, which is
+// conditionally rendered by the caller instead of ever showing a location
+// string nobody actually entered (Issue 3: never display an undefined/
+// null/blank location — only show it when a real city/state exists).
 function formatLocation(location) {
-  if (!location) return "India";
+  if (!location) return "";
   if (typeof location === "string") return location;
+
+  // The backend defaults `country` to "India" even for a user who never
+  // entered a location at all (see cleanLocation() in profile.controller.js)
+  // — without this guard, every brand-new/location-less profile would show
+  // a bare "India" line that looks like the user picked it. Only render
+  // anything once there's a real city or state on record.
+  if (!location?.city && !location?.state) return "";
 
   return [location?.city, location?.state, location?.country]
     .filter(Boolean)
@@ -251,13 +263,15 @@ function isStudentUser(user) {
   return String(user?.primaryInterest || "").trim().toLowerCase() === "student";
 }
 
+// Location is intentionally NOT part of this check — mirrors the backend's
+// hasRequiredBasics() in profile.controller.js (Issue 3: location is
+// completely optional and must never reduce profile-completion percent).
 function hasRequiredBasics(user) {
   return Boolean(
     user?.fullName &&
       user?.username &&
       user?.dob &&
       user?.gender &&
-      user?.location?.city &&
       user?.primaryInterest
   );
 }
@@ -739,10 +753,12 @@ function Profile() {
                   </p>
                 )}
 
-                <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-[var(--imc-text-faint)]">
-                  <MapPin size={13} />
-                  {location}
-                </p>
+                {location && (
+                  <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-[var(--imc-text-faint)]">
+                    <MapPin size={13} />
+                    {location}
+                  </p>
+                )}
 
                 {user?.primaryInterest && (
                   <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-[var(--imc-text-faint)]">
@@ -1558,7 +1574,7 @@ function JourneyProfileCard({ journey, onView }) {
           <img src={cover} alt={journey.title} className="h-full w-full object-cover" />
         ) : (
           <div className="imc-lattice grid h-full w-full place-items-center bg-gradient-to-br from-[#12141C] via-[#2E2A8F] to-[#4338CA]">
-            <img src={getJourneyCoverIcon()} alt="" className="h-9 w-9 rounded-full object-cover" />
+            <img src={getJourneyCoverIcon()} alt="" className="h-24 w-24 rounded-full object-cover opacity-95" />
           </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />

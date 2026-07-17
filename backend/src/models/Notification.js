@@ -70,6 +70,21 @@ const notificationSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: {},
     },
+    // Uniquely identifies "this actor did this type of thing to this
+    // entity" — e.g. `like:post:<postId>:<actorId>`. Used to make
+    // notification creation idempotent (a Mongo unique index, not just an
+    // application-level check) so a double-tap/retry/race on the same
+    // action can never create two active notifications. Left null for
+    // notification types that are inherently one-shot per event (a single
+    // DM, a badge award) where no natural collision key is needed.
+    deduplicationKey: {
+      type: String,
+      default: null,
+    },
+    readAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -85,7 +100,21 @@ notificationSchema.pre("save", function normalizeNotification() {
   if (!this.actor && this.sender) this.actor = this.sender;
   if (this.isRead && !this.read) this.read = this.isRead;
   if (this.read && !this.isRead) this.isRead = this.read;
+  if (this.isRead && !this.readAt) this.readAt = new Date();
 });
+
+// Required composite/lookup indexes — see notification.service.js for how
+// each is used (list-by-recipient newest-first, unread-count, and the
+// dedup upsert).
+notificationSchema.index({ recipient: 1, createdAt: -1 });
+notificationSchema.index({ recipient: 1, isRead: 1 });
+// Sparse + unique: only documents that actually set a deduplicationKey
+// participate in the uniqueness constraint, so every other notification
+// type (deduplicationKey left null) is unaffected.
+notificationSchema.index(
+  { deduplicationKey: 1 },
+  { unique: true, sparse: true }
+);
 
 const Notification =
   mongoose.models.Notification ||

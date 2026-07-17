@@ -3,9 +3,8 @@ import { Readable } from "stream";
 import Circle from "../models/Circle.js";
 import CircleMember from "../models/CircleMember.js";
 import CirclePost from "../models/CirclePost.js";
-import Notification from "../models/Notification.js";
 import cloudinary from "../config/cloudinary.js";
-import { emitNotification } from "../socket/socket.js";
+import notificationService from "../services/notification.service.js";
 
 const userFields = "fullName name username avatar headline gender";
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "😢"];
@@ -127,29 +126,20 @@ export const createCirclePost = async (req, res) => {
         const preview = trimmedContent || "sent a photo";
 
         await Promise.all(
-          otherMembers.map(async (member) => {
-            try {
-              const notification = await Notification.create({
-                recipient: member.user,
-                sender: req.user._id,
+          otherMembers.map((member) =>
+            notificationService
+              .create({
+                recipientId: member.user,
+                actorId: req.user._id,
                 type: "circle_message",
+                entityType: "circle",
+                entityId: circleId,
                 title: circle?.name || "Circle message",
                 message: `${authorName}: ${preview}`,
-                // Without this, deriveTarget() in notification.controller.js
-                // has no circleId to resolve and falls back to /network —
-                // this is what was sending "community message"
-                // notifications to the wrong page.
-                circle: circleId,
-                targetType: "circle",
-                targetId: circleId,
-                data: { circle: circleId, post: post._id },
-              });
-
-              emitNotification(member.user, notification);
-            } catch (notifyError) {
-              console.error("Circle message notification skipped:", notifyError.message);
-            }
-          })
+                metadata: { circle: circleId, post: post._id },
+              })
+              .catch(() => null)
+          )
         );
       }
     } catch (notifyBatchError) {

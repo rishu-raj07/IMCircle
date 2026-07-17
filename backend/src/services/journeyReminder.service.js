@@ -2,7 +2,7 @@ import cron from "node-cron";
 
 import Journey from "../models/Journey.js";
 import JourneyMilestone from "../models/JourneyMilestone.js";
-import Notification from "../models/Notification.js";
+import notificationService from "./notification.service.js";
 
 function getJourneyDay(createdAt) {
   const startDate = new Date(createdAt);
@@ -54,17 +54,27 @@ async function createJourneyReminder(label) {
         message = `Final reminder: post your Day ${dayNumber} journey update before the day ends.`;
       }
 
-      await Notification.create({
-        recipient: journey.creator,
-        type: "journey_reminder",
+      // This is a self-reminder — the "actor" is the system, not another
+      // user, so allowSelf bypasses the self-notification guard. The
+      // dedupe key is built from (type, entityType, entityId, actor,
+      // recipient) — entityId is the journey, which stays the same across
+      // days, so `label` is folded into `type` (journey_reminder_morning,
+      // _evening, _final) to keep the three daily slots distinct from each
+      // other. A new day's reminder resurfaces (and re-marks unread) the
+      // same slot from the previous day rather than piling up a fresh row
+      // per day forever, which is the desired behavior for a recurring
+      // nudge like this.
+      await notificationService.create({
+        recipientId: journey.creator,
+        actorId: journey.creator,
+        type: `journey_reminder_${label}`,
+        entityType: "journey",
+        entityId: journey._id,
         title,
         message,
-        link: `/journey/${journey._id}`,
-        data: {
-          journey: journey._id,
-          day: dayNumber,
-          reminderType: label,
-        },
+        metadata: { journey: journey._id, day: dayNumber, reminderType: label },
+        dedupe: true,
+        allowSelf: true,
       });
     }
   } catch (error) {

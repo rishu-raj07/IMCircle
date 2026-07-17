@@ -29,10 +29,16 @@ function getTrailingMentionQuery(value) {
 function MentionSuggestions({ value, onInsert }) {
   const query = getTrailingMentionQuery(value);
   const [results, setResults] = useState([]);
+  // True when the search actually matched people, but every one of them
+  // got filtered out for not being in the viewer's Circle — surfaced as a
+  // small hint instead of just silently showing nothing, which otherwise
+  // looks like the search is broken.
+  const [onlyOutsideCircle, setOnlyOutsideCircle] = useState(false);
 
   useEffect(() => {
     if (!query || query.length < 2) {
       setResults([]);
+      setOnlyOutsideCircle(false);
       return undefined;
     }
 
@@ -40,16 +46,36 @@ function MentionSuggestions({ value, onInsert }) {
       try {
         const res = await searchUsers(query);
         const users = res?.users || res?.data?.users || [];
-        setResults(users.slice(0, 6));
+        // Only people already in the viewer's Circle can be @mentioned —
+        // `isInCircle` is already stamped onto every result by the backend
+        // (compactPublicUser), so this is a pure client-side filter, no
+        // extra request needed.
+        const circleUsers = users.filter((user) => user?.isInCircle);
+        setResults(circleUsers.slice(0, 6));
+        setOnlyOutsideCircle(users.length > 0 && circleUsers.length === 0);
       } catch {
         setResults([]);
+        setOnlyOutsideCircle(false);
       }
     }, 220);
 
     return () => window.clearTimeout(timer);
   }, [query]);
 
-  if (!query || results.length === 0) return null;
+  if (!query) return null;
+
+  if (results.length === 0) {
+    if (!onlyOutsideCircle) return null;
+
+    return (
+      <div
+        className="mt-1 rounded-2xl px-3 py-2.5 text-[11px] font-semibold"
+        style={{ background: "var(--imc-surface-2)", border: "1px solid var(--imc-border)", color: "var(--imc-text-muted)" }}
+      >
+        You can only mention people in your Circle.
+      </div>
+    );
+  }
 
   const pick = (user) => {
     const username = user?.username;

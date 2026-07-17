@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
+  ArrowUp,
   Check,
   Loader2,
   PenSquare,
@@ -341,6 +342,8 @@ function Home() {
   const seenInSessionRef = useRef(new Set());
   const visibleTimersRef = useRef(new Map());
   const sentinelRef = useRef(null);
+  const fifthPostRef = useRef(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
   const itemObserverRef = useRef(null);
   const requestSeqRef = useRef(0);
   const loadingMoreRef = useRef(false);
@@ -591,6 +594,29 @@ function Home() {
     observer.observe(node);
     return () => observer.disconnect();
   }, [cursor, hasMore, isLoading, isRefreshing, activeTab]);
+
+  // "Scroll to top" floating button — appears once the 5th feed post has
+  // scrolled past the top of the viewport, not on a fixed pixel threshold
+  // (post heights vary a lot: a bare text post vs. a photo/video card), so
+  // "after 5 posts" stays accurate regardless of what's actually in the
+  // feed. Hidden again if the user scrolls back up above it.
+  useEffect(() => {
+    const node = fifthPostRef.current;
+    if (!node) {
+      setShowScrollTop(false);
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setShowScrollTop(!entry.isIntersecting && entry.boundingClientRect.top < 0);
+      },
+      { threshold: 0 }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [feedItems]);
 
   useEffect(() => {
     itemObserverRef.current?.disconnect();
@@ -1028,7 +1054,12 @@ function Home() {
     // background (--imc-bg) peeking through this small margin is enough
     // to separate one card from the next — no extra gray strip needed.
     return (
-      <div key={key} {...wrapperProps} className="mb-2">
+      <div
+        key={key}
+        {...wrapperProps}
+        ref={index === 4 ? fifthPostRef : undefined}
+        className="mb-2"
+      >
         {content}
       </div>
     );
@@ -1247,6 +1278,29 @@ function Home() {
           <PenSquare size={21} strokeWidth={2.2} />
         </button>
 
+        {/* Scroll-to-top — mirrors the compose button's fixed positioning
+            convention but sits on the opposite (left) side so the two never
+            overlap. Only mounted once the 5th post has actually scrolled
+            past, see the IntersectionObserver above. */}
+        {showScrollTop && (
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            aria-label="Scroll to top"
+            className="fixed z-40 grid h-11 w-11 place-items-center rounded-full active:scale-95"
+            style={{
+              background: "var(--imc-surface)",
+              border: "1px solid var(--imc-border)",
+              boxShadow: "0 8px 20px rgba(18,20,28,0.12)",
+              left: "max(16px, calc((100vw - 430px) / 2 + 16px))",
+              bottom: "calc(84px + env(safe-area-inset-bottom))",
+              color: "var(--imc-indigo-text)",
+            }}
+          >
+            <ArrowUp size={20} strokeWidth={2.4} />
+          </button>
+        )}
+
         <BottomNav />
 
         <ShareCardModal
@@ -1358,7 +1412,7 @@ function JourneyUpdatePrompt({ journeys, onUpdate }) {
                 {cover ? (
                   <ImageLoader src={cover} alt="" className="h-full w-full object-cover" wrapperClassName="h-full w-full" width={120} />
                 ) : (
-                  <img src={getJourneyCoverIcon()} alt="" className="h-4 w-4 rounded-full object-cover" />
+                  <img src={getJourneyCoverIcon()} alt="" className="h-full w-full rounded-[11px] object-cover" />
                 )}
               </div>
               <div className="min-w-0 flex-1">

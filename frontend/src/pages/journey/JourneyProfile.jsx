@@ -405,7 +405,7 @@ function JourneyProfile() {
             ) : (
               <div className="imc-lattice flex h-full items-center justify-center">
                 <div className="text-center">
-                  <img src={getJourneyCoverIcon()} alt="" className="mx-auto h-11 w-11 rounded-full object-cover" />
+                  <img src={getJourneyCoverIcon()} alt="" className="mx-auto h-24 w-24 rounded-full object-cover opacity-95" />
                   <p className="mt-2 text-[11px] font-black uppercase tracking-[0.18em]" style={{ color: "var(--imc-indigo)" }}>
                     ImCircle Journey
                   </p>

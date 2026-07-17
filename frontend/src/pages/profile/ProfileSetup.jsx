@@ -189,13 +189,13 @@ function ProfileSetup() {
     }
   }, [searchParams]);
 
-  // Profile photo and tagline are optional — only these fields actually gate
-  // finishing setup. Missing photo/tagline no longer blocks "Continue".
+  // Profile photo, tagline, and location are all optional — only these
+  // fields actually gate finishing setup. Missing photo/tagline/location no
+  // longer blocks "Continue" (Issue 3: location must be completely optional).
   const hasBasicInfo = Boolean(
     fullName.trim() &&
       username.trim() &&
       dob.trim() &&
-      location.city.trim() &&
       gender.trim() &&
       primaryInterest.trim()
   );
@@ -212,7 +212,6 @@ function ProfileSetup() {
       fullName.trim() &&
       username.trim() &&
       dob.trim() &&
-      location.city.trim() &&
       gender.trim() &&
       primaryInterest.trim()
     ) {
@@ -302,8 +301,7 @@ function ProfileSetup() {
         "Username must be 3-30 characters: letters, numbers or underscore only"
       );
     }
-    // Date of birth and gender are optional — no block here.
-    if (!location.city.trim()) return setError("Location is required");
+    // Date of birth, gender, and location are all optional — no block here.
     if (!primaryInterest.trim()) {
       return setError("Select an interest, or write your interest in the Other field");
     }

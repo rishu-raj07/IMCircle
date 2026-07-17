@@ -1,7 +1,6 @@
 import CircleRequest from "../models/CircleRequest.js";
 import User from "../models/User.js";
-import Notification from "../models/Notification.js";
-import { emitNotification } from "../socket/socket.js";
+import notificationService from "../services/notification.service.js";
 
 const publicUserFields =
   "fullName name username avatar profileImage profilePicture picture photo photoURL image coverImage headline bio field role primaryInterest skills interests location preferences stats followers following circle createdAt gender";
@@ -18,22 +17,6 @@ const withMutualCircleCount = (user, viewerCircleIds) => {
   ).length;
 
   return { ...value, mutualCircleCount };
-};
-
-const createNotification = async ({ recipient, sender, type, title, message }) => {
-  try {
-    const notification = await Notification.create({
-      recipient,
-      sender,
-      type,
-      title,
-      message,
-    });
-
-    emitNotification(recipient, notification);
-  } catch (error) {
-    console.error("Circle notification skipped:", error.message);
-  }
 };
 
 export const sendCircleRequest = async (req, res) => {
@@ -123,13 +106,21 @@ export const sendCircleRequest = async (req, res) => {
       status: "pending",
     });
 
-    await createNotification({
-      recipient: receiverId,
-      sender: senderId,
-      type: "circle_request",
-      title: "New circle request",
-      message: `${sender.fullName || "Someone"} wants to add you to circle`,
-    });
+    // dedupe: true — re-sending a request to the same person (after it
+    // expired/was withdrawn client-side, or a double-tap) resurfaces the
+    // same notification instead of stacking duplicates.
+    notificationService
+      .create({
+        recipientId: receiverId,
+        actorId: senderId,
+        type: "circle_request",
+        entityType: "user",
+        entityId: senderId,
+        metadata: { username: sender.username },
+        message: `${sender.fullName || "Someone"} wants to add you to circle`,
+        dedupe: true,
+      })
+      .catch(() => {});
 
     return res.status(201).json({
       success: true,
@@ -193,7 +184,7 @@ export const acceptCircleRequest = async (req, res) => {
     );
 
     const receiver = await User.findById(receiverId).select(
-      "fullName circle followers following"
+      "fullName username circle followers following"
     );
 
     const sender = await User.findById(senderId).select(
@@ -212,13 +203,30 @@ export const acceptCircleRequest = async (req, res) => {
       "stats.followingCount": sender.following.length,
     });
 
-    await createNotification({
-      recipient: senderId,
-      sender: receiverId,
-      type: "circle_accepted",
-      title: "Circle request accepted",
-      message: `${receiver.fullName || "Someone"} accepted your circle request`,
-    });
+    // The original "X wants to add you to circle" notification (on the
+    // receiver's side) is now stale — the request has been resolved — so
+    // remove it, then notify the original sender that it was accepted.
+    notificationService
+      .removeByDedupeKey({
+        type: "circle_request",
+        entityType: "user",
+        entityId: senderId,
+        actorId: senderId,
+        recipientId: receiverId,
+      })
+      .catch(() => {});
+
+    notificationService
+      .create({
+        recipientId: senderId,
+        actorId: receiverId,
+        type: "circle_accepted",
+        entityType: "user",
+        entityId: receiverId,
+        metadata: { username: receiver.username },
+        message: `${receiver.fullName || "Someone"} accepted your circle request`,
+      })
+      .catch(() => {});
 
     return res.status(200).json({
       success: true,
@@ -255,6 +263,23 @@ export const rejectCircleRequest = async (req, res) => {
 
     request.status = "rejected";
     await request.save();
+
+    // The pending "wants to add you to circle" notification is now stale —
+    // the request has been resolved — so remove it. Deliberately NOT
+    // creating a new "declined your request" notification: per the product
+    // decision (documented alongside the same call in unfollowUser), a
+    // rejection is a negative/quiet action that isn't surfaced to the
+    // person who sent the request, to avoid notification spam around a
+    // "no."
+    notificationService
+      .removeByDedupeKey({
+        type: "circle_request",
+        entityType: "user",
+        entityId: request.sender,
+        actorId: request.sender,
+        recipientId: receiverId,
+      })
+      .catch(() => {});
 
     return res.status(200).json({
       success: true,

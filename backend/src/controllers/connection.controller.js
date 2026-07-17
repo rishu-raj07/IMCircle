@@ -1,8 +1,7 @@
 import Connection from "../models/Connection.js";
 import User from "../models/User.js";
-import Notification from "../models/Notification.js";
 import FollowerEvent from "../models/FollowerEvent.js";
-import { emitNotification } from "../socket/socket.js";
+import notificationService from "../services/notification.service.js";
 
 const publicUserFields =
   "fullName username avatar headline field role location stats gender";
@@ -52,16 +51,18 @@ export const sendCircleRequest = async (req, res) => {
       status: "pending",
     });
 
-    const notification = await Notification.create({
-      recipient: recipientId,
-      sender: requesterId,
-      type: "connection_request",
-      title: "New Circle request",
-      message: `${requester.fullName} sent you a Circle request`,
-      connection: connection._id,
-    });
-
-    emitNotification(recipientId, notification);
+    notificationService
+      .create({
+        recipientId,
+        actorId: requesterId,
+        type: "connection_request",
+        entityType: "user",
+        entityId: requesterId,
+        metadata: { username: requester.username, connectionId: connection._id },
+        message: `${requester.fullName} sent you a Circle request`,
+        dedupe: true,
+      })
+      .catch(() => {});
 
     res.status(201).json({
       success: true,
@@ -121,16 +122,29 @@ export const acceptCircleRequest = async (req, res) => {
       },
     ]);
 
-    const notification = await Notification.create({
-      recipient: connection.requester,
-      sender: connection.recipient,
-      type: "connection_accept",
-      title: "Circle request accepted",
-      message: `${recipient.fullName} accepted your Circle request`,
-      connection: connection._id,
-    });
+    // The pending request notification is now stale — remove it before
+    // creating the "accepted" one, same pattern as circleRequest.controller.js.
+    notificationService
+      .removeByDedupeKey({
+        type: "connection_request",
+        entityType: "user",
+        entityId: connection.requester,
+        actorId: connection.requester,
+        recipientId: connection.recipient,
+      })
+      .catch(() => {});
 
-    emitNotification(connection.requester, notification);
+    notificationService
+      .create({
+        recipientId: connection.requester,
+        actorId: connection.recipient,
+        type: "connection_accept",
+        entityType: "user",
+        entityId: connection.recipient,
+        metadata: { username: recipient.username, connectionId: connection._id },
+        message: `${recipient.fullName} accepted your Circle request`,
+      })
+      .catch(() => {});
 
     res.status(200).json({
       success: true,

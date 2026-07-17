@@ -1,8 +1,7 @@
 import Circle from "../models/Circle.js";
 import CircleMember from "../models/CircleMember.js";
 import CircleInvite from "../models/CircleInvite.js";
-import Notification from "../models/Notification.js";
-import { emitNotification } from "../socket/socket.js";
+import notificationService from "../services/notification.service.js";
 
 const inviterFields = "fullName name username avatar headline";
 const circleFields = "name description coverImage tags membersCount visibility";
@@ -73,19 +72,18 @@ export const sendCircleInvite = async (req, res) => {
     const inviterName =
       req.user?.fullName || req.user?.name || req.user?.username || "Someone";
 
-    try {
-      const notification = await Notification.create({
-        recipient: userId,
-        sender: inviterId,
+    notificationService
+      .create({
+        recipientId: userId,
+        actorId: inviterId,
         type: "circle_invite",
+        entityType: "circle",
+        entityId: circleId,
         title: "Circle invite",
         message: `${inviterName} invited you to join ${circle?.name || "a circle"}`,
-      });
-
-      emitNotification(userId, notification);
-    } catch (notifyError) {
-      console.error("Circle invite notification skipped:", notifyError.message);
-    }
+        dedupe: true,
+      })
+      .catch(() => {});
 
     return res.status(201).json({
       success: true,

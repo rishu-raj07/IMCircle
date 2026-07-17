@@ -475,7 +475,7 @@ function JourneyReelSlide({ milestone = {} }) {
           <img
             src={getJourneyCoverIcon()}
             alt=""
-            className="absolute inset-0 m-auto h-16 w-16 rounded-full object-cover opacity-90"
+            className="absolute inset-0 m-auto h-32 w-32 rounded-full object-cover opacity-90"
           />
         </div>
       )}

@@ -94,13 +94,18 @@ function getHeadline(user) {
   );
 }
 
+// Returns "" (never a fake "India" default) when there's no real city/state
+// on record — the backend defaults location.country to "India" even for
+// users who never entered one, so falling back to a literal country string
+// here would show every location-less person as being in "India" (Issue 3:
+// never display a location that wasn't actually provided).
 function getLocation(user) {
   if (typeof user?.location === "string") return user.location;
 
   return (
     [user?.location?.city, user?.location?.state].filter(Boolean).join(", ") ||
     user?.city ||
-    "India"
+    ""
   );
 }
 
@@ -1138,13 +1143,15 @@ function RequestCard({ request, actionId, onAccept, onReject }) {
           <p className="truncate text-[11px] font-bold" style={{ color: MUTED }}>
             {getHeadline(sender)}
           </p>
-          <p
-            className="mt-1 flex items-center gap-1 text-[10px] font-bold"
-            style={{ color: MUTED }}
-          >
-            <MapPin size={11} />
-            {getLocation(sender)}
-          </p>
+          {getLocation(sender) && (
+            <p
+              className="mt-1 flex items-center gap-1 text-[10px] font-bold"
+              style={{ color: MUTED }}
+            >
+              <MapPin size={11} />
+              {getLocation(sender)}
+            </p>
+          )}
 
           <div className="mt-5 grid grid-cols-2 gap-2.5">
             <button
@@ -1334,13 +1341,15 @@ function PeopleCard({ person, requested, loading, onCircle, onView }) {
             {getHeadline(person)}
           </p>
 
-          <p
-            className="mt-1 flex items-center gap-1 text-[10px] font-bold"
-            style={{ color: MUTED }}
-          >
-            <MapPin size={11} />
-            {getLocation(person)}
-          </p>
+          {getLocation(person) && (
+            <p
+              className="mt-1 flex items-center gap-1 text-[10px] font-bold"
+              style={{ color: MUTED }}
+            >
+              <MapPin size={11} />
+              {getLocation(person)}
+            </p>
+          )}
 
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
@@ -1460,7 +1469,7 @@ function BuildingInPublicCard({ milestone, onOpen, isOwner = false, isCircleMemb
           <img src={cover} alt={journey?.title || "Journey"} className="absolute inset-0 h-full w-full object-cover" />
         ) : (
           <div className="absolute inset-0 grid place-items-center" style={{ background: "linear-gradient(135deg, rgba(67,56,202,0.5), rgba(18,20,28,0.85))" }}>
-            <img src={getJourneyCoverIcon()} alt="" className="h-8 w-8 rounded-full object-cover" />
+            <img src={getJourneyCoverIcon()} alt="" className="h-28 w-28 rounded-full object-cover opacity-95" />
           </div>
         )}
 

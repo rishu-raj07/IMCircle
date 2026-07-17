@@ -15,7 +15,7 @@ import {
 import { useNavigate, useLocation } from "react-router-dom";
 import { getMyProfile } from "../../api/profileApi";
 import { getConversations } from "../../api/messageApi";
-import { getNotifications } from "../../api/notificationApi";
+import { getUnreadNotificationCount } from "../../api/notificationApi";
 import { getGenderAvatarIcon } from "../../utils/avatar";
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
@@ -48,10 +48,6 @@ function getUserAvatar(user) {
   if (typeof url !== "string") return "";
   if (url.startsWith("/uploads")) return `${API_URL}${url}`;
   return url;
-}
-
-function isNotificationUnread(notification) {
-  return !(notification?.isRead || notification?.read);
 }
 
 function SideDrawer({ isOpen, onClose }) {
@@ -90,10 +86,11 @@ function SideDrawer({ isOpen, onClose }) {
 
     (async () => {
       try {
-        const res = await getNotifications();
-        const list = res?.notifications || res?.data?.notifications || res?.data || [];
-        const count = (Array.isArray(list) ? list : []).filter(isNotificationUnread).length;
-        if (!cancelled) setUnreadNotifications(count);
+        // The real unread-count endpoint (not a page of notifications
+        // filtered client-side) — accurate even when there are more unread
+        // notifications than fit on one page.
+        const res = await getUnreadNotificationCount();
+        if (!cancelled) setUnreadNotifications(res?.unreadCount || 0);
       } catch {
         // best-effort
       }

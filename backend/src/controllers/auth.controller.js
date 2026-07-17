@@ -10,6 +10,29 @@ import { verifyGoogleCredential } from "../services/google.service.js";
 import { ensureUserIndexes } from "../services/userIndex.service.js";
 import { startTimer } from "../utils/perfTimer.js";
 import { resolveReferrerId } from "../utils/referral.js";
+import notificationService from "../services/notification.service.js";
+
+// Shared by every signup path (email OTP, mobile OTP, Google) — fires once,
+// exactly when the referred account actually completes signup/verification
+// (never at account-pre-creation, e.g. before an OTP is confirmed), so the
+// referrer isn't notified about someone who never finished signing up.
+function notifyReferrerOfJoin(referredBy, newUser) {
+  if (!referredBy) return;
+
+  const name = newUser.fullName && newUser.fullName !== "BN User" ? newUser.fullName : "Someone you referred";
+
+  notificationService
+    .create({
+      recipientId: referredBy,
+      actorId: newUser._id,
+      type: "referral",
+      entityType: "user",
+      entityId: newUser._id,
+      metadata: { username: newUser.username },
+      message: `${name} joined IMCircle using your referral`,
+    })
+    .catch(() => {});
+}
 
 // --- Google Play review OTP bypass -----------------------------------
 // The Play Store review team's automated/manual test devices can't
@@ -283,6 +306,8 @@ export const verifyMobileOtp = async (req, res) => {
       });
     }
 
+    const isFirstMobileVerification = !user.verification.mobile;
+
     user.verification.mobile = true;
     user.lastActiveAt = Date.now();
 
@@ -291,6 +316,10 @@ export const verifyMobileOtp = async (req, res) => {
     }
 
     await user.save({ validateBeforeSave: false });
+
+    if (isFirstMobileVerification) {
+      notifyReferrerOfJoin(user.referredBy, user);
+    }
 
     return sendSecureAuthResponse(req, res, user, 200, "Mobile verified successfully");
   } catch (error) {
@@ -350,6 +379,11 @@ export const googleLogin = async (req, res) => {
         referredBy,
       });
       timer.step("user_create");
+
+      // Google sign-in verifies email as part of the provider flow itself,
+      // so account creation here IS the completed signup — no separate OTP
+      // step to wait for.
+      notifyReferrerOfJoin(referredBy, user);
     } else {
       if (user.isDeleted) {
         timer.done({ result: "account_deleted" });
@@ -554,6 +588,11 @@ export const verifyOtp = async (req, res) => {
   user.otp = undefined;
 
   await user.save({ validateBeforeSave: false });
+
+  // The guard at the top of this function (`if (user.verification.email)
+  // return 400`) already guarantees this only runs once per account, so no
+  // extra "was this already verified" tracking is needed here.
+  notifyReferrerOfJoin(user.referredBy, user);
 
   return sendSecureAuthResponse(req, res, user, 200, "Email verified successfully");
 };

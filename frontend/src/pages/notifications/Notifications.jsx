@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   Bell,
@@ -22,6 +22,8 @@ import {
 } from "../../api/notificationApi";
 import { createConversation } from "../../api/messageApi";
 import { getGenderAvatarIcon } from "../../utils/avatar";
+import { socket } from "../../socket/socket";
+import { getSessionUser } from "../../utils/sessionUser";
 
 // Fixed brand hue (doesn't flip between themes, same convention as
 // PostCard.jsx's MARIGOLD). Everything else below reads a CSS variable
@@ -181,10 +183,7 @@ function getType(item) {
 
 // Figures out where a notification card should navigate when tapped,
 // preferring a real backend-provided link (existing behavior), then falling
-// back to structured targetType/targetId data. Only ever returns routes that
-// already exist in AppRoutes.jsx — there is no dedicated single-post route
-// yet, so "post" notifications (always about the recipient's own post) open
-// the recipient's own profile instead of a route that doesn't exist.
+// back to structured targetType/targetId data.
 function resolveNotificationRoute(item) {
   const explicitLink = item?.link || item?.url || item?.targetUrl || item?.meta?.url || item?.data?.url;
   if (explicitLink) return explicitLink;
@@ -197,6 +196,7 @@ function resolveNotificationRoute(item) {
     item?.learningId ||
     item?.data?.journey ||
     item?.data?.learning ||
+    item?.data?.post ||
     "";
 
   const actor = getSender(item);
@@ -224,10 +224,7 @@ function resolveNotificationRoute(item) {
       return conversationId ? `/chat/${conversationId}` : actorProfileRoute;
     }
     case "post":
-      // No dedicated post detail route exists — these are always "on your
-      // post", so the recipient's own profile is the closest real place to
-      // see it.
-      return "/profile";
+      return targetId ? `/post/${targetId}` : actorProfileRoute;
     case "user":
       return actorProfileRoute;
     default:
@@ -252,22 +249,66 @@ function Notifications() {
   const [activeTab, setActiveTab] = useState("All");
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState("");
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadingMoreRef = useRef(false);
+  const sentinelRef = useRef(null);
+  const currentUserId = useMemo(() => {
+    const user = getSessionUser();
+    return user?._id || user?.id || "";
+  }, []);
 
+  // Resets to page 1 — used on first mount, the 8s poll, and pull-to-focus
+  // refresh. Polling stays in place alongside the socket listener below
+  // (spec requirement: never rely only on sockets — MongoDB via this fetch
+  // is the source of truth if a socket event is ever missed, e.g. the tab
+  // was backgrounded when it fired).
   const loadNotifications = async () => {
     try {
       setLoading(true);
-      const data = await getFreshNotifications();
-      setNotifications(
-        normalizeNotifications(data).sort(
-          (a, b) => getNotificationTime(b) - getNotificationTime(a)
-        )
+      const data = await getFreshNotifications({ page: 1, limit: 20 });
+      const list = normalizeNotifications(data).sort(
+        (a, b) => getNotificationTime(b) - getNotificationTime(a)
       );
+      setNotifications(list);
+      setPage(1);
+      setHasMore(data?.hasMore ?? list.length >= 20);
     } catch {
       setNotifications((prev) => prev);
     } finally {
       setLoading(false);
     }
   };
+
+  const loadMore = useCallback(async () => {
+    if (loadingMoreRef.current || !hasMore) return;
+
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+
+    try {
+      const nextPage = page + 1;
+      const data = await getFreshNotifications({ page: nextPage, limit: 20 });
+      const nextItems = normalizeNotifications(data);
+
+      setNotifications((prev) => {
+        const existingIds = new Set(prev.map((item) => getId(item)));
+        const merged = [
+          ...prev,
+          ...nextItems.filter((item) => !existingIds.has(getId(item))),
+        ];
+        return merged.sort((a, b) => getNotificationTime(b) - getNotificationTime(a));
+      });
+      setPage(nextPage);
+      setHasMore(data?.hasMore ?? nextItems.length >= 20);
+    } catch {
+      // best-effort — the sentinel will just retry on the next intersection
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [page, hasMore]);
 
   useEffect(() => {
     loadNotifications();
@@ -291,6 +332,54 @@ function Notifications() {
       window.removeEventListener("focus", loadNotifications);
     };
   }, []);
+
+  // Real-time delivery: a like/comment/follow/etc notification lands here
+  // instantly instead of waiting up to 8s for the next poll. New items are
+  // de-duped against whatever's already in the list (the poll above and this
+  // listener can both deliver the same notification — id-based de-dup
+  // in the setter keeps that from double-rendering).
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    socket.connect();
+    socket.emit("user_online", currentUserId);
+
+    socket.on("new_notification", (incoming) => {
+      if (!incoming) return;
+
+      setNotifications((prev) => {
+        const incomingId = getId(incoming);
+        if (incomingId && prev.some((item) => getId(item) === incomingId)) {
+          return prev;
+        }
+
+        return [incoming, ...prev].sort(
+          (a, b) => getNotificationTime(b) - getNotificationTime(a)
+        );
+      });
+    });
+
+    return () => {
+      socket.off("new_notification");
+    };
+  }, [currentUserId]);
+
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node) return undefined;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasMore && !loading && !loadingMoreRef.current) {
+          loadMore();
+        }
+      },
+      { rootMargin: "200px" }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [loadMore, hasMore, loading]);
 
   const unreadCount = notifications.filter((item) => !item?.read && !item?.isRead).length;
 
@@ -470,6 +559,19 @@ function Notifications() {
                   onDelete={() => handleDelete(item)}
                 />
               ))}
+
+              {/* Infinite-scroll trigger — same IntersectionObserver
+                  pattern as the Home feed. Only relevant on the "All" tab
+                  since the other tabs filter an already-fetched set. */}
+              {activeTab === "All" && (
+                <div ref={sentinelRef} className="h-4 w-full">
+                  {loadingMore && (
+                    <div className="flex justify-center py-3">
+                      <Loader2 className="animate-spin" size={20} style={{ color: MARIGOLD }} />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <div className="rounded-[24px] bg-[var(--imc-surface)] p-6 text-center" style={{ border: `1px solid ${LINE}` }}>

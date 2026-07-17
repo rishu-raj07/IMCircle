@@ -90,6 +90,11 @@ function getLocationText(location) {
   if (!location) return "";
   if (typeof location === "string") return location;
 
+  // Same guard as Profile.jsx's formatLocation() — the backend defaults
+  // `country` to "India" even when a user never entered a location, so
+  // without this, an empty location would still render a bare "India" line.
+  if (!location?.city && !location?.state) return "";
+
   return [location?.city, location?.state, location?.country]
     .filter(Boolean)
     .join(", ");

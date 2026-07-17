@@ -227,6 +227,24 @@ export const isUserOnline = (userId) => {
   return onlineUsers.has(userId.toString());
 };
 
+// Stricter than isUserOnline: true only if this user currently has a socket
+// sitting in this exact conversation's room (i.e. the chat screen is open
+// right now), not just connected somewhere else in the app. Used to decide
+// whether a new DM should also create a Notification — a message sent while
+// the recipient is actively looking at that same conversation is already
+// visible in real time via `receive_message`, so a duplicate entry in the
+// Notifications tab would just be noise. If they're online but on a
+// different screen (or a different chat), they still get notified.
+export const isUserActiveInConversation = (userId, conversationId) => {
+  if (!io || !userId || !conversationId) return false;
+
+  const socketId = onlineUsers.get(userId.toString());
+  if (!socketId) return false;
+
+  const room = io.sockets.adapter.rooms.get(conversationId.toString());
+  return Boolean(room && room.has(socketId));
+};
+
 export const emitNotification = (recipientId, notification) => {
   if (!io || !recipientId) return;
   io.to(recipientId.toString()).emit("new_notification", notification);

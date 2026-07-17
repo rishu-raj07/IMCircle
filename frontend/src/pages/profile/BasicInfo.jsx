@@ -561,7 +561,7 @@ function BasicInfo({
         </div>
 
         <div className={step === 3 ? "" : "hidden"}>
-          <LocationField value={location} onChange={setLocation} />
+          <LocationField value={location} onChange={setLocation} required={false} />
         </div>
 
         <div className={step === 3 ? "" : "hidden"}>

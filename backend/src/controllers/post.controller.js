@@ -1,36 +1,10 @@
 import Post from "../models/Post.js";
 import User from "../models/User.js";
-import Notification from "../models/Notification.js";
-import { emitNotification } from "../socket/socket.js";
 import cloudinary from "../config/cloudinary.js";
 import { processContentText } from "../services/contentParsing.service.js";
+import notificationService from "../services/notification.service.js";
 
 const authorFields = "fullName username avatar headline field role gender";
-
-const createNotification = async ({
-  recipient,
-  sender,
-  type,
-  title,
-  message,
-  post,
-}) => {
-  if (!recipient || !sender) return;
-  if (recipient.toString() === sender.toString()) return;
-
-  const notification = await Notification.create({
-    recipient,
-    sender,
-    type,
-    title,
-    message,
-    post,
-  });
-
-  emitNotification(recipient, notification);
-
-  return notification;
-};
 
 export const createPost = async (req, res) => {
   try {
@@ -183,17 +157,36 @@ export const likePost = async (req, res) => {
       post.likes = post.likes.filter(
         (id) => id.toString() !== req.user._id.toString()
       );
+
+      // Documented decision (Issue 2 spec): unlike REMOVES the like
+      // notification rather than leaving a stale "liked your post" sitting
+      // in the recipient's list for something that's no longer true.
+      notificationService
+        .removeByDedupeKey({
+          type: "like",
+          entityType: "post",
+          entityId: post._id,
+          actorId: req.user._id,
+          recipientId: post.author,
+        })
+        .catch(() => {});
     } else {
       post.likes.push(req.user._id);
 
-      await createNotification({
-        recipient: post.author,
-        sender: req.user._id,
-        type: "like",
-        title: "New like",
-        message: `${req.user.fullName} liked your post`,
-        post: post._id,
-      });
+      // `dedupe: true` means unlike-then-relike resurfaces the SAME
+      // notification (marked unread again) instead of creating a second
+      // row — repeatedly tapping like can never spam the recipient.
+      notificationService
+        .create({
+          recipientId: post.author,
+          actorId: req.user._id,
+          type: "like",
+          entityType: "post",
+          entityId: post._id,
+          message: `${req.user.fullName} liked your post`,
+          dedupe: true,
+        })
+        .catch(() => {});
     }
 
     await post.save();
@@ -236,14 +229,29 @@ export const commentOnPost = async (req, res) => {
 
     await post.save();
 
-    await createNotification({
-      recipient: post.author,
-      sender: req.user._id,
-      type: "comment",
-      title: "New comment",
-      message: `${req.user.fullName} commented on your post`,
-      post: post._id,
-    });
+    const newComment = post.comments[post.comments.length - 1];
+
+    notificationService
+      .create({
+        recipientId: post.author,
+        actorId: req.user._id,
+        type: "comment",
+        entityType: "post",
+        entityId: post._id,
+        message: `${req.user.fullName} commented on your post`,
+      })
+      .catch(() => {});
+
+    // @mentions inside a comment notify the mentioned person too, same as
+    // mentioning someone in the post body itself — fire-and-forget, never
+    // blocks the comment response.
+    processContentText({
+      text,
+      authorId: req.user._id,
+      contentType: "comment",
+      contentId: newComment?._id,
+      link: `/post/${post._id}`,
+    }).catch(() => {});
 
     const updatedPost = await Post.findById(post._id)
       .populate("author", authorFields)
@@ -342,6 +350,21 @@ export const repostPost = async (req, res) => {
         post.reposts[existingIndex].createdAt = new Date();
         await post.save();
 
+        // Same dedup key as a plain repost below — adding/changing a
+        // thought on an existing repost resurfaces the one notification
+        // rather than stacking a second one for the same actor+post.
+        notificationService
+          .create({
+            recipientId: post.author,
+            actorId: userId,
+            type: "repost",
+            entityType: "post",
+            entityId: post._id,
+            message: `${req.user.fullName} reposted your post with a thought`,
+            dedupe: true,
+          })
+          .catch(() => {});
+
         return res.status(200).json({
           success: true,
           message: "Repost updated",
@@ -353,6 +376,18 @@ export const repostPost = async (req, res) => {
 
       post.reposts.splice(existingIndex, 1);
       await post.save();
+
+      // Documented decision, same as unlike: removing a repost removes the
+      // notification too, since "reposted your post" is no longer true.
+      notificationService
+        .removeByDedupeKey({
+          type: "repost",
+          entityType: "post",
+          entityId: post._id,
+          actorId: userId,
+          recipientId: post.author,
+        })
+        .catch(() => {});
 
       return res.status(200).json({
         success: true,
@@ -370,6 +405,20 @@ export const repostPost = async (req, res) => {
     });
 
     await post.save();
+
+    notificationService
+      .create({
+        recipientId: post.author,
+        actorId: userId,
+        type: "repost",
+        entityType: "post",
+        entityId: post._id,
+        message: repostText
+          ? `${req.user.fullName} reposted your post with a thought`
+          : `${req.user.fullName} reposted your post`,
+        dedupe: true,
+      })
+      .catch(() => {});
 
     return res.status(200).json({
       success: true,
@@ -412,14 +461,17 @@ export const sharePost = async (req, res) => {
 
       await post.save();
 
-      await createNotification({
-        recipient: post.author,
-        sender: req.user._id,
-        type: "share",
-        title: "New share",
-        message: `${req.user.fullName} shared your post`,
-        post: post._id,
-      });
+      notificationService
+        .create({
+          recipientId: post.author,
+          actorId: req.user._id,
+          type: "share",
+          entityType: "post",
+          entityId: post._id,
+          message: `${req.user.fullName} shared your post`,
+          dedupe: true,
+        })
+        .catch(() => {});
     }
 
     return res.status(200).json({
@@ -670,6 +722,33 @@ export const replyPostComment = async (req, res) => {
     });
 
     await post.save();
+
+    const newReply = post.comments[post.comments.length - 1];
+
+    // Notifies whoever this reply is actually directed at — the parent
+    // comment's author for a first-level reply, or the specific reply
+    // author when `replyingToUserId` points at a nested reply (that's the
+    // "someone replies to your reply" case, same field the frontend
+    // already sends today).
+    const replyRecipient = replyingToUserId || parent.user;
+    notificationService
+      .create({
+        recipientId: replyRecipient,
+        actorId: req.user._id,
+        type: "reply",
+        entityType: "post",
+        entityId: post._id,
+        message: `${req.user.fullName} replied to your comment`,
+      })
+      .catch(() => {});
+
+    processContentText({
+      text,
+      authorId: req.user._id,
+      contentType: "comment",
+      contentId: newReply?._id,
+      link: `/post/${post._id}`,
+    }).catch(() => {});
 
     const updatedPost = await populatePostComments(post._id);
     const comments = buildCommentTree(updatedPost.comments, req.user._id);

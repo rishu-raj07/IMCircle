@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Compass, Loader2, MapPin } from "lucide-react";
+import { Compass, Loader2, MapPin, X } from "lucide-react";
 import {
   getLocationDetails,
   reverseLocation,
@@ -127,9 +127,21 @@ function LocationField({
     }
   };
 
+  const hasValue = Boolean(value?.city);
+
+  const clearLocation = () => {
+    setEditing(false);
+    setText("");
+    setSuggestions([]);
+    setError("");
+    onChange({ city: "", state: "", country: "", lat: null, lng: null });
+  };
+
   return (
     <div>
-      <label className="mb-2 block text-[12px] font-bold text-[var(--imc-text-muted)]">{label} {required && <span className="text-red-500">*</span>}</label>
+      <label className="mb-2 block text-[12px] font-bold text-[var(--imc-text-muted)]">
+        {label} {required ? <span className="text-red-500">*</span> : <span className="font-medium text-[var(--imc-text-faint)]">(optional)</span>}
+      </label>
       <div className="flex items-start gap-2">
         <div className="relative flex-1">
           <MapPin size={19} className="pointer-events-none absolute left-4 top-[27px] -translate-y-1/2 text-[var(--imc-indigo-text)]" />
@@ -152,6 +164,16 @@ function LocationField({
             className="h-[54px] w-full rounded-[16px] border border-[var(--imc-border)] bg-[var(--imc-surface)] pl-11 pr-10 text-[15px] font-bold text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)] focus:border-[var(--imc-indigo-text)]"
           />
           {searching && <Loader2 size={17} className="absolute right-4 top-[19px] animate-spin text-[var(--imc-indigo-text)]" />}
+          {!searching && hasValue && (
+            <button
+              type="button"
+              onClick={clearLocation}
+              aria-label="Clear location"
+              className="absolute right-3 top-[27px] -translate-y-1/2 rounded-full p-1 text-[var(--imc-text-faint)] active:scale-90"
+            >
+              <X size={16} />
+            </button>
+          )}
           {suggestions.length > 0 && (
             <div className="absolute left-0 right-0 top-[60px] z-30 overflow-hidden rounded-2xl border border-[var(--imc-border)] bg-[var(--imc-surface)] shadow-xl">
               {suggestions.map((item) => (

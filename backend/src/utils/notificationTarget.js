@@ -82,9 +82,7 @@ export function deriveTarget(raw) {
     else if (targetType === "learning" && learningId) link = `/learning-view/${learningId}`;
     else if (targetType === "circle" && circleId) link = `/circles/${circleId}`;
     else if (targetType === "message" && resolvedConversationId) link = `/chat/${resolvedConversationId}`;
-    // "post" has no dedicated single-post route yet — leave link empty and
-    // let the frontend fall back to a safe existing route (the recipient's
-    // own profile, since these are always "commented/liked your post").
+    else if (targetType === "post" && postId) link = `/post/${postId}`;
   }
 
   return {

@@ -27,6 +27,7 @@ export const APP_PLATFORM = detectPlatform();
 export const IS_WEB = APP_PLATFORM === "web";
 export const IS_ANDROID = APP_PLATFORM === "android";
 export const IS_IOS = APP_PLATFORM === "ios";
+export const IS_NATIVE = IS_ANDROID || IS_IOS;
 
 export const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
 export const SOCKET_URL =
@@ -72,6 +73,7 @@ export default {
   IS_WEB,
   IS_ANDROID,
   IS_IOS,
+  IS_NATIVE,
   API_URL,
   SOCKET_URL,
   GOOGLE_CLIENT_ID,

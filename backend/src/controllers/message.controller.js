@@ -1,14 +1,14 @@
 import Conversation from "../models/Conversation.js";
 import Message from "../models/Message.js";
-import Notification from "../models/Notification.js";
 import User from "../models/User.js";
+import notificationService from "../services/notification.service.js";
 
 import {
   emitMessage,
   emitMessageSeen,
   emitMessagesUnsent,
-  emitNotification,
   isUserOnline,
+  isUserActiveInConversation,
 } from "../socket/socket.js";
 
 const userPopulateFields =
@@ -405,31 +405,28 @@ export const sendMessage = async (req, res) => {
 
     // Best-effort notification so a direct message shows up in the
     // recipient's Notifications tab and, when tapped, opens this exact
-    // conversation (see targetType "message" handling in
-    // notification.controller.js) instead of falling back to Network.
-    // Skipped while the recipient is actively online/connected (they're
-    // already seeing it live via the socket) to avoid flooding the
-    // Notifications tab during a live back-and-forth conversation.
-    if (receiverId && !isUserOnline(receiverId)) {
-      try {
-        const senderName =
-          req.user.fullName || req.user.name || req.user.username || "Someone";
+    // conversation. Skipped only while the recipient has this exact
+    // conversation open right now (isUserActiveInConversation checks the
+    // conversation's socket room, not just "online somewhere in the app") —
+    // they're already seeing the message live via `receive_message`, so a
+    // duplicate Notifications-tab entry would just be noise. If they're
+    // online but on a different screen/chat, they still get notified.
+    if (receiverId && !isUserActiveInConversation(receiverId, conversation._id)) {
+      const senderName =
+        req.user.fullName || req.user.name || req.user.username || "Someone";
 
-        const notification = await Notification.create({
-          recipient: receiverId,
-          sender: req.user._id,
+      notificationService
+        .create({
+          recipientId: receiverId,
+          actorId: req.user._id,
           type: "message",
+          entityType: "message",
+          entityId: conversation._id,
           title: senderName,
           message: preview || "Sent you a message",
-          targetType: "message",
-          targetId: conversation._id,
-          data: { conversationId: conversation._id, senderId: req.user._id },
-        });
-
-        emitNotification(receiverId, notification);
-      } catch (notifyError) {
-        console.error("Message notification skipped:", notifyError.message);
-      }
+          metadata: { conversationId: conversation._id, senderId: req.user._id },
+        })
+        .catch(() => {});
     }
 
     return res.status(201).json({

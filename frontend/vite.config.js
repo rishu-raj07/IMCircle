@@ -1,9 +1,19 @@
+import { readFileSync } from "fs";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 const pwaPackageName = "vite-plugin-pwa";
 const { VitePWA = () => null } = await import(pwaPackageName).catch(() => ({}));
+
+// Baked into the bundle at build time so the running app always knows its
+// own version/build-date without an extra network request — compared
+// against GET /api/meta/version by useVersionCheck.js to decide whether to
+// show the "New version available" banner. A stale cached bundle keeps
+// whatever value was baked in when IT was built, which is exactly the
+// signal this comparison needs.
+const appVersion = JSON.parse(readFileSync("./package.json", "utf-8")).version;
+const buildDate = new Date().toISOString();
 
 // Every native (Capacitor) build runs `vite build` through one of the
 // "cap:*" package.json scripts (cap:sync, cap:android, cap:ios) — npm sets
@@ -28,6 +38,10 @@ const { VitePWA = () => null } = await import(pwaPackageName).catch(() => ({}));
 const isCapacitorBuild = (process.env.npm_lifecycle_event || "").startsWith("cap:");
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+    __BUILD_DATE__: JSON.stringify(buildDate),
+  },
   plugins: [
     react(),
     tailwindcss(),

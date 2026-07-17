@@ -456,7 +456,7 @@ export default function ProfilePeoplePage() {
                     }
                     className="h-14 w-14 shrink-0 overflow-hidden rounded-full"
                   >
-                    <Avatar src={avatar} name={name} size={56} />
+                    <Avatar user={item} src={avatar} name={name} size={56} />
                   </button>
 
                   <button

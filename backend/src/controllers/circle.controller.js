@@ -3,8 +3,7 @@ import CircleMember from "../models/CircleMember.js";
 import CircleInvite from "../models/CircleInvite.js";
 import CircleJoinRequest from "../models/CircleJoinRequest.js";
 import CirclePost from "../models/CirclePost.js";
-import Notification from "../models/Notification.js";
-import { emitNotification } from "../socket/socket.js";
+import notificationService from "../services/notification.service.js";
 
 // Rough keyword sets for each `User.primaryInterest` option, reused from the
 // same personalization idea as the Journey Discover feed — best-effort text
@@ -265,21 +264,19 @@ export const joinCircle = async (req, res) => {
           req.user.fullName || req.user.name || req.user.username || "Someone";
 
         await Promise.all(
-          managers.map(async (manager) => {
-            try {
-              const notification = await Notification.create({
-                recipient: manager.user,
-                sender: req.user._id,
+          managers.map((manager) =>
+            notificationService
+              .create({
+                recipientId: manager.user,
+                actorId: req.user._id,
                 type: "circle_join",
+                entityType: "circle",
+                entityId: circleId,
                 title: circle?.name || "New member",
                 message: `${joinerName} joined ${circle?.name || "your circle"}`,
-              });
-
-              emitNotification(manager.user, notification);
-            } catch (notifyError) {
-              console.error("Circle join notification skipped:", notifyError.message);
-            }
-          })
+              })
+              .catch(() => null)
+          )
         );
       }
     } catch (notifyBatchError) {
@@ -624,21 +621,19 @@ export const deleteCircle = async (req, res) => {
 
     try {
       await Promise.all(
-        memberIds.map(async (userId) => {
-          try {
-            const notification = await Notification.create({
-              recipient: userId,
-              sender: req.user._id,
+        memberIds.map((userId) =>
+          notificationService
+            .create({
+              recipientId: userId,
+              actorId: req.user._id,
               type: "circle_deleted",
               title: "Community deleted",
               message: `${circle.name} was deleted by its owner`,
-            });
-
-            emitNotification(userId, notification);
-          } catch (notifyError) {
-            console.error("Circle deletion notification skipped:", notifyError.message);
-          }
-        })
+              // No entityType/link — the circle no longer exists, so there's
+              // nothing meaningful to route to.
+            })
+            .catch(() => null)
+        )
       );
     } catch (notifyBatchError) {
       console.error("Circle deletion notification batch skipped:", notifyBatchError.message);
@@ -825,21 +820,20 @@ export const requestToJoinCircle = async (req, res) => {
         req.user?.fullName || req.user?.name || req.user?.username || "Someone";
 
       await Promise.all(
-        managers.map(async (manager) => {
-          try {
-            const notification = await Notification.create({
-              recipient: manager.user,
-              sender: req.user._id,
+        managers.map((manager) =>
+          notificationService
+            .create({
+              recipientId: manager.user,
+              actorId: req.user._id,
               type: "circle_join_request",
+              entityType: "circle",
+              entityId: circleId,
               title: "Join request",
               message: `${requesterName} wants to join ${circle.name}`,
-            });
-
-            emitNotification(manager.user, notification);
-          } catch (notifyError) {
-            console.error("Circle join request notification skipped:", notifyError.message);
-          }
-        })
+              dedupe: true,
+            })
+            .catch(() => null)
+        )
       );
     } catch (notifyBatchError) {
       console.error("Circle join request notification batch skipped:", notifyBatchError.message);
@@ -954,6 +948,32 @@ const resolveCircleJoinRequest = async (req, res, accept) => {
     joinRequest.status = accept ? "accepted" : "rejected";
     await joinRequest.save();
 
+    // The request is resolved either way — clear the pending "wants to
+    // join" notification from every manager who got one (not just the one
+    // who acted), so it doesn't sit there as stale unread state.
+    try {
+      const allManagers = await CircleMember.find({
+        circle: circleId,
+        role: { $in: ["owner", "admin"] },
+      }).select("user");
+
+      await Promise.all(
+        allManagers.map((manager) =>
+          notificationService
+            .removeByDedupeKey({
+              type: "circle_join_request",
+              entityType: "circle",
+              entityId: circleId,
+              actorId: joinRequest.user,
+              recipientId: manager.user,
+            })
+            .catch(() => null)
+        )
+      );
+    } catch {
+      // best-effort cleanup, never blocks the actual accept/reject
+    }
+
     if (accept) {
       const alreadyMember = await CircleMember.findOne({
         circle: circleId,
@@ -965,21 +985,19 @@ const resolveCircleJoinRequest = async (req, res, accept) => {
         await Circle.findByIdAndUpdate(circleId, { $inc: { membersCount: 1 } });
       }
 
-      try {
-        const circle = await Circle.findById(circleId).select("name");
+      const circle = await Circle.findById(circleId).select("name");
 
-        const notification = await Notification.create({
-          recipient: joinRequest.user,
-          sender: req.user._id,
+      notificationService
+        .create({
+          recipientId: joinRequest.user,
+          actorId: req.user._id,
           type: "circle_join_accepted",
+          entityType: "circle",
+          entityId: circleId,
           title: "Request accepted",
           message: `You're in! Your request to join ${circle?.name || "the circle"} was accepted`,
-        });
-
-        emitNotification(joinRequest.user, notification);
-      } catch (notifyError) {
-        console.error("Circle join accept notification skipped:", notifyError.message);
-      }
+        })
+        .catch(() => {});
     }
 
     res.status(200).json({

@@ -1,5 +1,4 @@
 import User from "../models/User.js";
-import Notification from "../models/Notification.js";
 import Post from "../models/Post.js";
 import LearningRepost from "../models/LearningRepost.js";
 import JourneyMilestoneRepost from "../models/JourneyMilestoneRepost.js";
@@ -8,7 +7,7 @@ import JourneyMilestoneLike from "../models/JourneyMilestoneLike.js";
 import JourneyMilestoneSave from "../models/JourneyMilestoneSave.js";
 import CircleRequest from "../models/CircleRequest.js";
 import JourneyFollower from "../models/JourneyFollower.js";
-import { emitNotification } from "../socket/socket.js";
+import notificationService from "../services/notification.service.js";
 import { getSignupRankBadge } from "../utils/badges.js";
 import { sendOtpSms, verifyOtpSms } from "../services/msg91.service.js";
 import { repairMissingProfileMedia } from "../utils/profileMediaRepair.js";
@@ -555,19 +554,20 @@ export const followUser = async (req, res) => {
       }
     );
 
-    try {
-      const notification = await Notification.create({
-        recipient: targetUserId,
-        sender: currentUserId,
+    // dedupe: true so re-following after an unfollow (or a double-tap race)
+    // resurfaces the same notification instead of stacking duplicates.
+    notificationService
+      .create({
+        recipientId: targetUserId,
+        actorId: currentUserId,
         type: "follow",
-        title: "New follower",
+        entityType: "user",
+        entityId: currentUserId,
+        metadata: { username: currentUser.username },
         message: `${currentUser.fullName} started following you`,
-      });
-
-      emitNotification(targetUserId, notification);
-    } catch (err) {
-      console.error("Follow notification skipped:", err.message);
-    }
+        dedupe: true,
+      })
+      .catch(() => {});
 
     return res.status(200).json({
       success: true,
@@ -635,6 +635,23 @@ export const unfollowUser = async (req, res) => {
       { _id: targetUserId },
       { $max: { "stats.followersCount": 0 } }
     );
+
+    // Consistent with the unlike/un-repost decision elsewhere: remove the
+    // now-stale "started following you" notification rather than leaving an
+    // unread notification about something that's no longer true.
+    //
+    // Deliberately NOT creating a new "X unfollowed you" notification type —
+    // per the product decision, unfollow is a negative/quiet action that
+    // real social apps don't surface to the person being unfollowed.
+    notificationService
+      .removeByDedupeKey({
+        type: "follow",
+        entityType: "user",
+        entityId: currentUserId,
+        actorId: currentUserId,
+        recipientId: targetUserId,
+      })
+      .catch(() => {});
 
     return res.status(200).json({
       success: true,

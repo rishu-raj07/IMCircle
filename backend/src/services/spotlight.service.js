@@ -9,8 +9,13 @@ import FollowerEvent from "../models/FollowerEvent.js";
 import Post from "../models/Post.js";
 import SpotlightWeek from "../models/SpotlightWeek.js";
 import SpotlightWinner from "../models/SpotlightWinner.js";
-import { SPOTLIGHT_CATEGORIES, isValidSpotlightCategory } from "../constants/spotlightCategories.js";
+import {
+  SPOTLIGHT_CATEGORIES,
+  SPOTLIGHT_CATEGORY_BY_KEY,
+  isValidSpotlightCategory,
+} from "../constants/spotlightCategories.js";
 import { awardBadge } from "./badge.service.js";
+import notificationService from "./notification.service.js";
 
 const PUBLIC_FIELDS = "fullName username avatar headline field role primaryInterest gender";
 
@@ -402,11 +407,46 @@ export async function generateWeeklySpotlight(weekKey, { force = false } = {}) {
 }
 
 export async function publishWeek(weekKey) {
-  return SpotlightWeek.findOneAndUpdate(
+  const week = await SpotlightWeek.findOneAndUpdate(
     { weekKey },
     { status: "published", publishedAt: new Date() },
     { new: true }
   );
+
+  if (week) {
+    // Notify every winner now that the week is actually visible to users —
+    // generateWeeklySpotlight() may have written draft winners days earlier,
+    // but they shouldn't hear about it until publish makes it real. Covers
+    // both algorithm-picked and admin-set winners (setBy doesn't matter
+    // here, publish is the single "this is now live" moment for the week).
+    SpotlightWinner.find({ weekKey })
+      .select("user category")
+      .lean()
+      .then((winners) => {
+        winners.forEach((winner) => {
+          const category = SPOTLIGHT_CATEGORY_BY_KEY[winner.category];
+          const label = category?.label || "this week's Spotlight";
+          const isBuilderOfWeek = winner.category === "builder_of_week";
+
+          notificationService
+            .create({
+              recipientId: winner.user,
+              actorId: winner.user,
+              type: isBuilderOfWeek ? "builder_of_week" : "spotlight",
+              entityType: "spotlight",
+              entityId: winner._id,
+              message: isBuilderOfWeek
+                ? "You're this week's Builder of the Week!"
+                : `You were selected for "${label}" this week`,
+              allowSelf: true,
+            })
+            .catch(() => {});
+        });
+      })
+      .catch(() => {});
+  }
+
+  return week;
 }
 
 export async function unpublishWeek(weekKey) {

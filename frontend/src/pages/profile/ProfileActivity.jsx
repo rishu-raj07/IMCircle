@@ -462,7 +462,7 @@ function MissedJourneyCard({ journey = {}, onOpen }) {
           <img src={cover} alt={journey.title || "Missed journey"} className="h-full w-full object-cover" />
         ) : (
           <div className="imc-lattice grid h-full w-full place-items-center bg-gradient-to-br from-[#12141C] via-[#2E2A8F] to-[#4338CA]">
-            <img src={getJourneyCoverIcon()} alt="" className="h-9 w-9 rounded-full object-cover" />
+            <img src={getJourneyCoverIcon()} alt="" className="h-24 w-24 rounded-full object-cover opacity-95" />
           </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />

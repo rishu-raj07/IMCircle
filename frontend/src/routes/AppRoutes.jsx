@@ -23,6 +23,7 @@ const Home = lazy(() => import("../pages/home/Home"));
 const DiscoverJourneys = lazy(() => import("../pages/discover/DiscoverJourneys"));
 const Spotlight = lazy(() => import("../pages/spotlight/Spotlight"));
 const HashtagFeed = lazy(() => import("../pages/hashtag/HashtagFeed"));
+const PostDetail = lazy(() => import("../pages/post/PostDetail"));
 const CreatePost = lazy(() => import("../pages/create/CreatePost"));
 const CreateLearning = lazy(() => import("../pages/create/CreateLearning"));
 const CreateJourney = lazy(() => import("../pages/create/CreateJourney"));
@@ -146,6 +147,19 @@ export default function AppRoutes() {
         element={
           <Private>
             <HashtagFeed />
+          </Private>
+        }
+      />
+
+      {/* What a post like/comment/reply/repost/mention notification opens
+          — see LINK_BUILDERS in notification.service.js (entityType "post"
+          -> `/post/${id}`). Previously no such route existed at all, so
+          every post notification silently fell back to /profile. */}
+      <Route
+        path="/post/:postId"
+        element={
+          <Private>
+            <PostDetail />
           </Private>
         }
       />

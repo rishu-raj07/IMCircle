@@ -7,9 +7,16 @@ import {
   searchDegrees,
   searchIndustries,
   createCompany,
+  getVersionInfo,
 } from "../controllers/meta.controller.js";
 
 const router = express.Router();
+
+// Intentionally unauthenticated — the "is my app up to date" check has to
+// work even for a logged-out user sitting on a stale cached bundle, and
+// external uptime/deploy-verification tooling needs to hit this without a
+// session too. No user data is exposed here, only build metadata.
+router.get("/version", getVersionInfo);
 
 router.get("/companies", searchCompanies);
 router.get("/colleges", searchColleges);

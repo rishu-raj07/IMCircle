@@ -17,6 +17,7 @@ import { createPost } from "../../api/postApi";
 import { currentUser } from "../../store/authStore";
 import { trackEvent } from "../../utils/analyticsTracker";
 import MentionSuggestions from "../../components/common/MentionSuggestions";
+import HashtagSuggestions from "../../components/common/HashtagSuggestions";
 import { getGenderAvatarIcon } from "../../utils/avatar";
 import {
   setStoredPermissionState,
@@ -419,6 +420,7 @@ function CreatePost() {
             />
 
             <MentionSuggestions value={post} onInsert={(next) => setPost(next.slice(0, MAX_TEXT))} />
+            <HashtagSuggestions value={post} onInsert={(next) => setPost(next.slice(0, MAX_TEXT))} />
 
             <p className="mt-1 text-right text-[10px] font-bold text-[var(--imc-text-faint)]">
               {post.length}/{MAX_TEXT}

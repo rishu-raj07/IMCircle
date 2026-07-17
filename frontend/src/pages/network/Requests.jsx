@@ -54,9 +54,13 @@ function getName(user) {
   return user?.fullName || user?.name || user?.username || "User";
 }
 
+// Never falls back to a bare "India" — the backend defaults location.country
+// to "India" even for users who never entered a location, so returning that
+// here would show every location-less person as being "in India" (Issue 3:
+// never display a location that wasn't actually provided).
 function getLocation(user) {
   if (typeof user?.location === "string") return user.location;
-  return [user?.location?.city, user?.location?.state].filter(Boolean).join(", ") || user?.city || "India";
+  return [user?.location?.city, user?.location?.state].filter(Boolean).join(", ") || user?.city || "";
 }
 
 function getInterest(user) {

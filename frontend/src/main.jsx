@@ -5,17 +5,16 @@ import { GoogleOAuthProvider } from "@react-oauth/google";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App.jsx";
 import { ThemeProvider } from "./store/themeStore.jsx";
-import { APP_PLATFORM, GOOGLE_CLIENT_ID, IS_ANDROID, IS_IOS } from "./config/platform.js";
+import { APP_PLATFORM, GOOGLE_CLIENT_ID, IS_NATIVE } from "./config/platform.js";
 import { perfMark } from "./utils/perfLog.js";
 import { captureReferralCode } from "./utils/referral.js";
+import { SW_NEEDS_REFRESH_EVENT } from "./utils/versionCheckConstants.js";
 import "./index.css";
 
 // Capture ?ref=<username> before anything else — a share link can land on
 // any route (a profile, a deep link, /login), and by the time a signup
 // happens it's usually several navigations later.
 captureReferralCode();
-
-const IS_NATIVE = IS_ANDROID || IS_IOS;
 
 // Boot-time visibility: the only way to confirm which code path actually ran
 // on a real device (e.g. via chrome://inspect or a future log-shipping
@@ -58,7 +57,22 @@ if (IS_NATIVE && "serviceWorker" in navigator) {
   // Real web build only — hand-registered now that vite.config.js no
   // longer auto-injects this (see injectRegister: false there).
   import("virtual:pwa-register")
-    .then(({ registerSW }) => registerSW({ immediate: true }))
+    .then(({ registerSW }) => {
+      const updateSW = registerSW({
+        immediate: true,
+        // Fires once a new SW has finished installing and is sitting there
+        // waiting to take over — i.e. a new deploy is live. Bridges into
+        // useVersionCheck.js (which can't import this virtual module
+        // directly) via a plain window event + a stashed update function,
+        // so VersionUpdateBanner can show "Update" and actually act on a
+        // click instead of just polling the API and hoping.
+        onNeedRefresh() {
+          window.dispatchEvent(new Event(SW_NEEDS_REFRESH_EVENT));
+        },
+      });
+
+      window.__imcUpdateServiceWorker = () => updateSW(true);
+    })
     .catch(() => {
       // vite-plugin-pwa not available (e.g. dev server without the plugin
       // enabled) — safe to ignore, PWA install just won't be offered.

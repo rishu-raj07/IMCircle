@@ -11,6 +11,7 @@ import cloudinary from "../config/cloudinary.js";
 import { addBuilderScore } from "../services/builderScore.service.js";
 import { sendMail } from "../utils/mailer.js";
 import { processContentText } from "../services/contentParsing.service.js";
+import notificationService from "../services/notification.service.js";
 
 const REPORT_EMAIL = process.env.REPORT_NOTIFY_EMAIL || "report@imcircle.com";
 
@@ -1505,6 +1506,35 @@ export const commentMilestone = async (req, res) => {
       text: req.body.text,
     });
 
+    // Notify the journey owner that someone replied to this update —
+    // fire-and-forget, mirrors the reply notification on posts.
+    Journey.findById(milestone.journey)
+      .select("creator")
+      .then((journey) => {
+        if (!journey?.creator) return;
+
+        return notificationService.create({
+          recipientId: journey.creator,
+          actorId: req.user._id,
+          type: "journey_comment",
+          entityType: "journey_milestone",
+          entityId: milestone._id,
+          metadata: { journeyId: milestone.journey },
+          message: `${req.user.fullName} replied to your journey update`,
+        });
+      })
+      .catch(() => {});
+
+    // @mentions inside a journey-update comment notify the mentioned
+    // person, same as every other content type — fire-and-forget.
+    processContentText({
+      text: req.body.text,
+      authorId: req.user._id,
+      contentType: "comment",
+      contentId: comment._id,
+      link: `/journey/${milestone.journey}`,
+    }).catch(() => {});
+
     const updated = await JourneyMilestone.findByIdAndUpdate(
       milestone._id,
       { $inc: { commentsCount: 1 } },
@@ -1600,10 +1630,54 @@ export const repostMilestone = async (req, res) => {
       user: req.user._id,
     });
 
+    // Shared by every branch below — resolves the journey owner and fires
+    // the (de)notification, fire-and-forget, dedupe'd so toggling a
+    // milestone repost on/off/on never stacks duplicate notifications.
+    const notifyJourneyOwnerOfRepost = async (message) => {
+      try {
+        const journey = await Journey.findById(milestone.journey).select("creator");
+        if (!journey?.creator) return;
+
+        await notificationService.create({
+          recipientId: journey.creator,
+          actorId: req.user._id,
+          type: "journey_repost",
+          entityType: "journey_milestone",
+          entityId: milestone._id,
+          metadata: { journeyId: milestone.journey },
+          message,
+          dedupe: true,
+        });
+      } catch {
+        // best-effort — never block the repost action itself
+      }
+    };
+
+    const removeRepostNotification = async () => {
+      try {
+        const journey = await Journey.findById(milestone.journey).select("creator");
+        if (!journey?.creator) return;
+
+        await notificationService.removeByDedupeKey({
+          type: "journey_repost",
+          entityType: "journey_milestone",
+          entityId: milestone._id,
+          actorId: req.user._id,
+          recipientId: journey.creator,
+        });
+      } catch {
+        // best-effort
+      }
+    };
+
     if (existingRepost) {
       if (caption) {
         existingRepost.caption = caption;
         await existingRepost.save();
+
+        notifyJourneyOwnerOfRepost(
+          `${req.user.fullName} reposted your journey update with a thought`
+        ).catch(() => {});
 
         return res.status(200).json({
           success: true,
@@ -1625,6 +1699,8 @@ export const repostMilestone = async (req, res) => {
       milestone.repostsCount = Math.max((milestone.repostsCount || 0) - 1, 0);
       await milestone.save();
 
+      removeRepostNotification().catch(() => {});
+
       return res.status(200).json({
         success: true,
         message: "Milestone repost removed",
@@ -1645,6 +1721,12 @@ export const repostMilestone = async (req, res) => {
       { $inc: { repostsCount: 1 } },
       { new: true }
     );
+
+    notifyJourneyOwnerOfRepost(
+      caption
+        ? `${req.user.fullName} reposted your journey update with a thought`
+        : `${req.user.fullName} reposted your journey update`
+    ).catch(() => {});
 
     return res.status(200).json({
       success: true,

@@ -100,6 +100,9 @@ const isStudentUser = (user) => {
   return String(user.primaryInterest || "").trim().toLowerCase() === "student";
 };
 
+// Location is intentionally NOT part of this check (Issue 3: location must
+// be completely optional — never required to finish onboarding, never
+// blocks 100% profile completion, no validation error when blank).
 const hasRequiredBasics = (user) => {
   return Boolean(
     user.fullName &&
@@ -107,7 +110,6 @@ const hasRequiredBasics = (user) => {
       user.username &&
       user.dob &&
       user.gender &&
-      user.location?.city &&
       user.primaryInterest
   );
 };

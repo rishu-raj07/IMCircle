@@ -1,7 +1,6 @@
 import User from "../models/User.js";
-import Notification from "../models/Notification.js";
 import Hashtag from "../models/Hashtag.js";
-import { emitNotification } from "../socket/socket.js";
+import notificationService from "./notification.service.js";
 import { extractMentions, extractHashtags } from "../utils/textParsing.js";
 
 const MENTION_LABEL = {
@@ -9,6 +8,7 @@ const MENTION_LABEL = {
   learning: "learning post",
   journey_milestone: "journey update",
   circle_post: "circle post",
+  comment: "comment",
 };
 
 // Called (fire-and-forget, non-blocking) right after a piece of content is
@@ -55,18 +55,15 @@ export async function processContentText({
         if (String(mentioned._id) === String(authorId)) return;
 
         jobs.push(
-          Notification.create({
-            recipient: mentioned._id,
-            sender: authorId,
-            type: "mention",
-            title: "You were mentioned",
-            message: `mentioned you in a ${label}`,
-            targetType: contentType,
-            targetId: contentId,
-            link,
-          })
-            .then((notification) => {
-              emitNotification(mentioned._id, notification);
+          notificationService
+            .create({
+              recipientId: mentioned._id,
+              actorId: authorId,
+              type: "mention",
+              entityType: contentType,
+              entityId: contentId,
+              message: `mentioned you in a ${label}`,
+              link,
             })
             .catch(() => null)
         );
