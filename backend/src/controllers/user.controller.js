@@ -884,6 +884,9 @@ export const getUserPosts = async (req, res) => {
       getViewerRelationshipSets(req),
       Post.find({ author: userId, isDeleted: false })
         .populate("author", activityAuthorFields)
+        // See the matching comment in getUserReposts below — same gap,
+        // same "Someone" fallback bug for the top-comment preview.
+        .populate("comments.user", activityAuthorFields)
         .sort({ createdAt: -1 })
         .limit(200)
         .lean(),
@@ -951,6 +954,12 @@ export const getUserReposts = async (req, res) => {
       getViewerRelationshipSets(req),
       Post.find({ "reposts.user": userId, isDeleted: false })
         .populate("author", activityAuthorFields)
+        // Without this, post.comments[].user arrives as a raw unpopulated
+        // ObjectId — ReplyPreview.jsx's name lookup then has nothing to
+        // read (.fullName/.username don't exist on a bare id) and falls
+        // back to showing "Someone" for the top comment preview on every
+        // reposted card here, even though the comment has a real author.
+        .populate("comments.user", activityAuthorFields)
         .sort({ createdAt: -1 })
         .limit(200)
         .lean(),
