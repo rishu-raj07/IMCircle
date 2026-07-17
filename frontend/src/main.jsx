@@ -56,7 +56,17 @@ if (IS_NATIVE && "serviceWorker" in navigator) {
 } else if (!IS_NATIVE) {
   // Real web build only — hand-registered now that vite.config.js no
   // longer auto-injects this (see injectRegister: false there).
-  import("virtual:pwa-register")
+  //
+  // `@vite-ignore` is required here: vite.config.js deliberately omits the
+  // VitePWA plugin for Capacitor builds (isCapacitorBuild), so this virtual
+  // module doesn't exist during a `cap:android`/`cap:ios` build. Without
+  // this comment, Rolldown tries to statically resolve the specifier at
+  // build time regardless of the `!IS_NATIVE` runtime guard above, and the
+  // native build fails outright. `@vite-ignore` makes this a pure runtime
+  // dynamic import instead — on web builds (where the plugin IS present)
+  // this resolves exactly as before; the existing `.catch()` below already
+  // handles the case where it's genuinely absent at runtime.
+  import(/* @vite-ignore */ "virtual:pwa-register")
     .then(({ registerSW }) => {
       const updateSW = registerSW({
         immediate: true,

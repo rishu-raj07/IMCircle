@@ -17,11 +17,19 @@ import { deriveTarget } from "../utils/notificationTarget.js";
 export async function sendPushToUser(recipientId, notification) {
   try {
     const app = getFirebaseApp();
-    if (!app || !recipientId) return;
+    if (!app || !recipientId) {
+      console.log(
+        `[push.service] Skipped: ${!app ? "Firebase app not initialized" : "no recipientId"}`
+      );
+      return;
+    }
 
     const user = await User.findById(recipientId).select("pushTokens");
     const tokens = (user?.pushTokens || []).filter(Boolean);
-    if (tokens.length === 0) return;
+    if (tokens.length === 0) {
+      console.log(`[push.service] Skipped: user ${recipientId} has no pushTokens`);
+      return;
+    }
 
     const target = deriveTarget(notification);
 
@@ -49,6 +57,25 @@ export async function sendPushToUser(recipientId, notification) {
       apns: {
         payload: { aps: { sound: "default" } },
       },
+    });
+
+    // Temporary visibility while diagnosing a "push never shows up" report —
+    // sendEachForMulticast's per-token result is the only way to tell
+    // "Firebase accepted and should have delivered this" apart from "it was
+    // silently rejected" (bad token, wrong sender ID, app not registered for
+    // this project, etc.), and previously nothing logged on the success
+    // path at all, which made a real send indistinguishable from "never
+    // attempted" in the logs. Safe to remove once push is confirmed working.
+    console.log(
+      `[push.service] Sent "${notification?.type}" to ${tokens.length} token(s) for user ${recipientId}: ` +
+        `${response.successCount} succeeded, ${response.failureCount} failed.`
+    );
+    response.responses.forEach((result, index) => {
+      if (!result.success) {
+        console.log(
+          `[push.service]   token ${index} failed: ${result.error?.code || result.error?.message || "unknown error"}`
+        );
+      }
     });
 
     // Prune any token Firebase says is dead — otherwise every future push
