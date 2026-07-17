@@ -13,8 +13,17 @@
 //   FIREBASE_SERVICE_ACCOUNT_PATH  — absolute path to the downloaded
 //                                    service account .json file on disk
 //                                    (e.g. /var/www/imcircle/backend/secrets/firebase-service-account.json).
+// Uses the modern modular Admin SDK API (`firebase-admin/app`) rather than
+// the classic `import admin from "firebase-admin"; admin.credential.cert()`
+// namespace style. As of firebase-admin v14, the plain default export under
+// ESM only exposes the flattened app-lifecycle functions (initializeApp,
+// cert, getApps, etc.) — there is no `.credential` namespace and no
+// `.messaging()` method on that object at all, so the old namespaced style
+// throws "Cannot read properties of undefined (reading 'cert')" here. The
+// modular imports below are the officially supported path and match what
+// push.service.js now imports from "firebase-admin/messaging".
 import { readFileSync } from "fs";
-import admin from "firebase-admin";
+import { initializeApp, cert } from "firebase-admin/app";
 
 let app = null;
 let attempted = false;
@@ -50,8 +59,8 @@ export function getFirebaseApp() {
       return null;
     }
 
-    app = admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
+    app = initializeApp({
+      credential: cert(serviceAccount),
     });
 
     return app;

@@ -1,4 +1,7 @@
-import admin from "firebase-admin";
+// See firebaseAdmin.js for why this uses the modular `firebase-admin/messaging`
+// import instead of `admin.messaging()` — that method doesn't exist on the
+// plain ESM default export for this package version.
+import { getMessaging } from "firebase-admin/messaging";
 import User from "../models/User.js";
 import { getFirebaseApp } from "../config/firebaseAdmin.js";
 import { deriveTarget } from "../utils/notificationTarget.js";
@@ -46,7 +49,7 @@ export async function sendPushToUser(recipientId, notification) {
       notificationId: notification?._id ? String(notification._id) : "",
     };
 
-    const response = await admin.messaging().sendEachForMulticast({
+    const response = await getMessaging(app).sendEachForMulticast({
       tokens,
       notification: { title, body },
       data,
