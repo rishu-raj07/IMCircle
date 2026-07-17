@@ -1257,7 +1257,28 @@ export const verifyProfileMobileOtp = async (req, res) => {
       });
     }
 
-    const msg91Response = await verifyOtpSms(mobile, otp);
+    let msg91Response;
+
+    try {
+      msg91Response = await verifyOtpSms(mobile, otp);
+    } catch (msg91Error) {
+      // See the identical try/catch in verifyMobileOtp (auth.controller.js)
+      // for why this is needed — axios throws on MSG91's non-2xx response,
+      // which normal wrong/expired-OTP cases can trigger, and without this
+      // it fell through to the outer catch's vague "Failed to verify OTP"
+      // with the real MSG91 response only ever visible here in the logs.
+      console.warn(
+        "MSG91 OTP verify request failed:",
+        msg91Error.response?.status,
+        msg91Error.response?.data || msg91Error.message
+      );
+
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired OTP",
+      });
+    }
+
     const msgType = String(msg91Response?.type || "").toLowerCase();
 
     if (msgType && msgType !== "success") {

@@ -94,7 +94,7 @@ function CreateLearning() {
           }}
         />
 
-        <div className="relative z-10 flex min-h-screen flex-col px-5 pb-[calc(24px+env(safe-area-inset-bottom))] pt-[max(18px,env(safe-area-inset-top))]">
+        <div className="relative z-10 flex min-h-screen flex-col px-5 pb-[calc(24px+env(safe-area-inset-bottom))] pt-[18px]">
           <div className="flex items-center justify-between">
             <button
               type="button"

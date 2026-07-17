@@ -340,7 +340,7 @@ function CreateJourney() {
   return (
     <div className="min-h-screen bg-[var(--imc-bg)] text-[var(--imc-text)]">
       <div className="mx-auto min-h-screen w-full max-w-[430px] bg-[var(--imc-bg)] pb-[max(28px,env(safe-area-inset-bottom))]">
-      <header className="sticky top-0 z-20 border-b border-[var(--imc-border)] bg-[var(--imc-bg)]/95 px-4 pb-3 pt-[max(14px,env(safe-area-inset-top))] backdrop-blur-xl">
+      <header className="sticky top-0 z-20 border-b border-[var(--imc-border)] bg-[var(--imc-bg)]/95 px-4 pb-3 pt-[14px] backdrop-blur-xl">
         <div className="flex items-center gap-3">
           <button
             type="button"

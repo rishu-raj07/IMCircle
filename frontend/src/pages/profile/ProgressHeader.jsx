@@ -1,6 +1,6 @@
 function ProgressHeader({ title, subtitle, progress = 0, step = 1, totalSteps = 3 }) {
   return (
-    <div className="sticky top-0 z-30 -mx-5 bg-[color:var(--imc-bg)] px-5 pt-[max(14px,env(safe-area-inset-top))]">
+    <div className="sticky top-0 z-30 -mx-5 bg-[color:var(--imc-bg)] px-5 pt-[14px]">
       <div
         className="flex min-h-[58px] items-center justify-between"
         style={{ borderBottom: "1px solid var(--imc-border)" }}

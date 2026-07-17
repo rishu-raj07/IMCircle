@@ -284,7 +284,35 @@ export const verifyMobileOtp = async (req, res) => {
       // Skip MSG91 entirely for the reserved Play Store review login —
       // there's no real OTP to check against their SMS provider.
     } else {
-      const msg91Response = await verifyOtpSms(mobile, otp);
+      let msg91Response;
+
+      try {
+        msg91Response = await verifyOtpSms(mobile, otp);
+      } catch (msg91Error) {
+        // axios throws on any non-2xx HTTP status, and MSG91's /verify
+        // endpoint returns a non-2xx status (not a 200 with a `type` field)
+        // for several genuinely-normal cases — wrong code, expired code, a
+        // second verify attempt after the OTP was already consumed, etc.
+        // Before this try/catch existed, any of those cases fell straight
+        // through to this function's OUTER catch block below, which shows
+        // the user a vague "OTP verification failed" with zero indication
+        // of why, and the real MSG91 response was only ever visible in the
+        // server logs. Logging the real response here (not passing it to
+        // the client — it's provider-specific wording we don't control)
+        // means `pm2 logs` now shows exactly what MSG91 said instead of
+        // just "OTP verification failed" with no other detail.
+        console.warn(
+          "MSG91 OTP verify request failed:",
+          msg91Error.response?.status,
+          msg91Error.response?.data || msg91Error.message
+        );
+
+        return res.status(400).json({
+          success: false,
+          message: "Invalid or expired OTP",
+        });
+      }
+
       const msgType = String(msg91Response?.type || "").toLowerCase();
 
       if (msgType && msgType !== "success") {

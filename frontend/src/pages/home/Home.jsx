@@ -337,6 +337,11 @@ function Home() {
   const [myLearning, setMyLearning] = useState(null);
 
   const composeNavigatingRef = useRef(false);
+  // Set once on mount from location.state.newPost (see CreatePost.jsx) and
+  // consumed exactly once by the next "initial" fetchFeed — pinned to the
+  // top of whatever the server returns, then cleared so it doesn't keep
+  // forcing an old post back to the top on later refreshes/remounts.
+  const pendingNewPostRef = useRef(null);
   const pullStartYRef = useRef(null);
   const pullTriggeredRef = useRef(false);
   const seenInSessionRef = useRef(new Set());
@@ -536,7 +541,32 @@ function Home() {
         : [];
 
       setItems((prev) => {
-        const merged = mergeFeedItems(prev, incoming, !isMore);
+        let merged = mergeFeedItems(prev, incoming, !isMore);
+
+        // Pin a just-created post (handed off via navigation state from
+        // CreatePost.jsx) to the very top — the feed's ranking is
+        // engagement/score-based, not pure recency, so a brand-new post
+        // with zero engagement isn't guaranteed to land at the top of
+        // `incoming` on its own even on a completely fresh fetch. Only
+        // applies once, to the initial fetch right after posting; consumed
+        // (set to null) immediately so it doesn't keep overriding the
+        // feed's real ranking on every later refresh.
+        if (isInitial && pendingNewPostRef.current) {
+          const pinnedId = String(pendingNewPostRef.current._id || "");
+          const withoutDuplicate = merged.filter(
+            (item) => String(getItemData(item)?._id || "") !== pinnedId
+          );
+          merged = [
+            {
+              type: "post",
+              data: pendingNewPostRef.current,
+              createdAt: pendingNewPostRef.current.createdAt,
+            },
+            ...withoutDuplicate,
+          ];
+          pendingNewPostRef.current = null;
+        }
+
         cacheHomeFeed(tab, {
           items: merged,
           nextCursor: res?.nextCursor || null,
@@ -561,6 +591,21 @@ function Home() {
       loadingMoreRef.current = false;
     }
   };
+
+  // Runs once on mount, before the cache-restore/fetch effect below (React
+  // commits effects in declaration order) — captures a just-created post
+  // handed off from CreatePost.jsx into a ref the initial fetchFeed call
+  // reads synchronously, then immediately clears the navigation state so
+  // browser back/forward or a later remount of this same route doesn't
+  // keep re-pinning an old post to the top forever.
+  useEffect(() => {
+    const newPost = location.state?.newPost;
+    if (!newPost) return;
+
+    pendingNewPostRef.current = newPost;
+    navigate(location.pathname, { replace: true, state: {} });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const cached = getCachedHomeFeed(activeTab);

@@ -159,6 +159,20 @@
 html {
   font-family: var(--font-sans);
   color-scheme: light;
+
+  /* Without this, the browser's OWN native "pull down to reload" gesture
+     (Chrome for Android in particular) competes with Home.jsx's custom
+     JS-based pull-to-refresh — the browser can intercept the same
+     touchmove gesture and either trigger a full hard page reload (wiping
+     all app/React state, which feels like "it doesn't work" since it's
+     not the smooth in-app feed update the custom handler produces) or
+     partially swallow the touch events before the app's handler gets a
+     clean read on them. `contain` disables that native browser behavior
+     at the document boundary while leaving normal scrolling everywhere
+     else completely untouched, so Home.jsx's touchstart/touchmove
+     handlers become the only thing responding to an overscroll-down
+     gesture at the top of the page.  */
+  overscroll-behavior-y: contain;
 }
 
 html[data-theme="dark"] {
@@ -182,20 +196,43 @@ body {
   color: var(--imc-text);
   transition: background-color 0.2s ease, color 0.2s ease;
 
-  /* Every page in this app builds its own top-level `min-h-screen` wrapper
-     with no shared Layout component, and none of them account for the
-     status bar / camera cutout — so on real devices (this shipped first on
-     a Pixel, but every Android OEM and iPhone notch/Dynamic Island varies)
-     header icons like the top-right message/notification buttons render
-     partly underneath the status bar and become hard or impossible to tap.
-     `env(safe-area-inset-top)` reports 0 on devices without a cutout and
-     the actual inset on ones that have it (enabled by `viewport-fit=cover`
-     in index.html), so pushing it down here fixes every page at once
-     without touching 40+ individual page files. `position: fixed` elements
-     (BottomNav, FullScreenReel, modals, SplashIntro) are unaffected by
-     ancestor padding, so this only ever shifts normal in-flow page content —
-     exactly what needs to move. */
+  /* Keeps header content (menu/search/notification icons, page titles) out
+     from under the status bar / camera cutout on every normal in-flow page.
+     `env(safe-area-inset-top)` reports 0 on devices without a cutout and the
+     actual inset on ones that have it (enabled by `viewport-fit=cover` in
+     index.html). `position: fixed` elements (BottomNav, FullScreenReel,
+     modals, SplashIntro, Messages/Chat's app-shell — see Chat.jsx) are
+     unaffected by ancestor padding, so this only ever shifts normal in-flow
+     content.
+
+     IMPORTANT — this alone is NOT enough for `position: sticky` headers
+     (there are ~50 of them across the app). A sticky element's stuck offset
+     is measured from the viewport/scroll-container edge, not from an
+     ancestor's padding box, so once a sticky header actually sticks (i.e.
+     the instant you scroll past this body padding) it snaps flush to the
+     very top, losing this clearance again — that's the "header jumps
+     up/down" bug. The `.sticky.top-0` rule below restores the same inset as
+     a `top` offset so sticky headers keep the identical clearance whether
+     stuck or not — the two rules use the same formula on purpose so there's
+     no visible jump transitioning between the two states. A handful of pages
+     (Search, CreateJourney, CreatePost, Requests, JourneyProfile,
+     ProfileActivity, ProgressHeader, Profile, CreateLearning) used to ALSO
+     apply `env(safe-area-inset-top)` as their own header padding on top of
+     this — that was double-counting the inset (the "too much space" bug),
+     so those were trimmed back to a plain pixel baseline; the inset itself
+     now comes from exactly one place (here + the `.sticky.top-0` rule)
+     everywhere in the app. */
   padding-top: calc(env(safe-area-inset-top, 0px) + 8px);
+}
+
+/* See the long comment on `body` above — this keeps every `sticky top-0`
+   header (the header stays pinned while its page scrolls, which is most
+   pages in this app) clear of the status bar/notch in its STUCK state,
+   matching the body padding-top above used for its state before it sticks.
+   Deliberately plain/unlayered CSS (not `@layer utilities`) so it wins over
+   Tailwind's own `.top-0` utility regardless of class order in markup. */
+.sticky.top-0 {
+  top: calc(env(safe-area-inset-top, 0px) + 8px);
 }
 
 button,

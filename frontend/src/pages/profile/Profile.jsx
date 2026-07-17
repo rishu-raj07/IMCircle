@@ -693,7 +693,7 @@ function Profile() {
           `}
         </style>
         <main className="px-5">
-          <section className="relative -mx-5 border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-5 pb-5 pt-[max(28px,env(safe-area-inset-top))]">
+          <section className="relative -mx-5 border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-5 pb-5 pt-[20px]">
             <div className="flex items-start gap-4">
               <button
                 type="button"

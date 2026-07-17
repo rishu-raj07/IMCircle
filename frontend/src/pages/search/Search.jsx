@@ -394,7 +394,7 @@ function Search() {
   return (
     <div className="flex min-h-screen justify-center" style={{ background: "var(--imc-bg)" }}>
       <div className="min-h-screen w-full max-w-[430px] pb-24" style={{ background: "var(--imc-bg)" }}>
-        <header className="sticky top-0 z-20 border-b px-4 pb-4 pt-[max(16px,env(safe-area-inset-top))] backdrop-blur-xl" style={{ borderColor: "var(--imc-border)", background: "color-mix(in srgb, var(--imc-bg) 92%, transparent)" }}>
+        <header className="sticky top-0 z-20 border-b px-4 pb-4 pt-[16px] backdrop-blur-xl" style={{ borderColor: "var(--imc-border)", background: "color-mix(in srgb, var(--imc-bg) 92%, transparent)" }}>
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate(-1)}
@@ -544,6 +544,8 @@ function ResultImage({ item, large = false }) {
         <img src={image} alt={data?.name || data?.title || "Result"} className="h-full w-full object-cover" />
       ) : item.type === "circle" ? (
         <img src={getCommunityCoverIcon()} alt="" className="h-full w-full object-cover" />
+      ) : item.type === "person" ? (
+        <img src={getGenderAvatarIcon(data)} alt="" className="h-full w-full object-cover" />
       ) : (
         <Icon size={large ? 34 : 21} />
       )}

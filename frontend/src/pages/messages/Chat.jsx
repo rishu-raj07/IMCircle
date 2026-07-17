@@ -716,9 +716,22 @@ function Chat() {
     }
   };
     return (
-    <div className="flex min-h-screen justify-center bg-[var(--imc-bg)]">
-      <div className="relative flex h-[100dvh] w-full max-w-[430px] flex-col overflow-hidden bg-[#F8FAFC] dark:bg-[var(--imc-bg)]">
-        <div className="relative shrink-0 border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+    // `fixed inset-0` (viewport-locked) instead of `min-h-screen` +
+    // `h-[100dvh]` in normal document flow — a fixed-height chat app-shell
+    // like this one needs to be exactly the real viewport height, and
+    // `position: fixed` elements are the one thing that's completely
+    // unaffected by the global safe-area padding on `body` (see index.css).
+    // Being in normal flow instead meant `body`'s padding-top pushed this
+    // 100dvh-tall block down without shrinking it, so it overflowed past
+    // the real viewport by that many pixels and the whole "fixed" chat
+    // screen became scrollable instead of just the message list — visible
+    // as the header sliding up/down while scrolling a conversation.
+    <div className="fixed inset-0 flex justify-center bg-[var(--imc-bg)]">
+      <div className="relative flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-[#F8FAFC] dark:bg-[var(--imc-bg)]">
+        <div
+          className="relative shrink-0 border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 pb-3 shadow-[0_8px_24px_rgba(15,23,42,0.04)]"
+          style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
+        >
           {isSelecting ? (
             <div className="flex items-center justify-between">
               <button

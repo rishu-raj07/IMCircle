@@ -305,7 +305,7 @@ function ProfileActivity() {
   return (
     <div className="flex min-h-screen justify-center bg-[var(--imc-bg)]">
       <div className="relative min-h-screen w-full max-w-[430px] bg-[var(--imc-bg)] pb-24">
-        <header className="sticky top-0 z-30 border-b border-[var(--imc-border)] bg-[color-mix(in_srgb,var(--imc-bg)_94%,transparent)] pt-[env(safe-area-inset-top)] backdrop-blur-xl">
+        <header className="sticky top-0 z-30 border-b border-[var(--imc-border)] bg-[color-mix(in_srgb,var(--imc-bg)_94%,transparent)] backdrop-blur-xl">
           <div className="flex min-h-[68px] items-center gap-3 px-4">
             <button
               type="button"

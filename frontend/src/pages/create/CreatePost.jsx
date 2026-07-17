@@ -292,7 +292,13 @@ function CreatePost() {
         if (item?.preview) URL.revokeObjectURL(item.preview);
       });
 
-      navigate("/home");
+      // Hand the freshly created (and fully populated) post to Home.jsx so
+      // it can pin it to the very top of the feed immediately — the feed's
+      // own ranking is engagement/score-based, not pure recency, so a
+      // brand-new post with zero engagement isn't guaranteed to sort to
+      // the top on its own even after a fresh fetch. See the matching
+      // "newPost" handling in Home.jsx's initial-fetch effect.
+      navigate("/home", { state: { newPost: created?.post || created } });
     } catch (error) {
       alert(error?.response?.data?.message || "Post failed. Try again.");
     } finally {
@@ -303,7 +309,7 @@ function CreatePost() {
   return (
     <div className="min-h-screen bg-[var(--imc-bg)]">
       <div className="mx-auto min-h-screen w-full max-w-[430px] bg-[var(--imc-bg)] pb-[max(28px,env(safe-area-inset-bottom))]">
-      <header className="sticky top-0 z-20 border-b border-[var(--imc-border)] bg-[var(--imc-bg)]/95 px-4 pb-3 pt-[max(14px,env(safe-area-inset-top))] backdrop-blur-xl">
+      <header className="sticky top-0 z-20 border-b border-[var(--imc-border)] bg-[var(--imc-bg)]/95 px-4 pb-3 pt-[14px] backdrop-blur-xl">
         <div className="flex items-center gap-3">
           <button
             type="button"
