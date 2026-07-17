@@ -55,10 +55,27 @@ const getAccessSecret = () =>
 const getRefreshSecret = () =>
   process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET;
 
+// `sameSite: "lax"` cookies are never attached to cross-site XHR/fetch
+// requests (only top-level navigations) — the native app's WebView runs on
+// its own origin (`https://localhost`, see capacitor.config.ts's
+// androidScheme), which is cross-site relative to the API domain, so the
+// refreshToken cookie was silently never sent on POST /auth/refresh-token
+// from the app. That made every silent refresh 401 once the 15-minute
+// access token expired, which the frontend's axios interceptor correctly
+// (but confusingly, from a user's perspective) treats as a dead session and
+// force-logs-out — reproducing exactly as "logs out every ~10-15 min on the
+// app, but the website stays logged in" (web is same-origin, where Lax
+// cookies flow fine regardless). `sameSite: "none"` fixes this for native
+// without weakening web security: it's a superset of "lax" (still sent on
+// every same-site/same-origin request the website makes), and per spec must
+// be paired with `secure: true`, which production already sets. CSRF
+// exposure from this is already covered by this app's own origin allowlist
+// (`secureCorsOptions`) plus the separate CSRF token middleware — this
+// project isn't relying on SameSite alone for that.
 const cookieOptions = (maxAge) => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
-  sameSite: "lax",
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
   maxAge,
   path: "/",
 });
