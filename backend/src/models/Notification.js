@@ -74,12 +74,24 @@ const notificationSchema = new mongoose.Schema(
     // entity" — e.g. `like:post:<postId>:<actorId>`. Used to make
     // notification creation idempotent (a Mongo unique index, not just an
     // application-level check) so a double-tap/retry/race on the same
-    // action can never create two active notifications. Left null for
-    // notification types that are inherently one-shot per event (a single
-    // DM, a badge award) where no natural collision key is needed.
+    // action can never create two active notifications. Deliberately left
+    // with NO default here (not `default: null`) for notification types
+    // that are inherently one-shot per event (a single DM, a badge award)
+    // where no natural collision key is needed — the field must be truly
+    // OMITTED from the document, not explicitly null, for the sparse index
+    // below to actually exclude it. A sparse index only skips documents
+    // where the field doesn't exist at all; it still indexes (and
+    // uniquely constrains) an explicit `null` value like any other value.
+    // With `default: null`, every single non-deduped notification ever
+    // created got deduplicationKey: null written into it, and — since only
+    // ONE document can ever hold that value under a unique index — only
+    // the very first such notification in the collection's history ever
+    // actually succeeded; every one after it silently failed with a
+    // duplicate-key error that notification.service.js's own error
+    // handling deliberately doesn't log (that suppression was meant for a
+    // harmless concurrent-request race on the dedupe path, not this).
     deduplicationKey: {
       type: String,
-      default: null,
     },
     readAt: {
       type: Date,

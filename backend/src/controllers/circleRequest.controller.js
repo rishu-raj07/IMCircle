@@ -117,7 +117,7 @@ export const sendCircleRequest = async (req, res) => {
         entityType: "user",
         entityId: senderId,
         metadata: { username: sender.username },
-        message: `${sender.fullName || "Someone"} wants to add you to circle`,
+        message: `${sender.fullName || "Someone"} wants to add you to their Circle`,
         dedupe: true,
       })
       .catch(() => {});

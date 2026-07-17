@@ -7,6 +7,7 @@ import { getMyBuilderScore } from "../../api/builderScoreApi";
 import { getUnreadNotificationCount } from "../../api/notificationApi";
 import { socket } from "../../socket/socket";
 import { getSessionUser } from "../../utils/sessionUser";
+import { playNotificationSound } from "../../utils/notificationSound";
 
 const UNREAD_CHAT_CACHE_KEY = "top_header_unread_chat_ids";
 
@@ -152,6 +153,16 @@ function TopHeader({ onStreakClick }) {
     // (that page keeps its own list in sync and marks-as-read on open, so
     // bumping this badge in the background there would fight with it).
     socket.on("new_notification", () => {
+      // Sound plays regardless of which page they're on — TopHeader is
+      // mounted for the whole app lifetime, so this is the one place that
+      // reliably fires exactly once per real-time notification no matter
+      // where the user currently is. The unread badge count is still
+      // skipped on /notifications itself (that page keeps its own list in
+      // sync and would fight with this), but a live event arriving while
+      // already looking at the list should still make a sound, same as
+      // any other app.
+      playNotificationSound();
+
       if (location.pathname === "/notifications") return;
       setUnreadNotifCount((prev) => prev + 1);
     });

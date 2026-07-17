@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import JourneyMilestone from "./JourneyMilestone.js";
 import Notification from "./Notification.js";
+import User from "./User.js";
 
 const journeyMilestoneLikeSchema = new mongoose.Schema(
   {
@@ -76,6 +77,11 @@ async function createJourneyLikeNotification(doc) {
 
     if (existing) return;
 
+    // See JourneyFollower.js for the same fix and full explanation — this
+    // hook had the identical bug (message with no actor name at all).
+    const actor = await User.findById(actorId).select("fullName").lean();
+    const actorName = actor?.fullName || "Someone";
+
     await Notification.create({
       recipient: ownerId,
       receiver: ownerId,
@@ -84,7 +90,7 @@ async function createJourneyLikeNotification(doc) {
       actor: actorId,
       type: "journey_like",
       title: "New journey like",
-      message: "liked your journey",
+      message: `${actorName} liked your journey`,
       link: journey?._id ? `/journey/${journey._id}` : "",
       data: {
         journey: journey?._id,

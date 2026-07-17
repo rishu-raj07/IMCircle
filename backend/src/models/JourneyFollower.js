@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Journey from "./Journey.js";
 import Notification from "./Notification.js";
+import User from "./User.js";
 
 const journeyFollowerSchema = new mongoose.Schema(
   {
@@ -71,6 +72,14 @@ async function createJourneyFollowNotification(doc) {
 
     if (existing) return;
 
+    // Every other notification in the app includes the actor's name in the
+    // message itself (the frontend renders this string as-is rather than
+    // re-composing it) — this hook was the one place that didn't, which
+    // made it show up as a bare, nameless "started following your journey"
+    // with no indication of who.
+    const actor = await User.findById(actorId).select("fullName").lean();
+    const actorName = actor?.fullName || "Someone";
+
     await Notification.create({
       recipient: ownerId,
       receiver: ownerId,
@@ -79,7 +88,7 @@ async function createJourneyFollowNotification(doc) {
       actor: actorId,
       type: "journey_follow",
       title: "New journey follower",
-      message: "started following your journey",
+      message: `${actorName} started following your journey`,
       link: `/journey/${journey._id}`,
       data: {
         journey: journey._id,

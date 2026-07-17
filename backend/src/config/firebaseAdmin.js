@@ -65,11 +65,7 @@ export function getFirebaseApp() {
 
     return app;
   } catch (error) {
-    // Temporary: full stack instead of just .message, since "Cannot read
-    // properties of undefined (reading 'cert')" alone hasn't been enough to
-    // pin down which line/module is actually throwing this. Revert to just
-    // error.message once this is resolved.
-    console.error("[firebaseAdmin] Failed to initialize:", error.stack || error);
+    console.error("[firebaseAdmin] Failed to initialize:", error.message);
     return null;
   }
 }

@@ -37,6 +37,7 @@ const DEFAULT_TITLES = {
   circle_declined: "Circle request declined",
   circle_joined: "New Circle member",
   journey_follow: "New journey follower",
+  journey_update: "New journey update",
   journey_like: "New reaction",
   journey_comment: "New reply",
   journey_repost: "Journey reposted",

@@ -415,6 +415,42 @@ export const createMilestone = async (req, res) => {
       link: `/journey/${journey._id}`,
     }).catch(() => {});
 
+    // Notify everyone following this journey that a new update just went
+    // up — previously this controller had no fan-out to followers at all,
+    // so the only way to learn about a new Day N update was to happen to
+    // open the journey yourself. Fire-and-forget, one notification per
+    // follower, never blocks the response. Not deduped: each milestone is
+    // a genuinely new, distinct event (unlike a like/follow, which can be
+    // toggled), so there's nothing to collapse into a single reused row.
+    JourneyFollower.find({ journey: journey._id })
+      .select("user follower")
+      .lean()
+      .then((followers) => {
+        const followerIds = [
+          ...new Set(
+            followers
+              .map((f) => f.user || f.follower)
+              .filter(Boolean)
+              .map((id) => String(id))
+          ),
+        ].filter((id) => id !== String(req.user._id));
+
+        followerIds.forEach((followerId) => {
+          notificationService
+            .create({
+              recipientId: followerId,
+              actorId: req.user._id,
+              type: "journey_update",
+              entityType: "journey_milestone",
+              entityId: milestone._id,
+              metadata: { journeyId: journey._id },
+              message: `${req.user.fullName} posted a Day ${dayNumber} update on a journey you follow`,
+            })
+            .catch(() => {});
+        });
+      })
+      .catch(() => {});
+
     const populatedMilestone = await JourneyMilestone.findById(milestone._id)
       .populate("creator", userFields)
       .populate(
