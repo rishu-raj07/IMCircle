@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -7,7 +8,9 @@ import {
   ImagePlus,
   Loader2,
   MessageCircle,
+  Mic,
   MoreVertical,
+  Pencil,
   Reply,
   Search,
   Send,
@@ -23,6 +26,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   createCirclePost,
   deleteCirclePostMessage,
+  editCirclePost,
   reactToCirclePost,
   getCircleById,
   getCircleMembers,
@@ -42,8 +46,16 @@ import {
 } from "../../api/circleApi";
 import { getUserSuggestions, searchUsers } from "../../api/userApi";
 import { getMyCircleList } from "../../api/connectionApi";
+import api from "../../api/axios";
 import { getGenderAvatarIcon } from "../../utils/avatar";
 import { getCommunityCoverIcon } from "../../utils/media";
+import {
+  setStoredPermissionState,
+  shouldAttemptPermission,
+} from "../../utils/permissions";
+import VoiceMessagePlayer from "../../components/common/VoiceMessagePlayer";
+import RichText from "../../components/common/RichText";
+import LinkPreviewCard from "../../components/common/LinkPreviewCard";
 
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "😢"];
 
@@ -170,6 +182,30 @@ function CircleCommunity() {
   const [joinRequests, setJoinRequests] = useState([]);
   const [resolvingRequestId, setResolvingRequestId] = useState("");
   const fileInputRef = useRef(null);
+  const bottomRef = useRef(null);
+  const initialScrollDoneRef = useRef("");
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const pendingReplyForVoiceRef = useRef(null);
+  const postRefs = useRef({});
+  const [recording, setRecording] = useState(false);
+  const [sendingVoice, setSendingVoice] = useState(false);
+  const [highlightedPostId, setHighlightedPostId] = useState(null);
+
+  // Tapping a quoted-reply preview (inside a bubble, or the "Replying to"
+  // bar above the composer) jumps to and briefly highlights the original
+  // message — same behavior as Chat.jsx's DM chat.
+  const scrollToPost = (postId) => {
+    if (!postId) return;
+    const el = postRefs.current[postId];
+    if (!el) return;
+
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedPostId(postId);
+    window.setTimeout(() => {
+      setHighlightedPostId((prev) => (prev === postId ? null : prev));
+    }, 1200);
+  };
 
   const cover = getImageUrl(circle?.coverImage);
   const memberCount = circle?.membersCount || 0;
@@ -425,6 +461,21 @@ function CircleCommunity() {
     loadCircle();
   }, [circleId]);
 
+  useEffect(() => {
+    initialScrollDoneRef.current = "";
+  }, [circleId]);
+
+  // Same fix as the DM chat (Chat.jsx): open this community's message
+  // thread already scrolled to the latest message instead of visibly
+  // animating down to it after the page loads. Runs before paint so
+  // there's no flash of the top of the thread first.
+  useLayoutEffect(() => {
+    if (loading) return;
+    if (initialScrollDoneRef.current === circleId) return;
+    bottomRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+    initialScrollDoneRef.current = circleId;
+  }, [loading, circleId, sortedPosts]);
+
   const handleJoin = async () => {
     if (!circleId || joining) return;
 
@@ -487,10 +538,116 @@ function CircleCommunity() {
       setMessage("");
       clearPendingImage();
       setReplyTarget(null);
+      window.setTimeout(() => {
+        bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      }, 50);
     } catch (postError) {
       setError(postError?.response?.data?.message || "Could not send this message.");
     } finally {
       setPosting(false);
+    }
+  };
+
+  // Voice messages for the community chat — same two-step flow as the DM
+  // chat's mic button (Chat.jsx): upload the recorded clip to the existing
+  // generic /upload/audio endpoint first, then create a circle post that
+  // just references the resulting URL (see circleApi.js's createCirclePost).
+  const sendVoiceMessage = async (file) => {
+    if (!file) return;
+
+    setSendingVoice(true);
+    const replySnapshot = pendingReplyForVoiceRef.current;
+    pendingReplyForVoiceRef.current = null;
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const uploadRes = await api.post("/upload/audio", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      const attachment = uploadRes.data?.file;
+      if (!attachment?.url) return;
+
+      const data = await createCirclePost(circleId, {
+        audioUrl: attachment.url,
+        audioPublicId: attachment.publicId,
+        replyTo: getId(replySnapshot),
+      });
+
+      const post = data?.post || data?.data?.post || data?.data || data;
+
+      if (post && getId(post)) {
+        setPosts((prev) => [...prev, post]);
+      } else {
+        await loadCircle();
+      }
+
+      setReplyTarget(null);
+      window.setTimeout(() => {
+        bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      }, 50);
+    } catch (voiceError) {
+      setError(voiceError?.response?.data?.message || "Could not send this voice message.");
+    } finally {
+      setSendingVoice(false);
+    }
+  };
+
+  const toggleRecording = async () => {
+    if (iAmRestricted || sendingVoice) return;
+
+    if (recording) {
+      mediaRecorderRef.current?.stop();
+      return;
+    }
+
+    // Respect an already-known denial instead of calling getUserMedia again
+    // on every tap — same guard Chat.jsx's mic button uses.
+    const canAttempt = await shouldAttemptPermission("microphone");
+
+    if (!canAttempt) {
+      alert(
+        "Microphone access is turned off for IMCircle. Enable it in your device settings to record voice notes."
+      );
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setStoredPermissionState("microphone", "granted");
+      audioChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        setRecording(false);
+
+        const blob = new Blob(audioChunksRef.current, {
+          type: recorder.mimeType || "audio/webm",
+        });
+
+        const file = new File([blob], `voice-${Date.now()}.webm`, {
+          type: blob.type,
+        });
+
+        sendVoiceMessage(file);
+      };
+
+      pendingReplyForVoiceRef.current = replyTarget;
+      setReplyTarget(null);
+
+      recorder.start();
+      setRecording(true);
+    } catch (recordError) {
+      setStoredPermissionState("microphone", "denied");
+      alert("Microphone permission is needed to record voice notes.");
     }
   };
 
@@ -541,6 +698,29 @@ function CircleCommunity() {
     } catch (deleteError) {
       setPosts(prevPosts);
       setError(deleteError?.response?.data?.message || "Could not delete this message.");
+    }
+  };
+
+  const handleEditPost = async (postId, content) => {
+    if (!postId) return;
+
+    const prevPosts = posts;
+    setPosts((prev) =>
+      prev.map((item) =>
+        getId(item) === postId
+          ? { ...item, content, isEdited: true, editedAt: new Date().toISOString() }
+          : item
+      )
+    );
+
+    try {
+      const res = await editCirclePost(postId, content);
+      setPosts((prev) =>
+        prev.map((item) => (getId(item) === postId ? { ...item, ...res.post } : item))
+      );
+    } catch (editError) {
+      setPosts(prevPosts);
+      setError(editError?.response?.data?.message || "Could not save your edit.");
     }
   };
 
@@ -753,6 +933,7 @@ function CircleCommunity() {
             </div>
           ) : (
             <div className="space-y-3">
+              <AnimatePresence initial={false}>
               {sortedPosts.map((post) => (
                 <PostBubble
                   key={getId(post) || `${post?.createdAt}-${post?.content}`}
@@ -762,11 +943,20 @@ function CircleCommunity() {
                   onReply={(target) => setReplyTarget(target)}
                   onReact={(target, emoji) => handleReactToPost(target, emoji)}
                   onDelete={(target) => handleDeletePost(target)}
+                  onEdit={(postId, content) => handleEditPost(postId, content)}
+                  onJumpToMessage={scrollToPost}
+                  registerRef={(id, el) => {
+                    if (id) postRefs.current[id] = el;
+                  }}
+                  highlighted={highlightedPostId === getId(post)}
                 />
               ))}
+              </AnimatePresence>
             </div>
           )}
         </section>
+
+        <div ref={bottomRef} />
       </main>
 
       <div
@@ -783,43 +973,82 @@ function CircleCommunity() {
           </div>
         ) : (
           <>
-            {replyTarget && (
-              <div
-                className="mb-2 flex items-center gap-2 rounded-[14px] px-3 py-2"
-                style={{ background: PAPER }}
-              >
-                <Reply size={14} style={{ color: MARIGOLD }} className="shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[10px] font-black" style={{ color: INK }}>
-                    Replying to {getUserName(replyTarget?.author)}
-                  </p>
-                  <p className="truncate text-[11px] font-semibold" style={{ color: MUTED }}>
-                    {replyTarget?.content || (replyTarget?.image?.url ? "Photo" : "")}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setReplyTarget(null)}
-                  className="grid h-6 w-6 shrink-0 place-items-center rounded-full"
-                  style={{ color: MUTED }}
+            <AnimatePresence initial={false}>
+              {replyTarget && (
+                <motion.div
+                  key="reply-bar"
+                  initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  animate={{ opacity: 1, height: "auto", marginBottom: 8 }}
+                  exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                  className="flex items-center gap-2 overflow-hidden rounded-[14px] px-3 py-2"
+                  style={{ background: PAPER }}
                 >
-                  <X size={14} />
-                </button>
-              </div>
-            )}
-
-            {pendingImagePreview && (
-              <div className="mb-2 flex items-center gap-2">
-                <div className="relative h-16 w-16 overflow-hidden rounded-[12px]">
-                  <img src={pendingImagePreview} alt="Selected" className="h-full w-full object-cover" />
+                  <Reply size={14} style={{ color: MARIGOLD }} className="shrink-0" />
                   <button
-                    onClick={clearPendingImage}
-                    className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/60 text-white"
+                    type="button"
+                    onClick={() => scrollToPost(getId(replyTarget))}
+                    className="min-w-0 flex-1 text-left"
                   >
-                    <X size={12} />
+                    <p className="truncate text-[10px] font-black" style={{ color: INK }}>
+                      Replying to {getUserName(replyTarget?.author)}
+                    </p>
+                    <p className="truncate text-[11px] font-semibold" style={{ color: MUTED }}>
+                      {replyTarget?.content ||
+                        (replyTarget?.image?.url ? "Photo" : "") ||
+                        (replyTarget?.audio?.url ? "🎤 Voice message" : "")}
+                    </p>
                   </button>
-                </div>
-              </div>
-            )}
+                  <button
+                    onClick={() => setReplyTarget(null)}
+                    className="grid h-6 w-6 shrink-0 place-items-center rounded-full"
+                    style={{ color: MUTED }}
+                  >
+                    <X size={14} />
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence initial={false}>
+              {pendingImagePreview && (
+                <motion.div
+                  key="image-preview"
+                  initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  animate={{ opacity: 1, height: "auto", marginBottom: 8 }}
+                  exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                  className="flex items-center gap-2 overflow-hidden"
+                >
+                  <div className="relative h-16 w-16 overflow-hidden rounded-[12px]">
+                    <img src={pendingImagePreview} alt="Selected" className="h-full w-full object-cover" />
+                    <button
+                      onClick={clearPendingImage}
+                      className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/60 text-white"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence initial={false}>
+              {recording && (
+                <motion.div
+                  key="recording-bar"
+                  initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  animate={{ opacity: 1, height: "auto", marginBottom: 8 }}
+                  exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                  className="flex items-center justify-center gap-2 overflow-hidden text-[11px] font-black"
+                  style={{ color: "#D92D20" }}
+                >
+                  <span className="h-2 w-2 animate-pulse rounded-full" style={{ background: "#D92D20" }} />
+                  Recording voice message
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <div className="flex items-end gap-2">
               <input
@@ -848,6 +1077,25 @@ function CircleCommunity() {
               />
 
               <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={toggleRecording}
+                disabled={sendingVoice}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full disabled:opacity-50"
+                style={
+                  recording
+                    ? { background: "#D92D20", color: "#ffffff" }
+                    : { background: PAPER, color: INK }
+                }
+              >
+                {sendingVoice ? <Loader2 size={18} className="animate-spin" /> : <Mic size={18} />}
+              </button>
+
+              <button
+                // Without this, tapping Send steals focus from the textarea
+                // and closes the on-screen keyboard after every message —
+                // same fix as Chat.jsx's Send button.
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={handleSend}
                 disabled={posting || (!message.trim() && !pendingImage)}
                 className="grid h-11 w-11 shrink-0 place-items-center rounded-full disabled:opacity-50"
@@ -1553,13 +1801,17 @@ function DeleteCommunityConfirm({ circleName, loading, onCancel, onConfirm }) {
   );
 }
 
-function PostBubble({ post, viewerId, canModerate, onReply, onReact, onDelete }) {
+function PostBubble({ post, viewerId, canModerate, onReply, onReact, onDelete, onEdit, onJumpToMessage, registerRef, highlighted }) {
   const author = post?.author || {};
   const isMine = getId(author) === viewerId;
   const canDelete = isMine || canModerate;
   const hasImage = Boolean(post?.image?.url);
+  const hasAudio = Boolean(post?.audio?.url);
 
   const [showActions, setShowActions] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState(post?.content || "");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const bubbleRef = useRef(null);
   const pressTimer = useRef(null);
@@ -1660,49 +1912,78 @@ function PostBubble({ post, viewerId, canModerate, onReply, onReact, onDelete })
   const replySnippet = post?.replyTo;
 
   return (
-    <div
+    <motion.div
       ref={bubbleRef}
+      layout="position"
+      initial={{ opacity: 0, y: 14, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
       className={`flex ${isMine ? "justify-end" : "justify-start"}`}
       style={{ position: "relative", zIndex: showActions ? 50 : "auto" }}
     >
       <div className="relative max-w-[86%]">
-        {showActions && (
-          <div
-            className={`absolute -top-12 z-10 flex items-center gap-1 rounded-full bg-[var(--imc-surface)] p-1.5 shadow-lg ${
-              isMine ? "right-0" : "left-0"
-            }`}
-            style={{ border: `1px solid ${LINE}` }}
-          >
-            {REACTION_EMOJIS.map((emoji) => (
-              <button
-                key={emoji}
-                type="button"
-                onClick={() => {
-                  onReact(post, emoji);
-                  setShowActions(false);
-                }}
-                className="grid h-8 w-8 place-items-center rounded-full text-[16px] transition-transform active:scale-90"
-              >
-                {emoji}
-              </button>
-            ))}
-            {canDelete && (
-              <button
-                type="button"
-                onClick={() => {
-                  onDelete(post);
-                  setShowActions(false);
-                }}
-                className="grid h-8 w-8 place-items-center rounded-full transition-transform active:scale-90"
-                style={{ color: "#D92D20" }}
-              >
-                <Trash2 size={15} />
-              </button>
-            )}
-          </div>
-        )}
+        <AnimatePresence>
+          {showActions && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.85, y: 6 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.85, y: 6 }}
+              transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+              className={`absolute -top-12 z-10 flex items-center gap-1 rounded-full bg-[var(--imc-surface)] p-1.5 shadow-lg ${
+                isMine ? "right-0" : "left-0"
+              }`}
+              style={{ border: `1px solid ${LINE}` }}
+            >
+              {REACTION_EMOJIS.map((emoji) => (
+                <motion.button
+                  key={emoji}
+                  type="button"
+                  whileTap={{ scale: 0.8 }}
+                  onClick={() => {
+                    onReact(post, emoji);
+                    setShowActions(false);
+                  }}
+                  className="grid h-8 w-8 place-items-center rounded-full text-[16px]"
+                >
+                  {emoji}
+                </motion.button>
+              ))}
+              {isMine && !hasAudio && (
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.8 }}
+                  onClick={() => {
+                    setEditDraft(post?.content || "");
+                    setIsEditing(true);
+                    setShowActions(false);
+                  }}
+                  className="grid h-8 w-8 place-items-center rounded-full"
+                  style={{ color: INK }}
+                >
+                  <Pencil size={14} />
+                </motion.button>
+              )}
+              {canDelete && (
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.8 }}
+                  onClick={() => {
+                    onDelete(post);
+                    setShowActions(false);
+                  }}
+                  className="grid h-8 w-8 place-items-center rounded-full"
+                  style={{ color: "#D92D20" }}
+                >
+                  <Trash2 size={15} />
+                </motion.button>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <article
+          ref={(el) => registerRef?.(getId(post), el)}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
@@ -1710,12 +1991,15 @@ function PostBubble({ post, viewerId, canModerate, onReply, onReact, onDelete })
           onContextMenu={(event) => {
             if (longPressFiredRef.current) event.preventDefault();
           }}
-          className="rounded-[20px] bg-[var(--imc-surface)] p-3 shadow-[0_10px_24px_rgba(18,20,28,0.04)]"
+          className={`rounded-[20px] bg-[var(--imc-surface)] p-3 shadow-[0_10px_24px_rgba(18,20,28,0.04)] transition-[transform,box-shadow] duration-150 ${
+            highlighted ? "scale-[0.98] ring-2 ring-offset-2" : ""
+          }`}
           style={{
             border: `1px solid ${LINE}`,
             touchAction: "pan-y",
             WebkitUserSelect: "none",
             userSelect: "none",
+            ...(highlighted ? { "--tw-ring-color": INK, "--tw-ring-offset-color": "var(--imc-bg)" } : {}),
           }}
         >
           <div className="flex items-center gap-2">
@@ -1731,17 +2015,25 @@ function PostBubble({ post, viewerId, canModerate, onReply, onReact, onDelete })
           </div>
 
           {replySnippet && !replySnippet.isDeleted && (
-            <div
-              className="mt-2 rounded-[12px] border-l-4 px-2 py-1.5"
+            <button
+              type="button"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                onJumpToMessage?.(getId(replySnippet));
+              }}
+              className="mt-2 block w-full rounded-[12px] border-l-4 px-2 py-1.5 text-left active:scale-[0.98] transition-transform"
               style={{ borderColor: INK, background: PAPER }}
             >
               <p className="truncate text-[10px] font-black" style={{ color: INK }}>
                 {getUserName(replySnippet?.author)}
               </p>
               <p className="truncate text-[11px] font-semibold" style={{ color: MUTED }}>
-                {replySnippet?.content || (replySnippet?.image?.url ? "Photo" : "")}
+                {replySnippet?.content ||
+                  (replySnippet?.image?.url ? "Photo" : "") ||
+                  (replySnippet?.audio?.url ? "🎤 Voice message" : "")}
               </p>
-            </div>
+            </button>
           )}
 
           {hasImage && (
@@ -1753,13 +2045,81 @@ function PostBubble({ post, viewerId, canModerate, onReply, onReact, onDelete })
             />
           )}
 
-          {post?.content && (
-            <p className="mt-2 whitespace-pre-line text-[13px] font-semibold leading-5" style={{ color: INK }}>
-              {post.content}
-            </p>
+          {hasAudio && (
+            <VoiceMessagePlayer
+              url={post.audio.url}
+              seedKey={getId(post) || post.audio.url}
+              // Community bubbles are always the same light surface color
+              // regardless of who posted (unlike Chat.jsx's DM bubbles,
+              // which turn indigo for the viewer's own messages) — so this
+              // always uses the light-surface color variant, never the
+              // on-dark one.
+              isSent={false}
+              avatarUrl={
+                getImageUrl(
+                  author?.avatar ||
+                    author?.profileImage ||
+                    author?.profilePicture ||
+                    author?.photo ||
+                    author?.picture
+                ) || getGenderAvatarIcon(author)
+              }
+            />
           )}
 
+          {isEditing ? (
+            <div className="mt-2" onPointerDown={(event) => event.stopPropagation()}>
+              <textarea
+                value={editDraft}
+                onChange={(event) => setEditDraft(event.target.value.slice(0, 3000))}
+                autoFocus
+                rows={3}
+                className="w-full resize-none rounded-[12px] px-2.5 py-2 text-[13px] font-semibold outline-none"
+                style={{ border: `1px solid ${LINE}`, color: INK, background: PAPER }}
+              />
+              <div className="mt-1.5 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditing(false);
+                    setEditDraft(post?.content || "");
+                  }}
+                  className="rounded-full px-3 py-1 text-[11px] font-black"
+                  style={{ color: MUTED }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={savingEdit || !editDraft.trim()}
+                  onClick={async () => {
+                    setSavingEdit(true);
+                    try {
+                      await onEdit(getId(post), editDraft.trim());
+                      setIsEditing(false);
+                    } finally {
+                      setSavingEdit(false);
+                    }
+                  }}
+                  className="rounded-full px-3 py-1 text-[11px] font-black text-white disabled:opacity-50"
+                  style={{ background: INK }}
+                >
+                  {savingEdit ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            post?.content && (
+              <p className="mt-2 whitespace-pre-line text-[13px] font-semibold leading-5" style={{ color: INK }}>
+                <RichText text={post.content} />
+              </p>
+            )
+          )}
+
+          {!isEditing && <LinkPreviewCard text={post?.content} />}
+
           <p className="mt-2 text-right text-[10px] font-bold" style={{ color: MUTED }}>
+            {post?.isEdited && "edited · "}
             {post?.createdAt
               ? new Date(post.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
               : "now"}
@@ -1768,26 +2128,36 @@ function PostBubble({ post, viewerId, canModerate, onReply, onReact, onDelete })
 
         {Object.keys(reactionCounts).length > 0 && (
           <div className="mt-1 flex flex-wrap gap-1">
-            {Object.entries(reactionCounts).map(([emoji, count]) => (
-              <button
-                key={emoji}
-                onClick={() => onReact(post, emoji)}
-                className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black"
-                style={{
-                  background: myReaction === emoji ? "rgba(18,20,28,0.08)" : "var(--imc-surface)",
-                  border: `1px solid ${myReaction === emoji ? INK : LINE}`,
-                  color: INK,
-                }}
-              >
-                <span>{emoji}</span>
-                <span>{count}</span>
-              </button>
-            ))}
+            <AnimatePresence initial={false}>
+              {Object.entries(reactionCounts).map(([emoji, count]) => (
+                <motion.button
+                  key={emoji}
+                  layout
+                  initial={{ opacity: 0, scale: 0.5 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.5 }}
+                  transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => onReact(post, emoji)}
+                  className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black"
+                  style={{
+                    background: myReaction === emoji ? "rgba(18,20,28,0.08)" : "var(--imc-surface)",
+                    border: `1px solid ${myReaction === emoji ? INK : LINE}`,
+                    color: INK,
+                  }}
+                >
+                  <span>{emoji}</span>
+                  <span>{count}</span>
+                </motion.button>
+              ))}
+            </AnimatePresence>
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
+// Mirrors Chat.jsx's VoiceMessage bubble, just restyled with this file's own
+// color constants (INK/MUTED/PAPER/LINE) so it fits the community theme.
 export default CircleCommunity;

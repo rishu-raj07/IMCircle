@@ -1495,6 +1495,35 @@ export const registerPushToken = async (req, res) => {
   }
 };
 
+// Stores this device's E2EE public key (see User.js's publicKey field for
+// the full explanation). Called once per device the first time the app
+// notices it doesn't have a key pair yet — see
+// frontend/src/components/common/E2EEKeyInitializer.jsx. A plain overwrite
+// ($set, not $addToSet like push tokens) is correct here: unlike push
+// tokens, a user is only ever meant to have ONE current public key, and
+// generating a new device key pair is supposed to replace the old one.
+export const updatePublicKey = async (req, res) => {
+  try {
+    const { publicKey } = req.body;
+
+    if (!publicKey || typeof publicKey !== "string" || publicKey.length > 2000) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid public key is required",
+      });
+    }
+
+    await User.updateOne({ _id: req.user._id }, { $set: { publicKey } });
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
 // Called on logout from a native app so a signed-out device stops
 // receiving pushes meant for the account that just logged out of it.
 export const removePushToken = async (req, res) => {

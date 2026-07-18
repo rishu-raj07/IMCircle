@@ -32,6 +32,16 @@ export const deleteMessages = async (messageIds = [], scope = "me") => {
   return res.data;
 };
 
+// Accepts either the legacy plain string (`editMessage(id, "new text")`) or
+// an object payload for E2EE edits (`editMessage(id, { isEncrypted: true,
+// encryptedContent })`) — Chat.jsx's handleSaveEdit uses the object form so
+// it can send ciphertext instead of plaintext when the chat is encrypted.
+export const editMessage = async (messageId, payload) => {
+  const body = typeof payload === "string" ? { text: payload } : payload;
+  const res = await api.patch(`/messages/message/${messageId}`, body);
+  return res.data;
+};
+
 export const reactToMessage = async (messageId, reaction) => {
   const res = await api.patch(`/messages/message/${messageId}/reaction`, {
     reaction,

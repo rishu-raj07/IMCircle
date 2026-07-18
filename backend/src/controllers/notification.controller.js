@@ -31,7 +31,13 @@ export const getNotifications = async (req, res) => {
     const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 50);
     const skip = (page - 1) * limit;
 
-    const filter = { recipient: req.user._id };
+    // Direct-message notifications are deliberately excluded from this feed
+    // — a new DM already gets its own native push (see push.service.js /
+    // message.controller.js's sendMessage) without ever writing a
+    // Notification document, so this filter is mostly future-proofing
+    // against any older "message"-type rows still sitting in the database
+    // from before that change.
+    const filter = { recipient: req.user._id, type: { $ne: "message" } };
 
     const [notifications, total] = await Promise.all([
       Notification.find(filter)
@@ -65,6 +71,7 @@ export const getUnreadNotificationCount = async (req, res) => {
     const count = await Notification.countDocuments({
       recipient: req.user._id,
       isRead: false,
+      type: { $ne: "message" },
     });
 
     res.status(200).json({

@@ -61,6 +61,17 @@ function LocationField({
     try {
       setSearching(true);
       const location = await getLocationDetails(suggestion.id);
+
+      // Some place results (rural areas, certain landmarks/POIs) resolve
+      // without a usable city component. Rejecting those here — instead of
+      // committing an empty city — matches the same guard the GPS path
+      // already has below, and stops the input from silently reverting to
+      // blank right after the user taps a suggestion.
+      if (!location?.city) {
+        setError("Couldn't find a city for that result — try a different search.");
+        return;
+      }
+
       setEditing(false);
       onChange(location);
       setText(formatDisplay(location));
@@ -70,6 +81,36 @@ function LocationField({
       setError("Couldn't load this location");
     } finally {
       setSearching(false);
+    }
+  };
+
+  // If the user types a city and taps away (or the on-screen keyboard's
+  // "Done"/"Go" doesn't fire a real Enter keydown, common on Android) without
+  // explicitly tapping a suggestion, the field used to keep showing their
+  // typed text while silently never actually saving a location — value.city
+  // stayed "" the whole time. This commits the best available match on blur
+  // instead of just abandoning whatever the user typed.
+  const commitBestMatch = async () => {
+    const query = text.trim();
+
+    if (!query) {
+      if (value?.city) onChange({ city: "", state: "", country: "", lat: null, lng: null });
+      return;
+    }
+
+    if (query === formatDisplay(value)) return;
+
+    if (suggestions[0]) {
+      await selectSuggestion(suggestions[0]);
+      return;
+    }
+
+    try {
+      const results = await searchLocations(query);
+      if (results?.[0]) await selectSuggestion(results[0]);
+    } catch {
+      // Leave the previously-saved value alone rather than wiping it just
+      // because this lookup failed.
     }
   };
 
@@ -151,13 +192,19 @@ function LocationField({
               setEditing(true);
               setText(event.target.value);
               setError("");
-              onChange({ city: "", state: "", country: "", lat: null, lng: null });
             }}
             onKeyDown={(event) => {
               if (event.key === "Enter" && suggestions[0]) {
                 event.preventDefault();
                 selectSuggestion(suggestions[0]);
               }
+            }}
+            onBlur={() => {
+              // Delayed so a tap on a suggestion button (which also blurs
+              // this input) gets to run its own onClick/selectSuggestion
+              // first — by the time this fires, `text` will already match
+              // the freshly-selected value and this becomes a no-op.
+              window.setTimeout(commitBestMatch, 200);
             }}
             placeholder={placeholder}
             autoComplete="off"

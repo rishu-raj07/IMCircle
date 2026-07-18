@@ -43,7 +43,7 @@ const uploadToCloudinary = (buffer, folder, resourceType = "image") => {
 export const createCirclePost = async (req, res) => {
   try {
     const { circleId } = req.params;
-    const { content, replyTo } = req.body;
+    const { content, replyTo, audioUrl, audioPublicId } = req.body;
 
     const membership = await CircleMember.findOne({
       circle: circleId,
@@ -65,8 +65,9 @@ export const createCirclePost = async (req, res) => {
     }
 
     const trimmedContent = (content || "").trim();
+    const hasAudio = typeof audioUrl === "string" && audioUrl.trim().length > 0;
 
-    if (!trimmedContent && !req.file) {
+    if (!trimmedContent && !req.file && !hasAudio) {
       return res.status(400).json({
         success: false,
         message: "Write a message or attach an image",
@@ -83,6 +84,10 @@ export const createCirclePost = async (req, res) => {
 
       image = { url: uploaded.secure_url, publicId: uploaded.public_id };
     }
+
+    const audio = hasAudio
+      ? { url: audioUrl.trim(), publicId: audioPublicId || "" }
+      : undefined;
 
     let replyToId = null;
 
@@ -101,6 +106,7 @@ export const createCirclePost = async (req, res) => {
       author: req.user._id,
       content: trimmedContent,
       image,
+      audio,
       replyTo: replyToId,
     });
 
@@ -108,7 +114,7 @@ export const createCirclePost = async (req, res) => {
       .populate("author", userFields)
       .populate({
         path: "replyTo",
-        select: "content image author isDeleted",
+        select: "content image audio author isDeleted",
         populate: { path: "author", select: userFields },
       });
 
@@ -170,7 +176,7 @@ export const getCirclePosts = async (req, res) => {
       .populate("author", userFields)
       .populate({
         path: "replyTo",
-        select: "content image author isDeleted",
+        select: "content image audio author isDeleted",
         populate: { path: "author", select: userFields },
       })
       .populate("reactions.user", userFields)
@@ -206,13 +212,44 @@ export const updateCirclePost = async (req, res) => {
       });
     }
 
-    Object.assign(post, pickEditableCirclePostFields(req.body));
+    const edits = pickEditableCirclePostFields(req.body);
+
+    if (typeof edits.content === "string") {
+      const cleanContent = edits.content.trim();
+
+      if (!cleanContent && !post.image?.url && !post.media?.length) {
+        return res.status(400).json({
+          success: false,
+          message: "Message can't be empty",
+        });
+      }
+
+      edits.content = cleanContent;
+    }
+
+    Object.assign(post, edits);
+
+    // Mark as edited whenever the actual message content changes — mirrors
+    // the DM chat's edit indicator (Message.isEdited/editedAt).
+    if (edits.content !== undefined) {
+      post.isEdited = true;
+      post.editedAt = new Date();
+    }
 
     await post.save();
 
+    const populatedPost = await CirclePost.findById(post._id)
+      .populate("author", userFields)
+      .populate({
+        path: "replyTo",
+        select: "content image audio author isDeleted",
+        populate: { path: "author", select: userFields },
+      })
+      .populate("reactions.user", userFields);
+
     res.status(200).json({
       success: true,
-      post,
+      post: populatedPost,
     });
   } catch (error) {
     res.status(500).json({

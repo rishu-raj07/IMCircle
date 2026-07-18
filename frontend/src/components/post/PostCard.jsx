@@ -13,6 +13,7 @@ import PostDetailOverlay from "../common/PostDetailOverlay";
 import CircleAction from "../common/CircleAction";
 import ProfileCompleteBadge from "../badges/ProfileCompleteBadge";
 import RichText from "../common/RichText";
+import LinkPreviewCard from "../common/LinkPreviewCard";
 import { trackEvent } from "../../utils/analyticsTracker";
 import { formatRelativeTime } from "../../utils/relativeTime";
 import { getGenderAvatarIcon } from "../../utils/avatar";
@@ -391,6 +392,8 @@ function PostCard({ post = {}, type = "post", currentUser = null }) {
                 {expanded ? "Show less" : "Read more"}
               </button>
             )}
+
+            <LinkPreviewCard text={content} />
           </div>
         </div>
 

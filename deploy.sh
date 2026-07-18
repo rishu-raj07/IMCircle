@@ -19,9 +19,12 @@ ssh "$VPS_HOST" bash -s <<EOF
   set -euo pipefail
   cd "$REPO_DIR"
 
-  # These two files have local server-side edits that shouldn't be
+  # These files have local server-side edits that shouldn't be
   # overwritten by git pull (same as your existing push_instructions.txt).
-  git checkout -- backend/package-lock.json frontend/src/api/axios.js
+  # backend/package.json was added after a deploy failed with "local
+  # changes to backend/package.json would be overwritten by merge" —
+  # the server had a stray uncommitted edit to its version field.
+  git checkout -- backend/package-lock.json frontend/src/api/axios.js backend/package.json
   git pull
   git log -1 --oneline
 
@@ -42,9 +45,9 @@ ssh "$VPS_HOST" bash -s <<EOF
 EOF
 
 echo "== 3. Verify the live version endpoint =="
-curl -s https://imcircle.app/api/meta/version | tee /tmp/imcircle-version.json
+curl -s https://imcircle.com/api/meta/version | tee /tmp/imcircle-version.json
 echo
-echo "Confirm backendVersion / frontendVersion read 1.1.1 above."
+echo "Confirm backendVersion / frontendVersion read 1.1.4 above."
 
 echo "== 4. Cloudflare =="
 echo "Manual step (dashboard, not scriptable via curl without an API token):"

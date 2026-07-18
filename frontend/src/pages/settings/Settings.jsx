@@ -27,6 +27,7 @@ import { logoutApi } from "../../api/authApi";
 import { unregisterPushToken } from "../../utils/pushNotifications";
 import { reportProblem } from "../../api/supportApi";
 import { GOOGLE_WEB_CLIENT_ID, IS_ANDROID, IS_IOS } from "../../config/platform.js";
+import { shareApp } from "../../utils/shareLink";
 
 const IS_NATIVE = IS_ANDROID || IS_IOS;
 
@@ -46,58 +47,12 @@ function Settings() {
   // itself) — always the Play Store link, regardless of platform. This is
   // deliberately separate from content shares (post/profile/journey), which
   // still use their own URLs via utils/shareLink.js — never overwritten by
-  // this. Previously this used `window.location.origin` as the share URL,
-  // which on native is the WebView's internal origin (not a real,
-  // clickable web address), and never used the Capacitor Share plugin at
-  // all — on native, navigator.share is frequently unavailable, so this
-  // always fell straight through to the clipboard-only fallback, which is
-  // the "only ever says Link copied" bug.
-  const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.imcircle.app";
-  const SHARE_TEXT =
-    "Join me on IMCircle — the social network for people who grow.\n\n" +
-    "Build. Learn. Share your journey. Find your circle.\n\n" +
-    "Download IMCircle:\n" +
-    PLAY_STORE_URL;
-
-  const handleShare = async () => {
-    // Native (Android/iOS): the real OS share sheet via Capacitor, same as
-    // content shares in utils/shareLink.js.
-    if (IS_NATIVE) {
-      try {
-        const { Share } = await import("@capacitor/share");
-        await Share.share({
-          title: "Join IMCircle",
-          text: SHARE_TEXT,
-          dialogTitle: "Share IMCircle",
-        });
-        return;
-      } catch {
-        // User cancelled, or the plugin genuinely isn't available — fall
-        // through to the web/clipboard paths below rather than failing
-        // silently with nothing happening.
-      }
-    }
-
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: "Join IMCircle",
-          text: "Join me on IMCircle — the social network for people who grow.",
-          url: PLAY_STORE_URL,
-        });
-        return;
-      }
-    } catch {
-      // user cancelled or share failed — fall through to clipboard
-    }
-
-    try {
-      await navigator.clipboard.writeText(PLAY_STORE_URL);
-      alert("Link copied to clipboard");
-    } catch {
-      // clipboard unavailable — nothing more we can do silently
-    }
-  };
+  // this. The actual Capacitor-first / navigator.share / clipboard fallback
+  // chain now lives in shareApp() (utils/shareLink.js) so this and the
+  // top-right Profile share button can't drift out of sync again — the
+  // Profile button previously skipped the Capacitor plugin entirely and
+  // only ever fell through to a clipboard copy on native.
+  const handleShare = () => shareApp();
 
   const handleLogout = async () => {
     if (loggingOut) return;

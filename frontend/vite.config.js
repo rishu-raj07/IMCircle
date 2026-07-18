@@ -89,10 +89,6 @@ export default defineConfig({
           { src: "/icons/maskable-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
           { src: "/icons/maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" }
         ],
-        screenshots: [
-          { src: "/screenshots/mobile-home.png", sizes: "1080x2340", type: "image/png", form_factor: "narrow", label: "IMCircle home feed" },
-          { src: "/screenshots/desktop-home.png", sizes: "1920x1080", type: "image/png", form_factor: "wide", label: "IMCircle on desktop" }
-        ],
         shortcuts: [
           { name: "Home feed", url: "/home", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
           { name: "Create post", url: "/create-post", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },

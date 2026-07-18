@@ -24,6 +24,7 @@ import {
   reportUser,
   registerPushToken,
   removePushToken,
+  updatePublicKey,
   getUserPosts,
   getUserReposts,
 } from "../controllers/user.controller.js";
@@ -49,6 +50,10 @@ router.post("/contacts/match", protect, matchContacts);
 
 router.post("/me/push-token", protect, registerPushToken);
 router.delete("/me/push-token", protect, removePushToken);
+
+// End-to-end encryption (personal 1:1 chat) — uploads this device's public
+// key only. See User.js's publicKey field and frontend/src/utils/encryption.js.
+router.put("/me/public-key", protect, updatePublicKey);
 
 router.get("/followers", protect, getFollowers);
 router.get("/following", protect, getFollowing);

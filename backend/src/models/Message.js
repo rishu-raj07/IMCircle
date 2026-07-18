@@ -102,6 +102,40 @@ const messageSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    // Instagram/WhatsApp-style "edited" indicator — purely additive,
+    // existing messages default to false/null and render unchanged.
+    isEdited: {
+      type: Boolean,
+      default: false,
+    },
+    editedAt: {
+      type: Date,
+      default: null,
+    },
+
+    // End-to-end encryption (personal DM only) — see
+    // frontend/src/utils/encryption.js. When isEncrypted is true, `text`
+    // above is left empty and the real content lives ONLY here, as
+    // ciphertext the server can't read. Older messages (and voice
+    // attachments, which aren't encrypted in this version) simply have
+    // isEncrypted: false/undefined and keep using `text` exactly as before
+    // — this is purely additive, nothing about the existing plaintext path
+    // changes.
+    isEncrypted: {
+      type: Boolean,
+      default: false,
+    },
+    encryptedContent: {
+      ciphertext: {
+        type: String,
+        default: "",
+      },
+      iv: {
+        type: String,
+        default: "",
+      },
+    },
   },
   { timestamps: true }
 );

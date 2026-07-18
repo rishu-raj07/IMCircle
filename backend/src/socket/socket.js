@@ -226,6 +226,15 @@ export const initSocket = (server) => {
     socket.on("disconnect", () => {
       if (onlineUsers.get(userId) === socket.id) {
         onlineUsers.delete(userId);
+
+        // Stamps the moment this user actually went offline, so Chat.jsx's
+        // "Last seen ..." (shown once they're no longer online) reflects
+        // when they really left rather than lastActiveAt's previous
+        // meaning of "last login". Only updated on a genuine full
+        // disconnect (checked above) — not on every reconnect/tab-switch —
+        // and swallowed on error since a failed presence write must never
+        // crash the socket layer.
+        User.updateOne({ _id: userId }, { $set: { lastActiveAt: new Date() } }).catch(() => {});
       }
 
       broadcastOnlineUsers();
@@ -316,4 +325,12 @@ export const emitMessageReacted = (conversationId, message) => {
     messageId: message._id?.toString ? message._id.toString() : String(message._id),
     reactions: message.reactions || [],
   });
+};
+
+// Broadcasts a full edited message (already re-populated by the caller) so
+// the other participant sees the new text and the "edited" label live,
+// instead of only finding out on their next full refetch.
+export const emitMessageEdited = (conversationId, message) => {
+  if (!io || !conversationId || !message) return;
+  io.to(conversationId.toString()).emit("message_edited", message);
 };

@@ -66,6 +66,21 @@ const circlePostSchema = new mongoose.Schema(
       },
     },
 
+    // Voice messages for the community chat — additive, mirrors Message.js's
+    // attachments pattern. Uploaded via the existing generic /upload/audio
+    // endpoint first, then just the resulting URL/publicId is attached here
+    // (same two-step flow the DM chat already uses for voice notes).
+    audio: {
+      url: {
+        type: String,
+        default: "",
+      },
+      publicId: {
+        type: String,
+        default: "",
+      },
+    },
+
     replyTo: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "CirclePost",
@@ -128,6 +143,17 @@ const circlePostSchema = new mongoose.Schema(
     isDeleted: {
       type: Boolean,
       default: false,
+    },
+
+    // Instagram/WhatsApp-style "edited" indicator — additive, existing
+    // posts default to false/null and render unchanged.
+    isEdited: {
+      type: Boolean,
+      default: false,
+    },
+    editedAt: {
+      type: Date,
+      default: null,
     },
     impressionsCount: {
   type: Number,

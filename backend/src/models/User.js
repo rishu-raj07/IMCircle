@@ -783,6 +783,22 @@ const userSchema = new mongoose.Schema(
       },
     ],
 
+    // This device's end-to-end encryption public key (ECDH P-256, base64
+    // JWK), for personal 1:1 DM chats — see frontend/src/utils/encryption.js.
+    // Only ever set by the user themselves via PUT /users/me/public-key,
+    // right after their device generates its key pair. The matching PRIVATE
+    // key never leaves that device / is never sent here — this field alone
+    // can't decrypt anything, it just lets other users' devices look up who
+    // to encrypt a message FOR. A user who logs in on a new device (or
+    // clears app data) generates a fresh pair and overwrites this, same
+    // trade-off most E2EE chat apps make without a separate key-backup flow:
+    // old messages encrypted under the previous key become unreadable on
+    // the new device, but sending/receiving new messages keeps working.
+    publicKey: {
+      type: String,
+      default: "",
+    },
+
     reports: [
       {
         user: {

@@ -35,6 +35,7 @@ import RankBadge from "../../components/badges/RankBadge";
 import StreakMilestoneCard from "../../components/badges/StreakMilestoneCard";
 import { getStreakBadgeTier } from "../../utils/badges";
 import { getMyReferralStats } from "../../api/referralApi";
+import { shareApp } from "../../utils/shareLink";
 
 import { getMyProfile, updateProfile } from "../../api/profileApi";
 import { getUser as getCachedUser, setUser as setStoredUser } from "../../utils/storage";
@@ -376,32 +377,6 @@ function Profile() {
   const [completionOpen, setCompletionOpen] = useState(false);
   const [showCompletionBadgeInfo, setShowCompletionBadgeInfo] = useState(false);
 
-  const handleShareApp = async () => {
-    const shareData = {
-      title: "IMCircle",
-      text: "Join me on IMCircle and start building your journey in public.",
-      url: user?.username
-        ? `${PUBLIC_APP_URL}?ref=${encodeURIComponent(user.username)}`
-        : PUBLIC_APP_URL,
-    };
-
-    if (navigator.share) {
-      try {
-        await navigator.share(shareData);
-        return;
-      } catch (error) {
-        if (error?.name === "AbortError") return;
-      }
-    }
-
-    try {
-      await navigator.clipboard.writeText(PUBLIC_APP_URL);
-      window.alert("IMCircle app link copied");
-    } catch {
-      window.prompt("Copy the IMCircle app link", PUBLIC_APP_URL);
-    }
-  };
-
   const loadProfile = async () => {
     try {
       setLoading(true);
@@ -733,7 +708,7 @@ function Profile() {
                   <RankBadge tier={rankBadge} rank={signupRank} />
                   <button
                     type="button"
-                    onClick={handleShareApp}
+                    onClick={() => shareApp()}
                     aria-label="Share IMCircle app"
                     className="ml-auto grid h-9 w-9 shrink-0 place-items-center rounded-xl text-[var(--imc-text)] active:scale-95"
                   >

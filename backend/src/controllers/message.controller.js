@@ -2,18 +2,24 @@ import Conversation from "../models/Conversation.js";
 import Message from "../models/Message.js";
 import User from "../models/User.js";
 import notificationService from "../services/notification.service.js";
+import { sendPushToUser } from "../services/push.service.js";
 
 import {
   emitMessage,
   emitMessageSeen,
   emitMessagesUnsent,
   emitMessageReacted,
+  emitMessageEdited,
   isUserOnline,
   isUserActiveInConversation,
 } from "../socket/socket.js";
 
+// `publicKey` is included here so conversation participants/message senders
+// already carry it wherever this app fetches them — the DM chat's E2EE
+// (frontend/src/utils/encryption.js) needs the OTHER person's public key to
+// encrypt for them, and this avoids a separate lookup call for it.
 const userPopulateFields =
-  "fullName username avatar profileImage profilePicture image photo picture headline role occupation gender";
+  "fullName username avatar profileImage profilePicture image photo picture headline role occupation gender publicKey lastActiveAt";
 
 const getPlainId = (value) => {
   if (!value) return "";
@@ -281,11 +287,29 @@ export const getConversations = async (req, res) => {
   }
 };
 
-const replyPopulateSelect = "text attachments sender isDeleted";
+const replyPopulateSelect = "text attachments sender isDeleted isEncrypted encryptedContent";
 
 export const sendMessage = async (req, res) => {
   try {
-    const { text = "", attachments = [], clientTempId = "", replyTo = "" } = req.body;
+    const {
+      text = "",
+      attachments = [],
+      clientTempId = "",
+      replyTo = "",
+      isEncrypted = false,
+      encryptedContent = null,
+    } = req.body;
+
+    // E2EE messages (see Message.js) carry their real content only in
+    // encryptedContent — the server genuinely cannot read it, so this is
+    // just a shape check (both parts present, non-empty strings), not a
+    // content validation.
+    const hasValidEncryptedContent =
+      isEncrypted === true &&
+      typeof encryptedContent?.ciphertext === "string" &&
+      encryptedContent.ciphertext.trim().length > 0 &&
+      typeof encryptedContent?.iv === "string" &&
+      encryptedContent.iv.trim().length > 0;
 
     const conversation = await Conversation.findById(req.params.conversationId);
 
@@ -340,7 +364,7 @@ export const sendMessage = async (req, res) => {
       });
     }
 
-    if (!text.trim() && attachments.length === 0) {
+    if (!text.trim() && attachments.length === 0 && !hasValidEncryptedContent) {
       return res.status(400).json({
         success: false,
         message: "Message text or attachment is required",
@@ -391,12 +415,16 @@ export const sendMessage = async (req, res) => {
     const message = await Message.create({
       conversation: conversation._id,
       sender: req.user._id,
-      text: text.trim(),
+      text: hasValidEncryptedContent ? "" : text.trim(),
       clientTempId,
       attachments: formattedAttachments,
       seenBy: [],
       deliveredTo,
       replyTo: replyToId,
+      isEncrypted: hasValidEncryptedContent,
+      encryptedContent: hasValidEncryptedContent
+        ? { ciphertext: encryptedContent.ciphertext, iv: encryptedContent.iv }
+        : undefined,
     });
 
     const populatedMessage = await Message.findById(message._id)
@@ -407,7 +435,16 @@ export const sendMessage = async (req, res) => {
         populate: { path: "sender", select: userPopulateFields },
       });
 
-    const preview = getPreviewText(text, formattedAttachments);
+    // Encrypted messages have no server-readable text to build a real
+    // preview from — the conversation list's "last message" line falls back
+    // to a generic marker here. The frontend conversation list decrypts the
+    // ACTUAL latest message client-side for its own preview (see
+    // getConversations, which already returns the full latestMessage doc);
+    // this string is just a safe fallback for anything that reads
+    // conversation.lastMessage directly without decrypting.
+    const preview = hasValidEncryptedContent
+      ? "🔒 Message"
+      : getPreviewText(text, formattedAttachments);
 
     conversation.lastMessage = preview;
     conversation.lastMessageAt = new Date();
@@ -425,30 +462,29 @@ export const sendMessage = async (req, res) => {
 
     emitMessage(conversation._id, messageObj);
 
-    // Best-effort notification so a direct message shows up in the
-    // recipient's Notifications tab and, when tapped, opens this exact
-    // conversation. Skipped only while the recipient has this exact
-    // conversation open right now (isUserActiveInConversation checks the
-    // conversation's socket room, not just "online somewhere in the app") —
-    // they're already seeing the message live via `receive_message`, so a
-    // duplicate Notifications-tab entry would just be noise. If they're
-    // online but on a different screen/chat, they still get notified.
+    // Direct messages deliberately do NOT create a Notification document —
+    // unlike likes/comments/follows/etc, a DM already lives in the chat
+    // itself, so surfacing it a second time in the Notifications tab is
+    // redundant clutter. Instead this sends a native push directly (bypassing
+    // notificationService.create, which is what writes to that tab), so the
+    // recipient still gets alerted when they're not "live" in this chat —
+    // just without a lingering tab entry. Skipped only while the recipient
+    // has this exact conversation open right now (isUserActiveInConversation
+    // checks the conversation's socket room, not just "online somewhere in
+    // the app") — they're already seeing the message live via
+    // `receive_message`, so a push on top of that would just be noise. If
+    // they're online but on a different screen/chat, or fully offline, they
+    // still get the push.
     if (receiverId && !isUserActiveInConversation(receiverId, conversation._id)) {
       const senderName =
         req.user.fullName || req.user.name || req.user.username || "Someone";
 
-      notificationService
-        .create({
-          recipientId: receiverId,
-          actorId: req.user._id,
-          type: "message",
-          entityType: "message",
-          entityId: conversation._id,
-          title: senderName,
-          message: preview || "Sent you a message",
-          metadata: { conversationId: conversation._id, senderId: req.user._id },
-        })
-        .catch(() => {});
+      sendPushToUser(receiverId, {
+        type: "message",
+        title: senderName,
+        message: preview || "Sent you a message",
+        data: { conversationId: conversation._id, senderId: req.user._id },
+      }).catch(() => {});
     }
 
     return res.status(201).json({
@@ -699,6 +735,103 @@ export const deleteMessage = async (req, res) => {
     });
   } catch (error) {
     console.error("deleteMessage error:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+export const editMessage = async (req, res) => {
+  try {
+    const { text = "", isEncrypted = false, encryptedContent = null } = req.body;
+    const cleanText = text.trim();
+
+    const hasValidEncryptedContent =
+      isEncrypted === true &&
+      typeof encryptedContent?.ciphertext === "string" &&
+      encryptedContent.ciphertext.trim().length > 0 &&
+      typeof encryptedContent?.iv === "string" &&
+      encryptedContent.iv.trim().length > 0;
+
+    if (!hasValidEncryptedContent) {
+      if (!cleanText) {
+        return res.status(400).json({
+          success: false,
+          message: "Message text is required",
+        });
+      }
+
+      if (cleanText.length > 2000) {
+        return res.status(400).json({
+          success: false,
+          message: "Message is too long",
+        });
+      }
+    }
+
+    const message = await Message.findById(req.params.messageId);
+
+    if (!message || message.isDeleted) {
+      return res.status(404).json({
+        success: false,
+        message: "Message not found",
+      });
+    }
+
+    if (getPlainId(message.sender) !== getPlainId(req.user._id)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized",
+      });
+    }
+
+    // Editing only makes sense for text messages — a voice note's
+    // attachment isn't editable, and this keeps the feature scoped to what
+    // Instagram/WhatsApp actually support (text edits only). Encrypted
+    // messages have no server-readable `text`, so isEncrypted also counts
+    // as "this had text".
+    if ((!message.text && !message.isEncrypted) || message.attachments?.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "This message can't be edited",
+      });
+    }
+
+    if (hasValidEncryptedContent) {
+      message.text = "";
+      message.isEncrypted = true;
+      message.encryptedContent = {
+        ciphertext: encryptedContent.ciphertext,
+        iv: encryptedContent.iv,
+      };
+    } else {
+      message.text = cleanText;
+      message.isEncrypted = false;
+      message.encryptedContent = undefined;
+    }
+
+    message.isEdited = true;
+    message.editedAt = new Date();
+    await message.save();
+
+    const populatedMessage = await Message.findById(message._id)
+      .populate("sender", userPopulateFields)
+      .populate({
+        path: "replyTo",
+        select: replyPopulateSelect,
+        populate: { path: "sender", select: userPopulateFields },
+      });
+
+    emitMessageEdited(message.conversation, populatedMessage);
+
+    return res.status(200).json({
+      success: true,
+      message: populatedMessage,
+    });
+  } catch (error) {
+    console.error("editMessage error:", error.message);
 
     return res.status(500).json({
       success: false,

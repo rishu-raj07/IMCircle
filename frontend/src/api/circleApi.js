@@ -139,7 +139,7 @@ export const getCirclePosts = async (circleId) => {
 // quoting an earlier message via replyTo.
 export const createCirclePost = async (
   circleId,
-  { content = "", imageFile = null, replyTo = "" } = {}
+  { content = "", imageFile = null, replyTo = "", audioUrl = "", audioPublicId = "" } = {}
 ) => {
   if (imageFile) {
     const formData = new FormData();
@@ -158,6 +158,13 @@ export const createCirclePost = async (
 
   const payload = { content };
   if (replyTo) payload.replyTo = replyTo;
+  // Voice messages are uploaded separately first (see /upload/audio, same
+  // flow the DM chat uses), so only the resulting URL needs to travel here —
+  // no multipart form needed for this case.
+  if (audioUrl) {
+    payload.audioUrl = audioUrl;
+    payload.audioPublicId = audioPublicId;
+  }
 
   const res = await api.post(`/circles/${circleId}/posts`, payload);
   return res.data;
@@ -165,6 +172,11 @@ export const createCirclePost = async (
 
 export const deleteCirclePostMessage = async (postId) => {
   const res = await api.delete(`/circle-posts/${postId}`);
+  return res.data;
+};
+
+export const editCirclePost = async (postId, content) => {
+  const res = await api.patch(`/circle-posts/${postId}`, { content });
   return res.data;
 };
 

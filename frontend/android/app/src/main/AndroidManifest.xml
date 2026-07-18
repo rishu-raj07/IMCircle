@@ -9,6 +9,13 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
+    <!-- Required for voice messages (Chat.jsx / CircleCommunity.jsx call
+         navigator.mediaDevices.getUserMedia({audio:true}) directly). Without
+         this declared here, the OS-level runtime permission request in
+         MainActivity always fails and the mic never starts, regardless of
+         what the in-app permission prompt says. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"

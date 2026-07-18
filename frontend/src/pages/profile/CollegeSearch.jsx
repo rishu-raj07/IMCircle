@@ -115,9 +115,33 @@ export default function CollegeSearch({ open, value, onClose, onSelect }) {
         </div>
 
         <div className="mt-5 space-y-3">
+          {cleanQuery.length === 0 && (
+            <div className="rounded-[20px] border border-dashed border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 py-6 text-center">
+              <GraduationCap size={22} className="mx-auto mb-2 text-[var(--imc-text-faint)]" />
+              <p className="text-[13px] font-bold text-[var(--imc-text-muted)]">
+                Search for your school, college or university
+              </p>
+              <p className="mt-1 text-[11px] font-semibold text-[var(--imc-text-faint)]">
+                Type at least 2 characters, or add a new one below.
+              </p>
+            </div>
+          )}
+
+          {cleanQuery.length === 1 && (
+            <div className="rounded-[20px] bg-[var(--imc-surface)] px-4 py-5 text-center text-[13px] font-bold text-[var(--imc-text-muted)]">
+              Keep typing... 1 more character
+            </div>
+          )}
+
           {loading && (
             <div className="rounded-[20px] bg-[var(--imc-surface)] px-4 py-5 text-[14px] font-bold text-[var(--imc-text-muted)]">
               Searching...
+            </div>
+          )}
+
+          {!loading && cleanQuery.length >= 2 && colleges.length === 0 && (
+            <div className="rounded-[20px] bg-[var(--imc-surface)] px-4 py-5 text-center text-[13px] font-bold text-[var(--imc-text-muted)]">
+              No matches for “{cleanQuery}” — add it as a new school below.
             </div>
           )}
 
@@ -167,7 +191,7 @@ export default function CollegeSearch({ open, value, onClose, onSelect }) {
               );
             })}
 
-          {!loading && cleanQuery.length >= 2 && (
+          {!loading && (
             <button
               type="button"
               onClick={() => setShowAddCollege(true)}
@@ -179,9 +203,8 @@ export default function CollegeSearch({ open, value, onClose, onSelect }) {
 
               <div>
                 <p className="text-[15px] font-black text-[var(--imc-indigo-text)]">
-                  Create “{cleanQuery}”
+                  {cleanQuery.length >= 2 ? `Create "${cleanQuery}"` : "Add a new school"}
                 </p>
-
               </div>
             </button>
           )}

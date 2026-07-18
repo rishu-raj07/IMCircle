@@ -32,6 +32,14 @@ export const removePushToken = async (token) => {
   return res.data;
 };
 
+// End-to-end encryption (personal 1:1 chat) — uploads this device's public
+// key. See src/utils/encryption.js and E2EEKeyInitializer.jsx for where
+// this is called from.
+export const uploadPublicKey = async (publicKey) => {
+  const res = await api.put("/users/me/public-key", { publicKey });
+  return res.data;
+};
+
 // Real name/username/skill search against the backend — unlike suggestions,
 // this can surface any user regardless of whether they were preloaded, e.g.
 // typing an exact username like "rishuraj07". Backend requires 2+ chars.

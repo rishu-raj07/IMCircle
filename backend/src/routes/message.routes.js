@@ -5,6 +5,7 @@ import {
   getConversations,
   sendMessage,
   getMessages,
+  editMessage,
   deleteMessage,
   deleteMessages,
   reactToMessage,
@@ -36,6 +37,8 @@ router.patch("/:conversationId/unblock", protect, unblockConversation);
 router.delete("/:conversationId", protect, deleteConversationForMe);
 
 router.patch("/message/:messageId/reaction", protect, reactToMessage);
+
+router.patch("/message/:messageId", protect, editMessage);
 
 router.delete("/messages/bulk", protect, deleteMessages);
 

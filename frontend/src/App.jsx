@@ -4,6 +4,7 @@ import PermissionBootstrap from "./components/common/PermissionBootstrap";
 import DeepLinkListener from "./components/common/DeepLinkListener";
 import SplashIntro from "./components/common/SplashIntro";
 import PushNotificationListener from "./components/common/PushNotificationListener";
+import E2EEKeyInitializer from "./components/common/E2EEKeyInitializer";
 import VersionUpdateBanner from "./components/common/VersionUpdateBanner";
 import AppUpdateModal from "./components/common/AppUpdateModal";
 
@@ -21,6 +22,7 @@ function App() {
       <PermissionBootstrap />
       <DeepLinkListener />
       <PushNotificationListener />
+      <E2EEKeyInitializer />
       <AppRoutes />
     </ErrorBoundary>
   );

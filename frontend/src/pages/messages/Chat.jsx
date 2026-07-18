@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowLeft,
+  ArrowDown,
   MoreVertical,
   Send,
   Mic,
@@ -11,8 +13,9 @@ import {
   Trash2,
   Ban,
   Plus,
-  UserRound,
   Reply,
+  Pencil,
+  Lock,
 } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
@@ -22,6 +25,7 @@ import {
   markMessagesSeen,
   deleteMessages,
   reactToMessage,
+  editMessage,
   deleteConversation,
   blockConversation,
   unblockConversation,
@@ -36,6 +40,14 @@ import {
   shouldAttemptPermission,
 } from "../../utils/permissions";
 import ImageLoader from "../../components/common/ImageLoader";
+import VoiceMessagePlayer from "../../components/common/VoiceMessagePlayer";
+import RichText from "../../components/common/RichText";
+import LinkPreviewCard from "../../components/common/LinkPreviewCard";
+import {
+  isEncryptionSupported,
+  encryptForRecipient,
+  decryptFromUser,
+} from "../../utils/encryption";
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
 
@@ -75,6 +87,38 @@ function formatTime(date) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+// WhatsApp-style "Last seen ..." text for the chat header, shown whenever
+// the other person isn't currently online. Falls back to nothing (header
+// just shows "Offline") if the timestamp is missing or clearly stale data
+// from before lastActiveAt started tracking real disconnects.
+function formatLastSeen(date) {
+  if (!date) return "";
+
+  const seenAt = new Date(date);
+  if (Number.isNaN(seenAt.getTime())) return "";
+
+  const now = new Date();
+  const diffMs = now - seenAt;
+  if (diffMs < 0) return "";
+
+  const diffMinutes = Math.floor(diffMs / 60000);
+
+  if (diffMinutes < 1) return "Last seen just now";
+  if (diffMinutes < 60) return `Last seen ${diffMinutes}m ago`;
+
+  const isToday = seenAt.toDateString() === now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = seenAt.toDateString() === yesterday.toDateString();
+
+  const time = seenAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  if (isToday) return `Last seen today at ${time}`;
+  if (isYesterday) return `Last seen yesterday at ${time}`;
+
+  return `Last seen ${seenAt.toLocaleDateString([], { day: "numeric", month: "short" })}`;
 }
 
 function hasUser(arr = [], userId) {
@@ -190,6 +234,8 @@ function Chat() {
 
   const bottomRef = useRef(null);
   const loadedConversationRef = useRef("");
+  const initialScrollDoneRef = useRef("");
+  const inputRef = useRef(null);
   const longPressTimerRef = useRef(null);
   const longPressFiredRef = useRef(false);
   const pressStartRef = useRef({ x: 0, y: 0 });
@@ -197,6 +243,12 @@ function Chat() {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const messageRefs = useRef({});
+  const messageListRef = useRef(null);
+  // Mirrors the `showNewMessageBanner` state below but readable
+  // synchronously inside the receive_message socket handler (which closes
+  // over state from whenever the listener was attached, not necessarily
+  // the latest render) — see the comment on the scroll handler.
+  const isNearBottomRef = useRef(true);
 
   // Swipe-to-reply gesture — separate from the existing long-press
   // (react/select) state machine above so the two can coexist on the same
@@ -229,6 +281,13 @@ function Chat() {
   const [sendingVoice, setSendingVoice] = useState(false);
   const [replyTarget, setReplyTarget] = useState(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [showNewMessageBanner, setShowNewMessageBanner] = useState(false);
+  // messageId -> decrypted plaintext, for end-to-end encrypted messages.
+  // See utils/encryption.js — decryption happens client-side and is never
+  // sent anywhere, so this only ever lives in memory for this render.
+  const [decryptedMap, setDecryptedMap] = useState({});
 
   const currentUserId = getUserId(currentUser);
 
@@ -251,11 +310,73 @@ function Chat() {
     setBlocked(Boolean(conversation?.blockedBy?.length));
   }, [conversation?.blockedBy]);
 
+  // Decrypts any end-to-end encrypted message (and any encrypted quoted
+  // reply) that isn't already in decryptedMap. Runs whenever the message
+  // list changes — new messages, edits, or a freshly loaded chat. Skips
+  // entirely if this device has no shared key to decrypt with yet (e.g. the
+  // other person hasn't published a public key), in which case those
+  // bubbles just show "Couldn't decrypt this message" via the render below.
+  useEffect(() => {
+    if (!otherUser?.publicKey) return;
+
+    const pending = [];
+    const seen = new Set();
+
+    const collect = (item) => {
+      if (!item?.isEncrypted || !item?._id) return;
+      if (decryptedMap[item._id] !== undefined) return;
+      if (seen.has(item._id)) return;
+      seen.add(item._id);
+      pending.push(item);
+    };
+
+    messages.forEach((message) => {
+      collect(message);
+      collect(message.replyTo);
+    });
+
+    if (pending.length === 0) return;
+
+    let cancelled = false;
+
+    (async () => {
+      const updates = {};
+
+      for (const item of pending) {
+        try {
+          updates[item._id] = await decryptFromUser(otherUser.publicKey, item.encryptedContent);
+        } catch {
+          updates[item._id] = "";
+        }
+      }
+
+      if (!cancelled) setDecryptedMap((prev) => ({ ...prev, ...updates }));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [messages, otherUser?.publicKey, decryptedMap]);
+
   const scrollToBottom = () => {
     setTimeout(() => {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, 50);
   };
+
+  // Opening a chat used to visibly animate from the top of the message list
+  // down to the latest message (the smooth scrollIntoView in loadChat's
+  // finally block, firing after a render). Chats should just open already
+  // at the bottom, like Instagram/WhatsApp — this runs synchronously after
+  // the DOM commits but before the browser paints, so it jumps straight
+  // there with no visible scroll animation. Guarded per-conversationId so
+  // it only fires once per chat open, not on every subsequent message.
+  useLayoutEffect(() => {
+    if (loading) return;
+    if (initialScrollDoneRef.current === conversationId) return;
+    bottomRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+    initialScrollDoneRef.current = conversationId;
+  }, [loading, conversationId, messages]);
 
   // Tapping a quoted-reply preview jumps to (and briefly highlights) the
   // original message, the same way Instagram/WhatsApp do it.
@@ -271,12 +392,31 @@ function Chat() {
     }, 1200);
   };
 
+  // Tracks whether the user is currently near the bottom of the message
+  // list, so a message arriving while they've scrolled up to read older
+  // messages doesn't yank them back down — it shows the "New message" pill
+  // below instead, same as Instagram/WhatsApp.
+  const handleMessageListScroll = (event) => {
+    const el = event.currentTarget;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const nearBottom = distanceFromBottom < 150;
+
+    isNearBottomRef.current = nearBottom;
+    if (nearBottom) setShowNewMessageBanner(false);
+  };
+
+  const jumpToLatest = () => {
+    setShowNewMessageBanner(false);
+    scrollToBottom();
+  };
+
   useEffect(() => {
     if (!conversationId || loadedConversationRef.current === conversationId) {
       return;
     }
 
     loadedConversationRef.current = conversationId;
+    initialScrollDoneRef.current = "";
 
     const loadChat = async () => {
       try {
@@ -297,7 +437,6 @@ function Chat() {
         // best-effort — non-critical
       } finally {
         setLoading(false);
-        scrollToBottom();
       }
     };
 
@@ -360,7 +499,15 @@ function Chat() {
         markMessagesSeen(conversationId);
       }
 
-      scrollToBottom();
+      // Only auto-scroll if the user is already near the bottom (or it's
+      // their own message just landing) — otherwise they're reading older
+      // messages, and yanking them down would be jarring. Show the "New
+      // message" pill instead so they can jump down on their own terms.
+      if (!isIncomingFromOtherUser || isNearBottomRef.current) {
+        scrollToBottom();
+      } else {
+        setShowNewMessageBanner(true);
+      }
     });
 
     socket.on("message_delivered_update", ({ messageId, deliveredTo, userId }) => {
@@ -431,6 +578,13 @@ function Chat() {
       );
     });
 
+    socket.on("message_edited", (edited) => {
+      if (edited.conversation !== conversationId) return;
+      setMessages((prev) =>
+        prev.map((message) => (message._id === edited._id ? { ...message, ...edited } : message))
+      );
+    });
+
     socket.on("user_typing", (sender) => {
       if (getUserId(sender) !== currentUserId) {
         setTypingUser(sender);
@@ -449,6 +603,7 @@ function Chat() {
       socket.off("message_seen_update");
       socket.off("messages_unsent");
       socket.off("message_reacted");
+      socket.off("message_edited");
       socket.off("user_typing");
       socket.off("user_stop_typing");
     };
@@ -485,7 +640,71 @@ function Chat() {
     }, 900);
   };
 
+  const handleStartEdit = (message) => {
+    if (!message || String(message._id).startsWith("temp-")) return;
+    setEditingMessage(message);
+    setReplyTarget(null);
+    setText(message.isEncrypted ? decryptedMap[message._id] || "" : message.text || "");
+    setReactionTarget(null);
+    setShowEmojiPicker(false);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMessage(null);
+    setText("");
+  };
+
+  // Encrypts `plaintext` for the other participant if this device and the
+  // conversation support it, otherwise returns null so the caller falls
+  // back to plain text — see utils/encryption.js. Never throws.
+  const tryEncrypt = async (plaintext) => {
+    if (!isEncryptionSupported() || !otherUser?.publicKey) return null;
+
+    try {
+      return await encryptForRecipient(otherUser.publicKey, plaintext);
+    } catch {
+      return null;
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    const cleanText = text.trim();
+    if (!cleanText || !editingMessage || savingEdit) return;
+
+    setSavingEdit(true);
+
+    try {
+      const encryptedContent = await tryEncrypt(cleanText);
+      const payload = encryptedContent
+        ? { isEncrypted: true, encryptedContent }
+        : { text: cleanText };
+
+      const res = await editMessage(editingMessage._id, payload);
+
+      if (encryptedContent) {
+        setDecryptedMap((prev) => ({ ...prev, [editingMessage._id]: cleanText }));
+      }
+
+      setMessages((prev) =>
+        prev.map((message) =>
+          message._id === editingMessage._id ? { ...message, ...res.message } : message
+        )
+      );
+      setEditingMessage(null);
+      setText("");
+    } catch (error) {
+      alert(error?.response?.data?.message || "Couldn't save your edit. Try again.");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const handleSend = async () => {
+    if (editingMessage) {
+      await handleSaveEdit();
+      return;
+    }
+
     const cleanText = text.trim();
 
     if (!cleanText || !conversationId || !currentUserId || blocked) return;
@@ -514,12 +733,23 @@ function Chat() {
     scrollToBottom();
 
     try {
+      // The temp bubble above already shows `cleanText` directly (not
+      // marked isEncrypted), so there's no visible flash either way here —
+      // this only decides what actually goes over the wire.
+      const encryptedContent = await tryEncrypt(cleanText);
+
       const res = await sendMessage(conversationId, {
-        text: cleanText,
+        ...(encryptedContent
+          ? { isEncrypted: true, encryptedContent, text: "" }
+          : { text: cleanText }),
         attachments: [],
         clientTempId,
         replyTo: replySnapshot?._id,
       });
+
+      if (encryptedContent && res.message?._id) {
+        setDecryptedMap((prev) => ({ ...prev, [res.message._id]: cleanText }));
+      }
 
       trackEvent("message", {
         entityType: "conversation",
@@ -852,7 +1082,7 @@ function Chat() {
     <div className="fixed inset-0 flex justify-center bg-[var(--imc-bg)]">
       <div className="relative flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-[#F8FAFC] dark:bg-[var(--imc-bg)]">
         <div
-          className="relative shrink-0 border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 pb-3 shadow-[0_8px_24px_rgba(15,23,42,0.04)]"
+          className="relative z-10 shrink-0 border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 pb-3 shadow-[0_8px_24px_rgba(15,23,42,0.04)]"
           style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
         >
           {isSelecting ? (
@@ -924,7 +1154,7 @@ function Chat() {
                     ? "Typing..."
                     : isOtherOnline
                     ? "Online"
-                    : "Offline"}
+                    : formatLastSeen(otherUser?.lastActiveAt) || "Offline"}
                 </p>
               </div>
             </div>
@@ -966,11 +1196,14 @@ function Chat() {
         </div>
 
         <div
+          ref={messageListRef}
+          onScroll={handleMessageListScroll}
           onClick={() => {
             setReactionTarget(null);
             setShowMenu(false);
           }}
-          className="flex-1 overflow-y-auto bg-[#F8FAFC] px-5 py-5 pb-28 dark:bg-[var(--imc-bg)]"
+          className="flex-1 overflow-y-auto overscroll-contain bg-[#F8FAFC] px-5 py-5 pb-28 dark:bg-[var(--imc-bg)]"
+          style={{ willChange: "transform", transform: "translateZ(0)" }}
         >
           {loading ? (
             <div className="py-16 text-center text-[13px] font-bold text-[var(--imc-text-muted)]">
@@ -979,19 +1212,20 @@ function Chat() {
           ) : messages.length === 0 ? (
             <div className="flex min-h-[55vh] items-center justify-center">
               <div className="w-full rounded-[28px] border border-dashed border-[var(--imc-border)] bg-[var(--imc-surface-2)] px-5 py-8 text-center">
-                <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border bg-[var(--imc-surface)] text-[var(--imc-text-muted)] shadow-sm" style={{ borderColor: "var(--imc-border)" }}>
-                  <UserRound size={27} strokeWidth={1.7} />
+                <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border bg-[var(--imc-surface)] text-[var(--imc-indigo-text)] shadow-sm" style={{ borderColor: "var(--imc-border)" }}>
+                  <Lock size={24} strokeWidth={1.8} />
                 </div>
                 <h2 className="mt-4 text-[15px] font-black text-[var(--imc-text)]">
-                  Fresh chat with {getName(otherUser)}
+                  Messages are end-to-end encrypted
                 </h2>
                 <p className="mt-1 text-[12px] font-semibold text-[var(--imc-text-muted)]">
-                  Old messages are cleared. Send a new message to start again.
+                  No one outside this chat — not even IMCircle — can read them. Say hi to {getName(otherUser)} to get started.
                 </p>
               </div>
             </div>
           ) : (
             <div className="space-y-2">
+              <AnimatePresence initial={false}>
               {messages.map((message, index) => {
                 const isSent = getUserId(message.sender) === currentUserId;
                 const groupedWithPrevious = isSameSender(messages, index);
@@ -1003,12 +1237,28 @@ function Chat() {
                   otherUserId
                 );
 
+                // Resolved plaintext for THIS render only — decrypted E2EE
+                // messages exist in-memory as plaintext the moment they're
+                // shown on screen anyway, so linkifying/generating a link
+                // preview for that same plaintext leaks nothing new. Only
+                // real message content goes through RichText/LinkPreviewCard
+                // here, never the "Decrypting…"/"Couldn't decrypt" status
+                // placeholders.
+                const resolvedText = message.isEncrypted
+                  ? decryptedMap[message._id] || ""
+                  : message.text || "";
+
                 const senderForAvatar = otherUser;
                 const selected = selectedMessageIds.includes(message._id);
 
                 return (
-                  <div
+                  <motion.div
                     key={message._id || message.clientTempId}
+                    layout="position"
+                    initial={{ opacity: 0, y: 14, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
                     className={`flex items-end gap-2 ${
                       isSent ? "justify-end" : "justify-start"
                     } ${groupedWithPrevious ? "mt-1" : "mt-4"}`}
@@ -1111,6 +1361,10 @@ function Chat() {
                             >
                               {message.replyTo.isDeleted
                                 ? "This message was deleted"
+                                : message.replyTo.isEncrypted
+                                ? decryptedMap[message.replyTo._id] === ""
+                                  ? "Couldn't decrypt this message"
+                                  : decryptedMap[message.replyTo._id] || "Decrypting…"
                                 : message.replyTo.text ||
                                   (message.replyTo.attachments?.length
                                     ? "🎤 Voice message"
@@ -1119,19 +1373,42 @@ function Chat() {
                           </button>
                         )}
 
-                        {message.text && (
-                          <p className="whitespace-pre-wrap text-[13px] leading-6">
-                            {message.text}
-                          </p>
+                        {message.isEncrypted ? (
+                          decryptedMap[message._id] === "" ? (
+                            <p className="whitespace-pre-wrap text-[13px] leading-6">
+                              Couldn't decrypt this message
+                            </p>
+                          ) : decryptedMap[message._id] ? (
+                            <p className="whitespace-pre-wrap text-[13px] leading-6">
+                              <RichText text={resolvedText} />
+                            </p>
+                          ) : (
+                            <p className="whitespace-pre-wrap text-[13px] leading-6">
+                              Decrypting…
+                            </p>
+                          )
+                        ) : (
+                          message.text && (
+                            <p className="whitespace-pre-wrap text-[13px] leading-6">
+                              <RichText text={resolvedText} />
+                            </p>
+                          )
                         )}
+
+                        <LinkPreviewCard text={resolvedText} />
 
                         {message.attachments
                           ?.filter((item) => item.type === "audio" && item.url)
                           .map((item, audioIndex) => (
-                            <VoiceMessage
+                            <VoiceMessagePlayer
                               key={`${item.url}-${audioIndex}`}
-                              item={item}
+                              url={item.url}
+                              seedKey={message._id || item.url}
                               isSent={isSent}
+                              avatarUrl={
+                                getAvatarUrl(isSent ? currentUser : otherUser) ||
+                                getGenderAvatarIcon(isSent ? currentUser : otherUser)
+                              }
                             />
                           ))}
 
@@ -1140,7 +1417,13 @@ function Chat() {
                             isSent ? "text-violet-100/90" : "text-[var(--imc-text-faint)]"
                           }`}
                         >
-                          <span>{formatTime(message.createdAt)}</span>
+                          {message.isEdited && (
+                            <>
+                              <span>edited</span>
+                              <span>·</span>
+                            </>
+                          )}
+                          <span>{formatTime(message.editedAt || message.createdAt)}</span>
 
                           {isSent && (
                             <>
@@ -1150,106 +1433,175 @@ function Chat() {
                           )}
                         </p>
 
-                        {message.reactions?.length > 0 && (
-                          <div className="absolute -bottom-3 right-2 rounded-full border border-[var(--imc-border)] bg-[var(--imc-surface)] px-1.5 py-0.5 text-[12px] shadow-sm">
-                            {message.reactions.slice(-2).map((item, reactionIndex) => (
-                              <span key={`${item.reaction}-${reactionIndex}`}>
-                                {item.reaction}
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                        <AnimatePresence>
+                          {message.reactions?.length > 0 && (
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.4 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{ opacity: 0, scale: 0.4 }}
+                              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                              className="absolute -bottom-3 right-2 rounded-full border border-[var(--imc-border)] bg-[var(--imc-surface)] px-1.5 py-0.5 text-[12px] shadow-sm"
+                            >
+                              {message.reactions.slice(-2).map((item, reactionIndex) => (
+                                <span key={`${item.reaction}-${reactionIndex}`}>
+                                  {item.reaction}
+                                </span>
+                              ))}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
                     </div>
 
-                  </div>
+                  </motion.div>
                 );
               })}
+              </AnimatePresence>
             </div>
           )}
 
           <div ref={bottomRef} />
         </div>
 
-        {reactionTarget && (
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="absolute left-1/2 top-[88px] z-40 flex -translate-x-1/2 items-center gap-1 rounded-full border border-[var(--imc-border)] bg-[var(--imc-surface)] px-2 py-1.5 shadow-2xl"
-          >
-            {MESSAGE_REACTIONS.map((reaction) => (
-              <button
-                key={reaction}
-                onClick={() => handleReact(reaction)}
-                className="grid h-10 w-10 place-items-center rounded-full text-[20px] active:scale-90"
-              >
-                {reaction}
-              </button>
-            ))}
-            <button
+        <AnimatePresence>
+          {showNewMessageBanner && (
+            <motion.button
               type="button"
-              onClick={() => {
-                setShowEmojiPicker(true);
-                window.setTimeout(() => emojiInputRef.current?.focus(), 40);
-              }}
-              aria-label="Choose another emoji"
-              className="grid h-10 w-10 place-items-center rounded-full border text-[var(--imc-indigo-text)] active:scale-90"
-              style={{ background: "var(--imc-action-soft)", borderColor: "var(--imc-action-border)" }}
+              key="new-message-banner"
+              onClick={jumpToLatest}
+              initial={{ opacity: 0, y: 10, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.9 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              className="absolute bottom-[100px] left-1/2 z-30 flex -translate-x-1/2 items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-black text-white shadow-xl"
+              style={{ background: "#4338CA" }}
             >
-              <Plus size={17} strokeWidth={2.5} />
-            </button>
-          </div>
-        )}
+              <ArrowDown size={14} />
+              New message
+            </motion.button>
+          )}
+        </AnimatePresence>
 
-        {reactionTarget && showEmojiPicker && (
-          <div className="absolute left-1/2 top-[146px] z-50 w-[300px] max-w-[calc(100%-32px)] -translate-x-1/2 rounded-[18px] border p-3 shadow-2xl" style={{ background: "var(--imc-surface)", borderColor: "var(--imc-border)" }}>
-            <p className="mb-2 text-[10px] font-bold text-[var(--imc-text-muted)]">Open your emoji keyboard and choose any emoji</p>
-            <div className="flex gap-2">
-              <input
-                ref={emojiInputRef}
-                value={customReaction}
-                onChange={(event) => setCustomReaction(event.target.value.slice(0, 16))}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && customReaction.trim()) handleReact(customReaction.trim());
-                }}
-                inputMode="text"
-                enterKeyHint="done"
-                maxLength={16}
-                placeholder="😀"
-                className="h-11 min-w-0 flex-1 rounded-[14px] border bg-[var(--imc-surface-2)] px-3 text-center text-[22px] outline-none"
-                style={{ borderColor: "var(--imc-border)", color: "var(--imc-text)" }}
-              />
-              <button
+        <AnimatePresence>
+          {reactionTarget && (
+            <motion.div
+              key="reaction-bar"
+              onClick={(e) => e.stopPropagation()}
+              initial={{ opacity: 0, scale: 0.85, y: -6 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.85, y: -6 }}
+              transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+              className="absolute left-1/2 top-[88px] z-40 flex -translate-x-1/2 items-center gap-1 rounded-full border border-[var(--imc-border)] bg-[var(--imc-surface)] px-2 py-1.5 shadow-2xl"
+            >
+              {MESSAGE_REACTIONS.map((reaction) => (
+                <motion.button
+                  key={reaction}
+                  onClick={() => handleReact(reaction)}
+                  whileTap={{ scale: 0.8 }}
+                  className="grid h-10 w-10 place-items-center rounded-full text-[20px]"
+                >
+                  {reaction}
+                </motion.button>
+              ))}
+              {getUserId(reactionTarget.sender) === currentUserId &&
+                (reactionTarget.text || reactionTarget.isEncrypted) &&
+                !reactionTarget.attachments?.length && (
+                  <motion.button
+                    type="button"
+                    whileTap={{ scale: 0.8 }}
+                    onClick={() => {
+                      handleStartEdit(reactionTarget);
+                      setReactionTarget(null);
+                    }}
+                    aria-label="Edit message"
+                    className="grid h-10 w-10 place-items-center rounded-full text-[var(--imc-text-muted)]"
+                  >
+                    <Pencil size={17} />
+                  </motion.button>
+                )}
+              <motion.button
                 type="button"
-                disabled={!customReaction.trim()}
-                onClick={() => handleReact(customReaction.trim())}
-                className="h-11 rounded-[14px] px-4 text-[11px] font-black disabled:opacity-40"
-                style={{ background: "var(--imc-action-soft)", color: "var(--imc-indigo-text)", border: "1px solid var(--imc-action-border)" }}
+                whileTap={{ scale: 0.8 }}
+                onClick={() => {
+                  setShowEmojiPicker(true);
+                  window.setTimeout(() => emojiInputRef.current?.focus(), 40);
+                }}
+                aria-label="Choose another emoji"
+                className="grid h-10 w-10 place-items-center rounded-full border text-[var(--imc-indigo-text)]"
+                style={{ background: "var(--imc-action-soft)", borderColor: "var(--imc-action-border)" }}
               >
-                React
-              </button>
-            </div>
-          </div>
-        )}
+                <Plus size={17} strokeWidth={2.5} />
+              </motion.button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        {showDeleteConfirm && (
-          <ConfirmSheet
-            title={canUnsendSelected ? "Unsend selected messages?" : "Delete selected messages for you?"}
-            message={canUnsendSelected ? "These messages will be removed for everyone in this conversation." : "These messages will disappear only from your chat."}
-            actionLabel={canUnsendSelected ? "Unsend" : "Delete for me"}
-            onCancel={() => setShowDeleteConfirm(false)}
-            onConfirm={handleDeleteSelected}
-          />
-        )}
+        <AnimatePresence>
+          {reactionTarget && showEmojiPicker && (
+            <motion.div
+              key="emoji-picker"
+              initial={{ opacity: 0, scale: 0.92, y: -6 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: -6 }}
+              transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+              className="absolute left-1/2 top-[146px] z-50 w-[300px] max-w-[calc(100%-32px)] -translate-x-1/2 rounded-[18px] border p-3 shadow-2xl"
+              style={{ background: "var(--imc-surface)", borderColor: "var(--imc-border)" }}
+            >
+              <p className="mb-2 text-[10px] font-bold text-[var(--imc-text-muted)]">Open your emoji keyboard and choose any emoji</p>
+              <div className="flex gap-2">
+                <input
+                  ref={emojiInputRef}
+                  value={customReaction}
+                  onChange={(event) => setCustomReaction(event.target.value.slice(0, 16))}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && customReaction.trim()) handleReact(customReaction.trim());
+                  }}
+                  inputMode="text"
+                  enterKeyHint="done"
+                  maxLength={16}
+                  placeholder="😀"
+                  className="h-11 min-w-0 flex-1 rounded-[14px] border bg-[var(--imc-surface-2)] px-3 text-center text-[22px] outline-none"
+                  style={{ borderColor: "var(--imc-border)", color: "var(--imc-text)" }}
+                />
+                <button
+                  type="button"
+                  disabled={!customReaction.trim()}
+                  onClick={() => handleReact(customReaction.trim())}
+                  className="h-11 rounded-[14px] px-4 text-[11px] font-black disabled:opacity-40"
+                  style={{ background: "var(--imc-action-soft)", color: "var(--imc-indigo-text)", border: "1px solid var(--imc-action-border)" }}
+                >
+                  React
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        {showChatDeleteConfirm && (
-          <ConfirmSheet
-            title="Delete this chat?"
-            message="This chat will be removed from your messages list."
-            actionLabel="Delete chat"
-            onCancel={() => setShowChatDeleteConfirm(false)}
-            onConfirm={handleDeleteChat}
-          />
-        )}
+        <AnimatePresence>
+          {showDeleteConfirm && (
+            <ConfirmSheet
+              key="delete-selected"
+              title={canUnsendSelected ? "Unsend selected messages?" : "Delete selected messages for you?"}
+              message={canUnsendSelected ? "These messages will be removed for everyone in this conversation." : "These messages will disappear only from your chat."}
+              actionLabel={canUnsendSelected ? "Unsend" : "Delete for me"}
+              onCancel={() => setShowDeleteConfirm(false)}
+              onConfirm={handleDeleteSelected}
+            />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showChatDeleteConfirm && (
+            <ConfirmSheet
+              key="delete-chat"
+              title="Delete this chat?"
+              message="This chat will be removed from your messages list."
+              actionLabel="Delete chat"
+              onCancel={() => setShowChatDeleteConfirm(false)}
+              onConfirm={handleDeleteChat}
+            />
+          )}
+        </AnimatePresence>
 
         <div className="shrink-0 border-t border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 py-3 shadow-[0_-10px_30px_rgba(15,23,42,0.05)]">
           {blocked && (
@@ -1258,49 +1610,98 @@ function Chat() {
             </div>
           )}
 
-          {replyTarget && (
-            <div
-              className="mb-2 flex items-center gap-2 rounded-[16px] px-3 py-2"
-              style={{ background: "var(--imc-surface-2)" }}
-            >
-              <Reply size={16} style={{ color: "var(--imc-indigo-text)" }} className="shrink-0" />
-
-              <button
-                type="button"
-                onClick={() => scrollToMessage(getUserId(replyTarget))}
-                className="min-w-0 flex-1 text-left"
+          <AnimatePresence initial={false}>
+            {editingMessage && (
+              <motion.div
+                key="editing-bar"
+                initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                animate={{ opacity: 1, height: "auto", marginBottom: 8 }}
+                exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                className="flex items-center gap-2 overflow-hidden rounded-[16px] px-3 py-2"
+                style={{ background: "var(--imc-surface-2)" }}
               >
-                <p className="truncate text-[11px] font-black" style={{ color: "var(--imc-indigo-text)" }}>
-                  Replying to{" "}
-                  {getUserId(replyTarget.sender) === currentUserId
-                    ? "yourself"
-                    : getName(replyTarget.sender)}
-                </p>
-                <p className="truncate text-[12px] font-semibold text-[var(--imc-text-muted)]">
-                  {replyTarget.text ||
-                    (replyTarget.attachments?.length ? "🎤 Voice message" : "")}
-                </p>
-              </button>
+                <Pencil size={16} style={{ color: "var(--imc-indigo-text)" }} className="shrink-0" />
 
-              <button
-                type="button"
-                onClick={() => setReplyTarget(null)}
-                className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[var(--imc-text-muted)] active:bg-[var(--imc-surface)]"
+                <p className="min-w-0 flex-1 truncate text-[11px] font-black" style={{ color: "var(--imc-indigo-text)" }}>
+                  Editing message
+                </p>
+
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[var(--imc-text-muted)] active:bg-[var(--imc-surface)]"
+                >
+                  <X size={14} />
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence initial={false}>
+            {replyTarget && (
+              <motion.div
+                key="reply-bar"
+                initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                animate={{ opacity: 1, height: "auto", marginBottom: 8 }}
+                exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                className="flex items-center gap-2 overflow-hidden rounded-[16px] px-3 py-2"
+                style={{ background: "var(--imc-surface-2)" }}
               >
-                <X size={14} />
-              </button>
-            </div>
-          )}
+                <Reply size={16} style={{ color: "var(--imc-indigo-text)" }} className="shrink-0" />
 
-          {recording && (
-            <div className="mb-2 flex items-center justify-center gap-2 text-[11px] font-black text-[#D92D20]">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-[#D92D20]" />
-              Recording voice message
-            </div>
-          )}
+                <button
+                  type="button"
+                  onClick={() => scrollToMessage(getUserId(replyTarget))}
+                  className="min-w-0 flex-1 text-left"
+                >
+                  <p className="truncate text-[11px] font-black" style={{ color: "var(--imc-indigo-text)" }}>
+                    Replying to{" "}
+                    {getUserId(replyTarget.sender) === currentUserId
+                      ? "yourself"
+                      : getName(replyTarget.sender)}
+                  </p>
+                  <p className="truncate text-[12px] font-semibold text-[var(--imc-text-muted)]">
+                    {replyTarget.isEncrypted
+                      ? decryptedMap[replyTarget._id] === ""
+                        ? "Couldn't decrypt this message"
+                        : decryptedMap[replyTarget._id] || "Decrypting…"
+                      : replyTarget.text ||
+                        (replyTarget.attachments?.length ? "🎤 Voice message" : "")}
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setReplyTarget(null)}
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[var(--imc-text-muted)] active:bg-[var(--imc-surface)]"
+                >
+                  <X size={14} />
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence initial={false}>
+            {recording && (
+              <motion.div
+                key="recording-bar"
+                initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                animate={{ opacity: 1, height: "auto", marginBottom: 8 }}
+                exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                className="flex items-center justify-center gap-2 overflow-hidden text-[11px] font-black text-[#D92D20]"
+              >
+                <span className="h-2 w-2 animate-pulse rounded-full bg-[#D92D20]" />
+                Recording voice message
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <div className="flex items-center gap-2 rounded-[24px] bg-[var(--imc-surface-2)] p-1.5">
             <input
+              ref={inputRef}
               value={text}
               onChange={(e) => handleTyping(e.target.value.slice(0, 2000))}
               onKeyDown={(e) => {
@@ -1309,33 +1710,41 @@ function Chat() {
               type="text"
               maxLength={2000}
               disabled={blocked}
-              placeholder={blocked ? "Blocked" : "Type a message..."}
+              placeholder={blocked ? "Blocked" : editingMessage ? "Edit message..." : "Type a message..."}
               className="h-11 flex-1 rounded-[18px] bg-transparent px-3 text-[13px] font-semibold text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)]"
             />
 
-            <button
-              type="button"
-              onClick={toggleRecording}
-              disabled={blocked || sendingVoice}
-              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[18px] active:scale-95 disabled:opacity-40 ${
-                recording
-                  ? "bg-[#D92D20] text-white"
-                  : "bg-[var(--imc-surface)] text-[var(--imc-text-muted)] shadow-sm"
-              }`}
-            >
-              <Mic size={20} />
-            </button>
+            {!editingMessage && (
+              <button
+                type="button"
+                onClick={toggleRecording}
+                disabled={blocked || sendingVoice}
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[18px] active:scale-95 disabled:opacity-40 ${
+                  recording
+                    ? "bg-[#D92D20] text-white"
+                    : "bg-[var(--imc-surface)] text-[var(--imc-text-muted)] shadow-sm"
+                }`}
+              >
+                <Mic size={20} />
+              </button>
+            )}
 
             <button
+              // Tapping this button steals focus from the text input by
+              // default, which dismisses the on-screen keyboard right after
+              // every send — you'd have to tap the input again to keep
+              // typing. Blocking the mousedown's default focus behavior
+              // keeps focus (and the keyboard) on the input the whole time.
+              onMouseDown={(e) => e.preventDefault()}
               onClick={handleSend}
-              disabled={!text.trim() || blocked}
+              disabled={!text.trim() || blocked || savingEdit}
               className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[18px] text-white shadow-lg active:scale-95 ${
                 text.trim() && !blocked
                   ? "bg-[#4338CA]"
                   : "cursor-not-allowed bg-[rgba(18,20,28,0.14)]"
               }`}
             >
-              <Send size={18} />
+              {editingMessage ? <Check size={18} /> : <Send size={18} />}
             </button>
           </div>
         </div>
@@ -1344,47 +1753,23 @@ function Chat() {
   );
 }
 
-function VoiceMessage({ item, isSent }) {
-  return (
-    <div
-      className={`mt-1.5 flex min-w-[220px] items-center gap-2 rounded-[16px] px-3 py-2 ${
-        isSent
-          ? "bg-white/15 text-white"
-          : "border border-[var(--imc-border)] bg-[var(--imc-surface-2)] text-[var(--imc-text)]"
-      }`}
-    >
-      <span
-        className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${
-          isSent
-            ? "bg-white/20 text-white"
-            : "bg-[var(--imc-surface)] text-[var(--imc-indigo-text)]"
-        }`}
-      >
-        <Mic size={15} />
-      </span>
-
-      <div className="min-w-0 flex-1">
-        <p
-          className={`mb-1 text-[10px] font-black ${
-            isSent ? "text-violet-100" : "text-[var(--imc-text-muted)]"
-          }`}
-        >
-          Voice message
-        </p>
-        <audio
-          src={item.url}
-          controls
-          className="h-7 w-full max-w-[180px] rounded-full"
-        />
-      </div>
-    </div>
-  );
-}
 
 function ConfirmSheet({ title, message, actionLabel, onCancel, onConfirm }) {
   return (
-    <div className="absolute inset-0 z-50 flex items-end bg-black/30 px-4 pb-4">
-      <div className="w-full rounded-[26px] bg-[var(--imc-surface)] p-4 shadow-2xl">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      className="absolute inset-0 z-50 flex items-end bg-black/30 px-4 pb-4"
+    >
+      <motion.div
+        initial={{ y: 40, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 40, opacity: 0 }}
+        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+        className="w-full rounded-[26px] bg-[var(--imc-surface)] p-4 shadow-2xl"
+      >
         <h3 className="text-[16px] font-black text-[var(--imc-text)]">
           {title}
         </h3>
@@ -1406,8 +1791,8 @@ function ConfirmSheet({ title, message, actionLabel, onCancel, onConfirm }) {
             {actionLabel}
           </button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
