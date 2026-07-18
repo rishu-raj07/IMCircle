@@ -100,15 +100,20 @@ const isStudentUser = (user) => {
   return String(user.primaryInterest || "").trim().toLowerCase() === "student";
 };
 
-// Location is intentionally NOT part of this check (Issue 3: location must
-// be completely optional — never required to finish onboarding, never
-// blocks 100% profile completion, no validation error when blank).
+// Location and DOB are intentionally NOT part of this check. Location was
+// made fully optional in Issue 3 (never required to finish onboarding,
+// never blocks 100% profile completion, no validation error when blank).
+// DOB is labeled "(optional)" in BasicInfo.jsx's own form UI, but used to
+// still be required here — meaning a user who trusted that label and left
+// it blank could save successfully but would NEVER pass this check, so
+// ProtectedRoute (frontend) kept redirecting them back to /profile-setup
+// forever with no way out. Removed to actually match the "(optional)"
+// label.
 const hasRequiredBasics = (user) => {
   return Boolean(
     user.fullName &&
       user.fullName !== "BN User" &&
       user.username &&
-      user.dob &&
       user.gender &&
       user.primaryInterest
   );

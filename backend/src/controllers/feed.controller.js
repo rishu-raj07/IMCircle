@@ -29,7 +29,20 @@ const FEED_WEIGHTS = {
   locationMatchBoost: 10,
   roleMatchBoost: 8,
   mutualConnectionBoost: 10,
-  seenPenalty: 30,
+  // Was 30 — lower than circleBoost (50) and circleBoost+followBoost (90)
+  // combined, so a single popular post from someone in your Circle (who
+  // you likely also follow) kept net-scoring above every other, unseen
+  // candidate even after being marked seen: 50 - 30 = +20, easily beating
+  // fresh posts from people with no boosts at all, especially once a post
+  // is more than ~60h old and recencyBoost has fully decayed to 0 for
+  // everything anyway. That's exactly what "I only see the same post for
+  // days" looks like when the pool of Circle/followed posters is small.
+  // 70 guarantees a SEEN post from a circle member you also follow
+  // (50 + 40 = 90 unseen) drops below a completely fresh, boost-less post
+  // (90 - 70 = 20, well under a brand-new post's recency boost of ~30)
+  // without reducing how strongly genuinely NEW circle/follow content gets
+  // boosted in the first place.
+  seenPenalty: 70,
 };
 
 const VALID_TABS = new Set(["for-you", "following", "journeys", "learning", "jobs"]);

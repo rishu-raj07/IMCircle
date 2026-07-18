@@ -503,16 +503,66 @@ export const refreshToken = async (req, res) => {
     const oldHash = Session.hashToken(oldRefreshToken);
 
     if (oldHash !== session.refreshTokenHash) {
-      session.isRevoked = true;
-      session.revokedAt = Date.now();
+      // GRACE PERIOD: a request that started with the token from ONE
+      // generation back, arriving within a few seconds of the rotation
+      // that superseded it, is far more likely to be a benign race (two
+      // requests both holding the pre-rotation cookie — e.g. a background
+      // push-token-registration call firing at the same moment the main
+      // app refreshes on access-token expiry) than actual token theft. A
+      // stolen/replayed token from theft would surface much later than a
+      // few seconds. Treat this case as "already refreshed, here's the
+      // current pair" instead of revoking the whole session out from under
+      // a legitimate, still-active user.
+      const withinGracePeriod =
+        session.previousRefreshTokenHash === oldHash &&
+        session.rotatedAt &&
+        Date.now() - new Date(session.rotatedAt).getTime() < 15_000;
+
+      if (!withinGracePeriod) {
+        session.isRevoked = true;
+        session.revokedAt = Date.now();
+        await session.save({ validateBeforeSave: false });
+
+        res.clearCookie("accessToken", cookieOptions(0));
+        res.clearCookie("refreshToken", cookieOptions(0));
+
+        return res.status(401).json({
+          success: false,
+          message: "Refresh token reuse detected. Session revoked.",
+        });
+      }
+
+      const graceUser = await User.findById(decoded.id);
+
+      if (!graceUser || graceUser.isDeleted || graceUser.isBlocked) {
+        return res.status(401).json({
+          success: false,
+          message: "User not available",
+        });
+      }
+
+      // Re-issue a fresh access token bound to the session's CURRENT
+      // (already-rotated) refresh token rather than rotating again — the
+      // client's cookie gets brought back in sync with what the session
+      // actually has on file, without starting another rotation cycle.
+      const graceAccessToken = createAccessToken(graceUser._id);
+      const currentRefreshToken = createRefreshToken(graceUser._id, session._id);
+
+      session.refreshTokenHash = Session.hashToken(currentRefreshToken);
+      session.previousRefreshTokenHash = oldHash;
+      session.rotatedAt = Date.now();
+      session.lastUsedAt = Date.now();
+      session.expiresAt = new Date(Date.now() + REFRESH_MS);
+
       await session.save({ validateBeforeSave: false });
 
-      res.clearCookie("accessToken", cookieOptions(0));
-      res.clearCookie("refreshToken", cookieOptions(0));
+      res.cookie("accessToken", graceAccessToken, cookieOptions(ACCESS_MS));
+      res.cookie("refreshToken", currentRefreshToken, cookieOptions(REFRESH_MS));
 
-      return res.status(401).json({
-        success: false,
-        message: "Refresh token reuse detected. Session revoked.",
+      return res.status(200).json({
+        success: true,
+        accessToken: graceAccessToken,
+        user: getSafeUser(graceUser),
       });
     }
 
@@ -528,7 +578,9 @@ export const refreshToken = async (req, res) => {
     const accessToken = createAccessToken(user._id);
     const newRefreshToken = createRefreshToken(user._id, session._id);
 
+    session.previousRefreshTokenHash = session.refreshTokenHash;
     session.refreshTokenHash = Session.hashToken(newRefreshToken);
+    session.rotatedAt = Date.now();
     session.lastUsedAt = Date.now();
     session.expiresAt = new Date(Date.now() + REFRESH_MS);
 

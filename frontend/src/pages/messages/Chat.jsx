@@ -287,6 +287,14 @@ function Chat() {
       setOnlineUsers(users || []);
     });
 
+    // See the matching comment in backend/src/socket/socket.js — without
+    // this, a socket that was already connected before this page mounted
+    // (the normal case, since it stays connected across navigation) never
+    // gets told who's currently online, and this chat shows "Offline" for
+    // someone who's actually online until an unrelated connect/disconnect
+    // happens to occur elsewhere in the app.
+    socket.emit("get_online_users");
+
     socket.on("receive_message", (message) => {
       if (message.conversation !== conversationId) return;
 
@@ -403,7 +411,21 @@ function Chat() {
       socket.off("user_typing");
       socket.off("user_stop_typing");
     };
-  }, [currentUserId, conversationId, otherUserId]);
+    // `otherUserId` is deliberately NOT a dependency here, even though it's
+    // used inside this effect (the `join_chat` room only cares about
+    // conversationId, not who the other participant is). `conversation` —
+    // and therefore `otherUserId`, which is derived from it via useMemo —
+    // starts null and only gets set once loadChat()'s async fetch resolves,
+    // so otherUserId reliably changes from undefined to a real id a moment
+    // after mount. With it in this array, that change tore down and
+    // rebuilt the "online_users" listener right after mount — and the
+    // server only re-broadcasts that event on the NEXT socket
+    // connect/disconnect anywhere in the app, not on demand, so if nothing
+    // else happened to connect/disconnect during the visit, the freshly
+    // rebuilt listener could sit waiting indefinitely and this chat would
+    // show "Offline" for someone who was actually online the whole time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserId, conversationId]);
 
   const handleTyping = (value) => {
     setText(value);

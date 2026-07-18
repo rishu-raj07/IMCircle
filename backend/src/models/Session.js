@@ -16,6 +16,22 @@ const sessionSchema = new mongoose.Schema(
       index: true,
     },
 
+    // Refresh-token-reuse grace period (see refreshToken() in
+    // auth.controller.js). Rotation happens on every refresh, so two
+    // requests that both start with the same (still-valid) refresh token —
+    // e.g. two tabs, or a background push-token-registration call racing
+    // the main app's own refresh right when the 15-minute access token
+    // expires — will have the SECOND one arrive with a token that's already
+    // been rotated away by the FIRST. Without tracking one generation back,
+    // that legitimate race looks identical to actual token theft and gets
+    // the whole session revoked, forcing a real logout for no real reason.
+    previousRefreshTokenHash: {
+      type: String,
+      default: null,
+    },
+
+    rotatedAt: Date,
+
     deviceId: {
       type: String,
       required: true,

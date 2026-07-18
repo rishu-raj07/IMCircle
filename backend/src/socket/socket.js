@@ -136,6 +136,30 @@ export const initSocket = (server) => {
       // already happened above using the verified identity.
     });
 
+    // The initial "online_users" broadcast above only fires from the
+    // "connection" event, i.e. exactly once per actual underlying socket
+    // connection. Navigating between pages (Home -> Chat, etc.) re-runs
+    // React effects but does NOT reconnect an already-connected socket —
+    // `socket.connect()` on an already-connected client is a no-op — so a
+    // component that mounts its "online_users" listener after that point
+    // (Chat.jsx, every time you open a conversation) would otherwise only
+    // ever hear about presence changes from THIS point forward, never the
+    // current state, and would show every already-online person as
+    // "Offline" until someone else happened to connect or disconnect.
+    // Chat.jsx calls this once right after wiring up its listener so it
+    // always gets a real snapshot regardless of whether the socket was
+    // already connected before this page mounted.
+    socket.on("get_online_users", () => {
+      const blocked = socket.data?.blockedUsers;
+      const allOnline = Array.from(onlineUsers.keys());
+      const visible =
+        blocked && blocked.length
+          ? allOnline.filter((id) => !blocked.includes(id))
+          : allOnline;
+
+      socket.emit("online_users", visible);
+    });
+
     socket.on("join_chat", async (conversationId) => {
       if (!conversationId) return;
 

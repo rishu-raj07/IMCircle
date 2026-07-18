@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Compass, RefreshCcw, Sparkles } from "lucide-react";
+import { ArrowLeft, Compass, Sparkles } from "lucide-react";
 
 import JourneyReelSlide from "./JourneyReelSlide";
 import { getJourneyDiscoverFeed } from "../../api/journeyApi";
@@ -81,14 +81,7 @@ function DiscoverJourneys() {
       </header>
 
       {loading ? (
-        <div className="flex h-screen items-center justify-center">
-          <div className="text-center">
-            <RefreshCcw className="mx-auto animate-spin" style={{ color: "var(--imc-text-muted)" }} />
-            <p className="mt-3 text-[13px] font-bold" style={{ color: "var(--imc-text-muted)" }}>
-              Loading journeys...
-            </p>
-          </div>
-        </div>
+        <ReelSkeleton />
       ) : error ? (
         <div className="flex h-screen items-center justify-center px-8 text-center">
           <p className="text-[13px] font-bold" style={{ color: "var(--imc-text-muted)" }}>{error}</p>
@@ -135,6 +128,42 @@ function DiscoverJourneys() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Mirrors JourneyReelSlide's own layout (full-bleed media + a bottom info
+// block with an avatar/name row, a title row, a caption line, and a
+// progress row) instead of a generic spinner, so the very first thing a
+// visitor sees already looks like "the reel feed", not a blank loading
+// state that gets replaced by something with a completely different shape
+// once data arrives.
+function ReelSkeleton() {
+  return (
+    <div className="relative h-screen w-full max-w-[430px] overflow-hidden" style={{ background: "#1a1c22" }}>
+      <div className="absolute inset-0 animate-pulse" style={{ background: "linear-gradient(160deg, #23262f 0%, #1a1c22 55%, #15161b 100%)" }} />
+
+      <div className="absolute inset-x-3 animate-pulse" style={{ bottom: "calc(20px + env(safe-area-inset-bottom, 0px))" }}>
+        <div className="flex items-center gap-2">
+          <div className="h-9 w-9 shrink-0 rounded-full" style={{ background: "rgba(255,255,255,0.14)" }} />
+          <div className="h-3 w-28 rounded-full" style={{ background: "rgba(255,255,255,0.14)" }} />
+          <div className="ml-auto h-8 w-16 shrink-0 rounded-full" style={{ background: "rgba(255,255,255,0.1)" }} />
+        </div>
+
+        <div className="mt-3 pl-11">
+          <div className="h-3 w-36 rounded-full" style={{ background: "rgba(255,255,255,0.14)" }} />
+        </div>
+
+        <div className="mt-3 h-3 w-4/5 rounded-full" style={{ background: "rgba(255,255,255,0.14)" }} />
+        <div className="mt-2 h-3 w-2/3 rounded-full" style={{ background: "rgba(255,255,255,0.1)" }} />
+
+        <div className="mt-4 flex items-center justify-between">
+          <div className="h-2.5 w-20 rounded-full" style={{ background: "rgba(255,255,255,0.14)" }} />
+          <div className="h-2.5 w-16 rounded-full" style={{ background: "rgba(255,255,255,0.14)" }} />
+        </div>
+
+        <div className="mt-2 h-1 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.14)" }} />
+      </div>
     </div>
   );
 }

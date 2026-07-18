@@ -17,6 +17,7 @@ import {
   User,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { SocialLogin } from "@capgo/capacitor-social-login";
 import BottomNav from "../../components/navigation/BottomNav";
 import Modal from "../../components/common/Modal";
 import { useTheme } from "../../store/themeStore.jsx";
@@ -25,6 +26,9 @@ import { logoutUser } from "../../store/authStore";
 import { logoutApi } from "../../api/authApi";
 import { unregisterPushToken } from "../../utils/pushNotifications";
 import { reportProblem } from "../../api/supportApi";
+import { GOOGLE_WEB_CLIENT_ID, IS_ANDROID, IS_IOS } from "../../config/platform.js";
+
+const IS_NATIVE = IS_ANDROID || IS_IOS;
 
 const APP_VERSION = "1.0.0";
 
@@ -73,6 +77,29 @@ function Settings() {
       await unregisterPushToken();
     } catch {
       // best-effort
+    }
+
+    // App-side logout only ever cleared this app's own session — it never
+    // told Google's native Credential Manager (Android) / Sign-In SDK (iOS)
+    // that the user signed out. That's harmless for password/OTP accounts,
+    // but for anyone who signed in with Google, the picker was never shown
+    // again afterward: Credential Manager just silently re-selected the
+    // same Google account on the next login attempt, which looked
+    // indistinguishable from "logout doesn't work." Calling initialize()
+    // again here is safe/cheap even if this device already initialized it
+    // this session (GoogleAuthButton.jsx's own promise doesn't survive an
+    // app restart, so this can't assume that already happened).
+    if (IS_NATIVE && GOOGLE_WEB_CLIENT_ID) {
+      try {
+        await SocialLogin.initialize({
+          google: { webClientId: GOOGLE_WEB_CLIENT_ID },
+        });
+        await SocialLogin.logout({ provider: "google" });
+      } catch {
+        // best-effort — most users never signed in with Google at all, so
+        // this rejecting (nothing to sign out of) is the common case, not
+        // an error worth surfacing.
+      }
     }
 
     try {

@@ -66,14 +66,18 @@ export function getSessionUser() {
 // once every required field is filled in — see hasRequiredBasics() in
 // backend/src/controllers/profile.controller.js, which this fallback must
 // mirror exactly: fullName (a real one, not the "BN User" placeholder every
-// account is created with before setup), username, dob, gender,
-// location.city, and primaryInterest. The fallback exists only for accounts
-// created before onboardingCompleted/isProfileCompleted existed as fields;
-// it previously checked headline+location.city+gender+username, which
-// doesn't match hasRequiredBasics (missing dob/primaryInterest, and
-// headline was never actually a required field) — a mismatch that could
-// let an account through this check before the backend would actually
-// consider it complete.
+// account is created with before setup), username, gender, and
+// primaryInterest. The fallback exists only for accounts created before
+// onboardingCompleted/isProfileCompleted existed as fields.
+//
+// NOTE: dob and location.city are deliberately NOT checked here, even
+// though earlier versions of this function required both. Both are labeled
+// "(optional)" in the profile setup form's own UI (BasicInfo.jsx /
+// LocationField), but requiring them here meant a user who trusted that
+// label and left either blank could save their profile successfully and
+// still fail this check on every single page load — since ProtectedRoute
+// redirects to /profile-setup whenever this returns false, that was an
+// unescapable redirect loop for anyone who skipped either field.
 export function isOnboardingComplete(user) {
   return Boolean(
     user?.onboardingCompleted ||
@@ -81,9 +85,7 @@ export function isOnboardingComplete(user) {
       (user?.fullName &&
         user.fullName !== "BN User" &&
         user?.username &&
-        user?.dob &&
         user?.gender &&
-        user?.location?.city &&
         user?.primaryInterest)
   );
 }

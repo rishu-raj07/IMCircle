@@ -137,7 +137,7 @@ function ProfileSetup() {
         setIsEditingExisting(
           Boolean(
             user?.onboardingCompleted ||
-              (user?.username && user?.dob && user?.location?.city && user?.primaryInterest)
+              (user?.username && user?.gender && user?.primaryInterest)
           )
         );
 
@@ -189,13 +189,16 @@ function ProfileSetup() {
     }
   }, [searchParams]);
 
-  // Profile photo, tagline, and location are all optional — only these
-  // fields actually gate finishing setup. Missing photo/tagline/location no
-  // longer blocks "Continue" (Issue 3: location must be completely optional).
+  // Profile photo, tagline, dob, and location are all optional — only these
+  // fields actually gate finishing setup. Missing photo/tagline/dob/location
+  // no longer blocks "Continue" (Issue 3: location must be completely
+  // optional; dob is labeled "(optional)" in BasicInfo.jsx's own form and
+  // used to be required here anyway, which meant leaving it blank could
+  // save fine but then loop the user back to this page forever via
+  // isOnboardingComplete() — see the note there).
   const hasBasicInfo = Boolean(
     fullName.trim() &&
       username.trim() &&
-      dob.trim() &&
       gender.trim() &&
       primaryInterest.trim()
   );
@@ -211,7 +214,6 @@ function ProfileSetup() {
     if (
       fullName.trim() &&
       username.trim() &&
-      dob.trim() &&
       gender.trim() &&
       primaryInterest.trim()
     ) {

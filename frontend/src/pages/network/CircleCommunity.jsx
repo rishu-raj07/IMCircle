@@ -1062,12 +1062,12 @@ function DetailSheet({
       : [creator].filter((user) => getId(user)).map((user) => ({ user, role: "owner" }));
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-center bg-black/45">
+    <div className="fixed inset-0 z-50 isolate flex justify-center bg-black/45">
       <div
-        className="h-full w-full max-w-[430px] overflow-y-auto [&::-webkit-scrollbar]:hidden"
+        className="relative h-full w-full max-w-[430px] overflow-y-auto [&::-webkit-scrollbar]:hidden"
         style={{ background: PAPER, scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
-        <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-white/95 px-4 py-3 backdrop-blur-xl" style={{ borderColor: LINE }}>
+        <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-white px-4 py-3 backdrop-blur-xl" style={{ borderColor: LINE }}>
           <button
             onClick={onClose}
             className="grid h-10 w-10 place-items-center rounded-full"

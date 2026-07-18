@@ -542,7 +542,13 @@ function JourneyReelSlide({ milestone = {} }) {
           first, then the journey row (name + about + Follow Journey) below
           it, per the requested order, followed by the update caption and
           progress. */}
-      <div className="absolute inset-x-3" style={{ bottom: 20 }}>
+      {/* `20px` alone didn't account for the gesture-nav/home-indicator
+          strip on modern phones (env(safe-area-inset-bottom)) — on devices
+          where that's non-zero, the lowest rows in this block (the
+          Day X of Y / View journey row + progress bar) rendered partially
+          or fully behind/under it, which is what showed up as "the lower
+          text won't show". */}
+      <div className="absolute inset-x-3" style={{ bottom: "calc(20px + env(safe-area-inset-bottom, 0px))" }}>
         <div className="flex items-center gap-2">
           <button type="button" onClick={openCreatorProfile} className="shrink-0 active:scale-95">
             <div className="relative h-9 w-9 shrink-0 rounded-full bg-white p-[1.5px]">
@@ -629,14 +635,21 @@ function JourneyReelSlide({ milestone = {} }) {
           {!isOwnJourney && (
             <button
               onClick={handleFollow}
-              className="h-8 shrink-0 rounded-full border border-white/35 px-3 text-[10px] font-bold text-white active:scale-95"
+              className="h-8 shrink-0 whitespace-nowrap rounded-full border border-white/35 px-3 text-[10px] font-bold text-white active:scale-95"
               style={
                 following
                   ? { background: "rgba(255,255,255,0.16)" }
                   : { background: "rgba(0,0,0,0.20)" }
               }
             >
-              <span className="flex items-center gap-1">
+              {/* whitespace-nowrap (button + this span) plus the title
+                  span above having min-w-0 + truncate is what actually
+                  guarantees this button never collapses — shrink-0 alone
+                  stops the BOX from shrinking, but without whitespace-nowrap
+                  the text inside could still wrap onto a second line and get
+                  clipped by the fixed h-8 height, which is what "the follow
+                  journey button collapsing" was. */}
+              <span className="flex items-center gap-1 whitespace-nowrap">
                 {following ? <Check size={11} /> : <UserPlus size={11} />}
                 {following ? "Following" : "Follow Journey"}
               </span>
