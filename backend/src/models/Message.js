@@ -28,6 +28,15 @@ const messageSchema = new mongoose.Schema(
       index: true,
     },
 
+    // Swipe-to-reply (Instagram/WhatsApp-style quoted reply). Purely
+    // additive/optional — existing messages simply have this as null and
+    // render exactly as before.
+    replyTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Message",
+      default: null,
+    },
+
     attachments: [
       {
         url: String,

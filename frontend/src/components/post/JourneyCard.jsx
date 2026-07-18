@@ -2,11 +2,7 @@ import { memo, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Eye,
-  Heart,
-  Repeat2,
-  Send,
   ArrowRight,
-  Bookmark,
   Trophy,
   UserPlus,
   Check,
@@ -19,8 +15,9 @@ import {
 
 import CommentSheet from "../common/CommentSheet";
 import RepostSheet from "../common/RepostSheet";
+import LikersSheet from "../common/LikersSheet";
+import SocialActionBar from "./SocialActionBar";
 import SocialProofBanner from "./SocialProofBanner";
-import ReplyPreview from "./ReplyPreview";
 import ViewInfoSheet from "../common/ViewInfoSheet";
 import ImageLoader from "../common/ImageLoader";
 import ResponsivePostMedia from "../common/ResponsivePostMedia";
@@ -34,6 +31,7 @@ import { formatRelativeTime as formatSharedRelativeTime } from "../../utils/rela
 import {
   likeMilestone,
   unlikeMilestone,
+  getMilestoneLikers,
   repostMilestone,
   shareMilestone,
   commentMilestone,
@@ -285,6 +283,7 @@ function JourneyCard({ milestone = {} }) {
 
   const [showReplies, setShowReplies] = useState(false);
   const [showRepost, setShowRepost] = useState(false);
+  const [showLikers, setShowLikers] = useState(false);
   const [showViews, setShowViews] = useState(false);
   const [showReel, setShowReel] = useState(false);
   // Replaces the old always-visible "Why it was missed" card — now a
@@ -747,48 +746,32 @@ function JourneyCard({ milestone = {} }) {
               </button>
             </div>
 
-            <div
-              className="mt-2.5 flex items-center gap-7 pt-2.5"
-              style={{ borderTop: "1px solid var(--imc-border)" }}
-            >
-              <Action
-                icon={Heart}
-                count={likes}
-                active={liked}
-                onClick={handleLike}
-                tone="like"
-              />
-
-              <Action
-                icon={Repeat2}
-                count={reposts}
-                active={reposted}
-                onClick={() => {
-                  if (reposted) handleRepost("");
-                  else setShowRepost(true);
-                }}
-              />
-
-              <Action
-                icon={Bookmark}
-                count={saves}
-                active={saved}
-                onClick={handleSave}
-              />
-
-              <button
-                onClick={handleShare}
-                className="ml-auto grid h-10 w-10 place-items-center rounded-full active:scale-95"
-                style={{ color: "var(--imc-text-muted)" }}
-              >
-                <Send size={18} />
-              </button>
-            </div>
-
-            <ReplyPreview
-              count={replies}
-              topComment={milestone.topComment}
-              onOpen={() => setShowReplies(true)}
+            <SocialActionBar
+              liked={liked}
+              likesCount={likes}
+              onLike={handleLike}
+              commentsCount={replies}
+              reposted={reposted}
+              repostsCount={reposts}
+              onRepost={() => {
+                if (reposted) handleRepost("");
+                else setShowRepost(true);
+              }}
+              saved={saved}
+              savesCount={saves}
+              onSave={handleSave}
+              onShare={handleShare}
+              onOpenComments={() => setShowReplies(true)}
+              onOpenLikers={() => setShowLikers(true)}
+              likeProof={milestone.likeProof}
+              timestamp={formatRelativeTime(milestone.createdAt || milestone.updatedAt)}
+              onQuickComment={(text) => {
+                trackEvent("comment", { entityType: "journey_milestone", entityId: milestoneId }).catch(() => {});
+                return commentMilestone(milestoneId, text).then((res) => {
+                  setReplies((prev) => prev + 1);
+                  return res;
+                });
+              }}
             />
 
             {/* Clean inline CTA — plain text + arrow, no button chrome — so
@@ -846,6 +829,13 @@ function JourneyCard({ milestone = {} }) {
         onRepostWithThought={(thought) => handleRepost(thought)}
       />
 
+      <LikersSheet
+        open={showLikers}
+        onClose={() => setShowLikers(false)}
+        title="Liked by"
+        loadLikers={() => getMilestoneLikers(milestoneId)}
+      />
+
       <ViewInfoSheet
         open={showViews}
         onClose={() => setShowViews(false)}
@@ -870,22 +860,6 @@ function JourneyCard({ milestone = {} }) {
 // token for just this one action while repost/save keep the indigo style.
 // Flat icon + count (no border/background chip) — matches PostActions.jsx's
 // row so Post and Journey cards read as one consistent design language.
-function Action({ icon: Icon, count, active, onClick, tone }) {
-  const isLike = tone === "like";
-  const activeColor = isLike ? "var(--imc-danger)" : "var(--imc-indigo-text)";
-
-  return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-1.5 text-[12.5px] font-semibold active:scale-95"
-      style={{ color: active ? activeColor : "var(--imc-text-muted)" }}
-    >
-      <Icon size={19} fill={active ? "currentColor" : "none"} />
-      <span>{formatCount(count)}</span>
-    </button>
-  );
-}
-
 // Bottom sheet for the "Journey Missed" chip — replaces the old always-on
 // "Why it was missed" card. Same data (journey.finalNote /
 // journey.uncompletedReason), just revealed on demand so the card itself

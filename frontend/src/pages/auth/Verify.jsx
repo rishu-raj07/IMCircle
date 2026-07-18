@@ -56,6 +56,14 @@ function Verify() {
     if (pending?.devOtp) {
       setDevOtp(pending.devOtp);
     }
+
+    // Login.jsx hands this off when the initial send hit the backend's
+    // cooldown (a valid OTP was already sent moments ago) instead of
+    // treating it as a failure — seeds the real remaining wait instead of
+    // always showing a fresh 60s here.
+    if (pending?.retryAfter) {
+      setResendCooldown(Number(pending.retryAfter) || 60);
+    }
   }, [navigate]);
 
   // Web OTP API — on supporting browsers (Android Chrome), this listens for
@@ -206,6 +214,13 @@ function Verify() {
       setSendAttempt(nextAttempt);
       setResendCooldown(nextAttempt <= 2 ? 60 : 120);
     } catch (err) {
+      // Cooldown response (backend 30s guard or MSG91's own 311) — show the
+      // friendly message and pick up the countdown from the server's real
+      // retryAfter instead of leaving the button permanently stuck on
+      // whatever local cooldown value was already showing.
+      if (err.response?.data?.cooldown) {
+        setResendCooldown(Number(err.response.data.retryAfter) || 30);
+      }
       setError(err.response?.data?.message || "Failed to resend OTP");
     } finally {
       setResending(false);

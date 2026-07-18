@@ -44,7 +44,7 @@ EOF
 echo "== 3. Verify the live version endpoint =="
 curl -s https://imcircle.app/api/meta/version | tee /tmp/imcircle-version.json
 echo
-echo "Confirm backendVersion / frontendVersion / androidVersionName above all read 1.1.0."
+echo "Confirm backendVersion / frontendVersion read 1.1.1 above."
 
 echo "== 4. Cloudflare =="
 echo "Manual step (dashboard, not scriptable via curl without an API token):"

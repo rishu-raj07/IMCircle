@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Repeat2, Send, X } from "lucide-react";
 
+import { currentUser } from "../../store/authStore";
+import { canPublishContent } from "../../utils/sessionUser";
+import PublishGateModal from "./PublishGateModal";
+
 function RepostSheet({
   open,
   onClose,
@@ -13,6 +17,10 @@ function RepostSheet({
 }) {
   const [thought, setThought] = useState("");
   const [posting, setPosting] = useState(false);
+  // Only "Repost with Thought" is a real publish action (new authored text
+  // reaching the feed) — a plain "Repost to Feed" is closer to a share/like
+  // and is never gated. See canPublishContent() in utils/sessionUser.js.
+  const [showPublishGate, setShowPublishGate] = useState(false);
 
   useEffect(() => {
     if (!open) {
@@ -48,6 +56,11 @@ function RepostSheet({
     const cleanThought = thought.trim();
 
     if (posting || !cleanThought) return;
+
+    if (!canPublishContent(currentUser())) {
+      setShowPublishGate(true);
+      return;
+    }
 
     try {
       setPosting(true);
@@ -131,6 +144,11 @@ function RepostSheet({
           {posting ? "Reposting..." : "Repost with Thought"}
         </button>
       </div>
+
+      <PublishGateModal
+        open={showPublishGate}
+        onClose={() => setShowPublishGate(false)}
+      />
     </div>,
     document.body
   );

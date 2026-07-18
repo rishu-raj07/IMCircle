@@ -7,6 +7,7 @@ import {
   emitMessage,
   emitMessageSeen,
   emitMessagesUnsent,
+  emitMessageReacted,
   isUserOnline,
   isUserActiveInConversation,
 } from "../socket/socket.js";
@@ -280,9 +281,11 @@ export const getConversations = async (req, res) => {
   }
 };
 
+const replyPopulateSelect = "text attachments sender isDeleted";
+
 export const sendMessage = async (req, res) => {
   try {
-    const { text = "", attachments = [], clientTempId = "" } = req.body;
+    const { text = "", attachments = [], clientTempId = "", replyTo = "" } = req.body;
 
     const conversation = await Conversation.findById(req.params.conversationId);
 
@@ -359,6 +362,21 @@ export const sendMessage = async (req, res) => {
       });
     }
 
+    // Swipe-to-reply: only accept a replyTo id that actually points at a
+    // non-deleted message in this same conversation — silently drop it
+    // otherwise (mirrors the existing CirclePost.replyTo validation pattern)
+    // rather than erroring, so a stale/cross-conversation id never blocks
+    // sending the message itself.
+    let replyToId = null;
+    if (replyTo) {
+      const originalMessage = await Message.findOne({
+        _id: replyTo,
+        conversation: conversation._id,
+        isDeleted: false,
+      }).select("_id");
+      if (originalMessage) replyToId = originalMessage._id;
+    }
+
     const receiverIds = conversation.participants.filter(
       (id) => getPlainId(id) !== getPlainId(req.user._id)
     );
@@ -378,12 +396,16 @@ export const sendMessage = async (req, res) => {
       attachments: formattedAttachments,
       seenBy: [],
       deliveredTo,
+      replyTo: replyToId,
     });
 
-    const populatedMessage = await Message.findById(message._id).populate(
-      "sender",
-      userPopulateFields
-    );
+    const populatedMessage = await Message.findById(message._id)
+      .populate("sender", userPopulateFields)
+      .populate({
+        path: "replyTo",
+        select: replyPopulateSelect,
+        populate: { path: "sender", select: userPopulateFields },
+      });
 
     const preview = getPreviewText(text, formattedAttachments);
 
@@ -535,6 +557,11 @@ export const getMessages = async (req, res) => {
       },
     })
       .populate("sender", userPopulateFields)
+      .populate({
+        path: "replyTo",
+        select: replyPopulateSelect,
+        populate: { path: "sender", select: userPopulateFields },
+      })
       .sort({ createdAt: 1 });
 
     const formattedMessages = messages.map((message) => {
@@ -776,6 +803,8 @@ export const reactToMessage = async (req, res) => {
     });
 
     await message.save();
+
+    emitMessageReacted(message.conversation, message);
 
     return res.status(200).json({
       success: true,

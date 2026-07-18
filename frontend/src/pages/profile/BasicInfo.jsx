@@ -97,11 +97,24 @@ function UsernameField({
   usernameEditUnlocked,
   setUsernameEditUnlocked,
   usernameLastChangedAt,
+  onStatusChange,
 }) {
   const [suggestions, setSuggestions] = useState([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [status, setStatus] = useState("idle");
   const manuallyEditedRef = useRef(false);
+
+  // Reports live availability status up to ProfileSetup so it can disable
+  // the mandatory step-1 "Next" button until the username is confirmed
+  // available (spec: "Disable Next until both fields are valid"). Also
+  // reports "available" immediately for an already-registered, unchanged
+  // username (locked or not-yet-unlocked-for-editing) since that's already
+  // a valid, saved username — there's nothing to re-check.
+  useEffect(() => {
+    if (!onStatusChange) return;
+    onStatusChange(status);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
   const nameDebounceRef = useRef(null);
   const checkDebounceRef = useRef(null);
 
@@ -380,6 +393,7 @@ function BasicInfo({
   usernameEditUnlocked,
   setUsernameEditUnlocked,
   usernameLastChangedAt,
+  onUsernameStatusChange,
   dob,
   setDob,
   tagline,
@@ -399,19 +413,19 @@ function BasicInfo({
   const [customInterest, setCustomInterest] = useState(isCustomInterest ? primaryInterest : "");
   const stepCopy = {
     1: {
-      eyebrow: "Introduce yourself",
-      title: "Your profile identity",
-      text: "Add the name and short introduction people will see first.",
+      eyebrow: "Get started",
+      title: "Your name and username",
+      text: "Just these two — you can add everything else later.",
     },
     2: {
-      eyebrow: "Account details",
-      title: "Choose your identity",
-      text: "Pick a unique username and add your personal basics.",
+      eyebrow: "Optional · Personalize",
+      title: "Add a bit more about you",
+      text: "Photo, tagline, birthday, gender — all optional, skip anytime.",
     },
     3: {
-      eyebrow: "Personalize your feed",
+      eyebrow: "Optional · Discoverability",
       title: "Your place and interests",
-      text: "Help us show you more relevant people, journeys, and circles.",
+      text: "Helps people discover you. Skip this and add it later if you'd rather.",
     },
   }[step];
 
@@ -462,7 +476,7 @@ function BasicInfo({
           />
         </div>
 
-        <div className={step === 2 ? "" : "hidden"}>
+        <div className={step === 1 ? "" : "hidden"}>
           <UsernameField
             username={username}
             setUsername={setUsername}
@@ -471,6 +485,7 @@ function BasicInfo({
             setUsernameEditUnlocked={setUsernameEditUnlocked}
             fullName={fullName}
             usernameLastChangedAt={usernameLastChangedAt}
+            onStatusChange={onUsernameStatusChange}
           />
         </div>
 
@@ -538,7 +553,7 @@ function BasicInfo({
           </div>
         </div>
 
-        <div className={step === 1 ? "" : "hidden"}>
+        <div className={step === 2 ? "" : "hidden"}>
           <div className="mb-2 flex items-center justify-between">
             <label className="text-[12px] font-bold text-[var(--imc-text-muted)]">
               Tagline <span className="text-[11px] font-bold text-[var(--imc-text-faint)]">(optional)</span>
@@ -566,11 +581,11 @@ function BasicInfo({
 
         <div className={step === 3 ? "" : "hidden"}>
           <label className="mb-2 block text-[12px] font-bold text-[var(--imc-text-muted)]">
-            What are you here to explore? <span className="text-red-500">*</span>
+            What are you here to explore? <span className="font-medium text-[var(--imc-text-faint)]">(optional)</span>
           </label>
 
           <p className="mb-2 text-[11px] font-bold text-[var(--imc-text-faint)]">
-            Helps us personalize what shows up in your feed.
+            Helps us personalize what shows up in your feed and improve your discoverability.
           </p>
 
           <div className="flex flex-wrap gap-2">

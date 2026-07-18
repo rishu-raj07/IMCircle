@@ -883,7 +883,11 @@ function Profile() {
           </section>
 
           <section className="mt-2">
-            <div className="sticky top-0 z-20 -mx-5 grid grid-cols-4 border-y border-[var(--imc-border)] bg-[color-mix(in_srgb,var(--imc-bg)_94%,transparent)] px-4 backdrop-blur-xl">
+            {/* Was `sticky top-0` (pinned tab bar while posts scroll under
+                it) — reported as posts looking "stuck"/not scrolling
+                normally, so this now just scrolls away with the rest of
+                the page like every other section on this profile. */}
+            <div className="-mx-5 grid grid-cols-4 border-y border-[var(--imc-border)] bg-[color-mix(in_srgb,var(--imc-bg)_94%,transparent)] px-4 backdrop-blur-xl">
               {TABS.map((tab) => (
                 <button
                   type="button"

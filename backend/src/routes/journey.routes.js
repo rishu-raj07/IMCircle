@@ -17,6 +17,7 @@ import {
   getFollowingJourneys,
   likeMilestone,
   unlikeMilestone,
+  getMilestoneLikers,
   commentMilestone,
   getMilestoneComments,
   getJourneyFeed,
@@ -150,6 +151,14 @@ router.patch(
   milestoneIdValidator,
   validate,
   unlikeMilestone
+);
+
+router.get(
+  "/milestone/:milestoneId/likes",
+  protect,
+  milestoneIdValidator,
+  validate,
+  getMilestoneLikers
 );
 
 router.patch(

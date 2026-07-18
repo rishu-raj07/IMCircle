@@ -12,6 +12,7 @@ import {
   Ban,
   Plus,
   UserRound,
+  Reply,
 } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
@@ -195,6 +196,17 @@ function Chat() {
   const emojiInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const messageRefs = useRef({});
+
+  // Swipe-to-reply gesture — separate from the existing long-press
+  // (react/select) state machine above so the two can coexist on the same
+  // pointer sequence without fighting each other (long-press fires on a
+  // stationary hold, swipe fires on a deliberate rightward drag; whichever
+  // wins first cancels the other).
+  const swipeFiredRef = useRef(false);
+  const swipeElRef = useRef(null);
+  const swipeIconElRef = useRef(null);
+  const pendingReplyForVoiceRef = useRef(null);
 
   const [currentUser, setCurrentUser] = useState(null);
   const [conversation, setConversation] = useState(
@@ -215,6 +227,8 @@ function Chat() {
   const [showChatDeleteConfirm, setShowChatDeleteConfirm] = useState(false);
   const [recording, setRecording] = useState(false);
   const [sendingVoice, setSendingVoice] = useState(false);
+  const [replyTarget, setReplyTarget] = useState(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null);
 
   const currentUserId = getUserId(currentUser);
 
@@ -241,6 +255,20 @@ function Chat() {
     setTimeout(() => {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, 50);
+  };
+
+  // Tapping a quoted-reply preview jumps to (and briefly highlights) the
+  // original message, the same way Instagram/WhatsApp do it.
+  const scrollToMessage = (messageId) => {
+    if (!messageId) return;
+    const el = messageRefs.current[messageId];
+    if (!el) return;
+
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedMessageId(messageId);
+    window.setTimeout(() => {
+      setHighlightedMessageId((prev) => (prev === messageId ? null : prev));
+    }, 1200);
   };
 
   useEffect(() => {
@@ -391,6 +419,18 @@ function Chat() {
       setReactionTarget((prev) => (messageIds.includes(prev?._id) ? null : prev));
     });
 
+    // Reactions used to only update locally for whoever tapped the emoji —
+    // the other participant never saw it live. This makes a reaction show
+    // up instantly on both sides, closing that gap.
+    socket.on("message_reacted", ({ conversationId: targetConversationId, messageId, reactions }) => {
+      if (targetConversationId !== conversationId) return;
+      setMessages((prev) =>
+        prev.map((message) =>
+          message._id === messageId ? { ...message, reactions } : message
+        )
+      );
+    });
+
     socket.on("user_typing", (sender) => {
       if (getUserId(sender) !== currentUserId) {
         setTypingUser(sender);
@@ -408,6 +448,7 @@ function Chat() {
       socket.off("message_delivered_update");
       socket.off("message_seen_update");
       socket.off("messages_unsent");
+      socket.off("message_reacted");
       socket.off("user_typing");
       socket.off("user_stop_typing");
     };
@@ -450,6 +491,7 @@ function Chat() {
     if (!cleanText || !conversationId || !currentUserId || blocked) return;
 
     const clientTempId = `temp-${Date.now()}-${Math.random()}`;
+    const replySnapshot = replyTarget;
 
     const tempMessage = {
       _id: clientTempId,
@@ -463,10 +505,12 @@ function Chat() {
       createdAt: new Date().toISOString(),
       localStatus: "sending",
       status: "sending",
+      replyTo: replySnapshot || null,
     };
 
     setMessages((prev) => [...prev, tempMessage]);
     setText("");
+    setReplyTarget(null);
     scrollToBottom();
 
     try {
@@ -474,6 +518,7 @@ function Chat() {
         text: cleanText,
         attachments: [],
         clientTempId,
+        replyTo: replySnapshot?._id,
       });
 
       trackEvent("message", {
@@ -528,8 +573,17 @@ function Chat() {
     navigator.vibrate?.(18);
   };
 
+  const resetSwipeVisual = () => {
+    if (swipeElRef.current) swipeElRef.current.style.transform = "";
+    if (swipeIconElRef.current) swipeIconElRef.current.style.opacity = "0";
+  };
+
   const beginMessagePress = (event, message) => {
     longPressFiredRef.current = false;
+    swipeFiredRef.current = false;
+    swipeElRef.current = event.currentTarget;
+    swipeIconElRef.current =
+      event.currentTarget.parentElement?.querySelector('[data-reply-icon="true"]') || null;
     pressStartRef.current = { x: event.clientX, y: event.clientY };
     clearTimeout(longPressTimerRef.current);
     longPressTimerRef.current = setTimeout(() => {
@@ -538,13 +592,53 @@ function Chat() {
     }, 360);
   };
 
-  const moveMessagePress = (event) => {
-    const dx = Math.abs(event.clientX - pressStartRef.current.x);
-    const dy = Math.abs(event.clientY - pressStartRef.current.y);
-    if (dx > 10 || dy > 10) clearTimeout(longPressTimerRef.current);
+  // Swipe right to reply — mirrors CircleCommunity.jsx's PostBubble gesture
+  // (same threshold, same disambiguation approach) so this feels like the
+  // same feature elsewhere in the app. Disabled during multi-select and on
+  // still-sending messages (no saved id to reply to yet).
+  const moveMessagePress = (event, message) => {
+    const dx = event.clientX - pressStartRef.current.x;
+    const dy = event.clientY - pressStartRef.current.y;
+
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+      clearTimeout(longPressTimerRef.current);
+    }
+
+    if (
+      longPressFiredRef.current ||
+      swipeFiredRef.current ||
+      isSelecting ||
+      String(message._id).startsWith("temp-")
+    ) {
+      return;
+    }
+
+    if (dx > 0 && Math.abs(dy) < 40) {
+      const translate = Math.min(dx, 80);
+      if (swipeElRef.current) {
+        swipeElRef.current.style.transform = `translateX(${translate}px)`;
+      }
+      if (swipeIconElRef.current) {
+        swipeIconElRef.current.style.opacity = String(Math.min(translate / 55, 1));
+      }
+
+      if (dx > 55) {
+        swipeFiredRef.current = true;
+        navigator.vibrate?.(12);
+        setReplyTarget(message);
+        window.setTimeout(resetSwipeVisual, 120);
+      }
+    } else {
+      resetSwipeVisual();
+    }
   };
 
-  const endMessagePress = () => clearTimeout(longPressTimerRef.current);
+  const endMessagePress = () => {
+    clearTimeout(longPressTimerRef.current);
+    resetSwipeVisual();
+    swipeElRef.current = null;
+    swipeIconElRef.current = null;
+  };
 
   const handleReact = async (reaction) => {
     const messageId = reactionTarget?._id;
@@ -634,6 +728,8 @@ function Chat() {
     if (!file || !conversationId || !currentUserId || blocked) return;
 
     setSendingVoice(true);
+    const replySnapshot = pendingReplyForVoiceRef.current;
+    pendingReplyForVoiceRef.current = null;
 
     try {
       const formData = new FormData();
@@ -659,6 +755,7 @@ function Chat() {
         createdAt: new Date().toISOString(),
         localStatus: "sending",
         status: "sending",
+        replyTo: replySnapshot || null,
       };
 
       setMessages((prev) => [...prev, tempMessage]);
@@ -668,6 +765,7 @@ function Chat() {
         text: "",
         attachments: [attachment],
         clientTempId,
+        replyTo: replySnapshot?._id,
       });
 
       setMessages((prev) =>
@@ -729,6 +827,9 @@ function Chat() {
 
         sendVoiceMessage(file);
       };
+
+      pendingReplyForVoiceRef.current = replyTarget;
+      setReplyTarget(null);
 
       recorder.start();
       setRecording(true);
@@ -921,82 +1022,144 @@ function Chat() {
                     )}
 
                     <div
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (longPressFiredRef.current) {
-                          longPressFiredRef.current = false;
-                          return;
-                        }
-                        if (isSelecting) toggleMessageSelection(message._id);
+                      className="relative max-w-[74%]"
+                      ref={(el) => {
+                        if (message._id) messageRefs.current[message._id] = el;
                       }}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleMessagePress(message);
-                      }}
-                      onPointerDown={(event) => beginMessagePress(event, message)}
-                      onPointerMove={moveMessagePress}
-                      onPointerUp={endMessagePress}
-                      onPointerCancel={endMessagePress}
-                      onPointerLeave={endMessagePress}
-                      className={`relative max-w-[74%] px-4 py-2.5 ${
-                        isSent
-                          ? `bg-[#4338CA] text-white shadow-[0_8px_20px_rgba(67,56,202,0.18)] ${
-                              groupedWithPrevious && lastInGroup
-                                ? "rounded-[20px] rounded-br-md"
-                                : groupedWithPrevious
-                                ? "rounded-[20px] rounded-r-md"
-                                : "rounded-[20px] rounded-tr-md"
-                            }`
-                          : `border border-[var(--imc-border)] bg-[var(--imc-surface)] text-[var(--imc-text)] shadow-[0_6px_18px_rgba(15,23,42,0.05)] ${
-                              groupedWithPrevious && lastInGroup
-                                ? "rounded-[20px] rounded-bl-md"
-                                : groupedWithPrevious
-                                ? "rounded-[20px] rounded-l-md"
-                                : "rounded-[20px] rounded-tl-md"
-                            }`
-                      } ${selected ? "ring-2 ring-[var(--imc-indigo-text)] ring-offset-2 ring-offset-[#F8FAFC] dark:ring-offset-[var(--imc-bg)] scale-[0.98]" : ""} transition-[transform,box-shadow] duration-150 touch-pan-y select-none`}
                     >
-                      {message.text && (
-                        <p className="whitespace-pre-wrap text-[13px] leading-6">
-                          {message.text}
-                        </p>
-                      )}
-
-                      {message.attachments
-                        ?.filter((item) => item.type === "audio" && item.url)
-                        .map((item, audioIndex) => (
-                          <VoiceMessage
-                            key={`${item.url}-${audioIndex}`}
-                            item={item}
-                            isSent={isSent}
-                          />
-                        ))}
-
-                      <p
-                        className={`mt-1.5 flex items-center justify-end gap-1 text-[9.5px] font-bold ${
-                          isSent ? "text-violet-100/90" : "text-[var(--imc-text-faint)]"
-                        }`}
+                      <span
+                        data-reply-icon="true"
+                        className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 opacity-0"
+                        style={{ color: "var(--imc-indigo-text)" }}
                       >
-                        <span>{formatTime(message.createdAt)}</span>
+                        <Reply size={18} />
+                      </span>
 
-                        {isSent && (
-                          <>
-                            <span>·</span>
-                            <MessageStatus status={status} />
-                          </>
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (longPressFiredRef.current) {
+                            longPressFiredRef.current = false;
+                            return;
+                          }
+                          if (swipeFiredRef.current) {
+                            swipeFiredRef.current = false;
+                            return;
+                          }
+                          if (isSelecting) toggleMessageSelection(message._id);
+                        }}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleMessagePress(message);
+                        }}
+                        onPointerDown={(event) => beginMessagePress(event, message)}
+                        onPointerMove={(event) => moveMessagePress(event, message)}
+                        onPointerUp={endMessagePress}
+                        onPointerCancel={endMessagePress}
+                        onPointerLeave={endMessagePress}
+                        className={`relative px-4 py-2.5 ${
+                          isSent
+                            ? `bg-[#4338CA] text-white shadow-[0_8px_20px_rgba(67,56,202,0.18)] ${
+                                groupedWithPrevious && lastInGroup
+                                  ? "rounded-[20px] rounded-br-md"
+                                  : groupedWithPrevious
+                                  ? "rounded-[20px] rounded-r-md"
+                                  : "rounded-[20px] rounded-tr-md"
+                              }`
+                            : `border border-[var(--imc-border)] bg-[var(--imc-surface)] text-[var(--imc-text)] shadow-[0_6px_18px_rgba(15,23,42,0.05)] ${
+                                groupedWithPrevious && lastInGroup
+                                  ? "rounded-[20px] rounded-bl-md"
+                                  : groupedWithPrevious
+                                  ? "rounded-[20px] rounded-l-md"
+                                  : "rounded-[20px] rounded-tl-md"
+                              }`
+                        } ${
+                          selected || highlightedMessageId === message._id
+                            ? "ring-2 ring-[var(--imc-indigo-text)] ring-offset-2 ring-offset-[#F8FAFC] dark:ring-offset-[var(--imc-bg)] scale-[0.98]"
+                            : ""
+                        } transition-[transform,box-shadow] duration-150 touch-pan-y select-none`}
+                      >
+                        {message.replyTo && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              scrollToMessage(getUserId(message.replyTo));
+                            }}
+                            className={`mb-1.5 block w-full max-w-[220px] truncate rounded-[10px] border-l-[3px] px-2 py-1.5 text-left ${
+                              isSent
+                                ? "border-white/60 bg-white/10"
+                                : "border-[var(--imc-indigo-text)] bg-[var(--imc-surface-2)]"
+                            }`}
+                          >
+                            <p
+                              className={`truncate text-[10.5px] font-black ${
+                                isSent ? "text-white" : "text-[var(--imc-indigo-text)]"
+                              }`}
+                            >
+                              {message.replyTo.isDeleted
+                                ? "Original message"
+                                : getUserId(message.replyTo.sender) === currentUserId
+                                ? "You"
+                                : getName(message.replyTo.sender)}
+                            </p>
+                            <p
+                              className={`truncate text-[11.5px] font-semibold ${
+                                isSent ? "text-violet-100/90" : "text-[var(--imc-text-muted)]"
+                              }`}
+                            >
+                              {message.replyTo.isDeleted
+                                ? "This message was deleted"
+                                : message.replyTo.text ||
+                                  (message.replyTo.attachments?.length
+                                    ? "🎤 Voice message"
+                                    : "")}
+                            </p>
+                          </button>
                         )}
-                      </p>
 
-                      {message.reactions?.length > 0 && (
-                        <div className="absolute -bottom-3 right-2 rounded-full border border-[var(--imc-border)] bg-[var(--imc-surface)] px-1.5 py-0.5 text-[12px] shadow-sm">
-                          {message.reactions.slice(-2).map((item, reactionIndex) => (
-                            <span key={`${item.reaction}-${reactionIndex}`}>
-                              {item.reaction}
-                            </span>
+                        {message.text && (
+                          <p className="whitespace-pre-wrap text-[13px] leading-6">
+                            {message.text}
+                          </p>
+                        )}
+
+                        {message.attachments
+                          ?.filter((item) => item.type === "audio" && item.url)
+                          .map((item, audioIndex) => (
+                            <VoiceMessage
+                              key={`${item.url}-${audioIndex}`}
+                              item={item}
+                              isSent={isSent}
+                            />
                           ))}
-                        </div>
-                      )}
+
+                        <p
+                          className={`mt-1.5 flex items-center justify-end gap-1 text-[9.5px] font-bold ${
+                            isSent ? "text-violet-100/90" : "text-[var(--imc-text-faint)]"
+                          }`}
+                        >
+                          <span>{formatTime(message.createdAt)}</span>
+
+                          {isSent && (
+                            <>
+                              <span>·</span>
+                              <MessageStatus status={status} />
+                            </>
+                          )}
+                        </p>
+
+                        {message.reactions?.length > 0 && (
+                          <div className="absolute -bottom-3 right-2 rounded-full border border-[var(--imc-border)] bg-[var(--imc-surface)] px-1.5 py-0.5 text-[12px] shadow-sm">
+                            {message.reactions.slice(-2).map((item, reactionIndex) => (
+                              <span key={`${item.reaction}-${reactionIndex}`}>
+                                {item.reaction}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                   </div>
@@ -1092,6 +1255,40 @@ function Chat() {
           {blocked && (
             <div className="mb-3 rounded-2xl bg-[#FEF3F2] px-3 py-2 text-center text-[12px] font-black text-[#D92D20]">
               This chat is blocked. Messages cannot be sent.
+            </div>
+          )}
+
+          {replyTarget && (
+            <div
+              className="mb-2 flex items-center gap-2 rounded-[16px] px-3 py-2"
+              style={{ background: "var(--imc-surface-2)" }}
+            >
+              <Reply size={16} style={{ color: "var(--imc-indigo-text)" }} className="shrink-0" />
+
+              <button
+                type="button"
+                onClick={() => scrollToMessage(getUserId(replyTarget))}
+                className="min-w-0 flex-1 text-left"
+              >
+                <p className="truncate text-[11px] font-black" style={{ color: "var(--imc-indigo-text)" }}>
+                  Replying to{" "}
+                  {getUserId(replyTarget.sender) === currentUserId
+                    ? "yourself"
+                    : getName(replyTarget.sender)}
+                </p>
+                <p className="truncate text-[12px] font-semibold text-[var(--imc-text-muted)]">
+                  {replyTarget.text ||
+                    (replyTarget.attachments?.length ? "🎤 Voice message" : "")}
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setReplyTarget(null)}
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[var(--imc-text-muted)] active:bg-[var(--imc-surface)]"
+              >
+                <X size={14} />
+              </button>
             </div>
           )}
 

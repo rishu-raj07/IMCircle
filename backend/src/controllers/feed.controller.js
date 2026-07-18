@@ -29,20 +29,24 @@ const FEED_WEIGHTS = {
   locationMatchBoost: 10,
   roleMatchBoost: 8,
   mutualConnectionBoost: 10,
-  // Was 30 — lower than circleBoost (50) and circleBoost+followBoost (90)
-  // combined, so a single popular post from someone in your Circle (who
-  // you likely also follow) kept net-scoring above every other, unseen
-  // candidate even after being marked seen: 50 - 30 = +20, easily beating
-  // fresh posts from people with no boosts at all, especially once a post
-  // is more than ~60h old and recencyBoost has fully decayed to 0 for
-  // everything anyway. That's exactly what "I only see the same post for
-  // days" looks like when the pool of Circle/followed posters is small.
-  // 70 guarantees a SEEN post from a circle member you also follow
-  // (50 + 40 = 90 unseen) drops below a completely fresh, boost-less post
-  // (90 - 70 = 20, well under a brand-new post's recency boost of ~30)
-  // without reducing how strongly genuinely NEW circle/follow content gets
-  // boosted in the first place.
-  seenPenalty: 70,
+  // Was 30, then 70 — still not enough. 70 only beats a SINGLE combined
+  // circle+follow boost (90), but scoreItem() stacks up to SEVEN
+  // independent relationship/relevance boosts on the same item at once:
+  // circleBoost(50) + followBoost(40) + followedJourneyBoost(35) +
+  // topicMatchBoost(20) + locationMatchBoost(10) + roleMatchBoost(8) +
+  // mutualConnectionBoost(10) + engagementBoost(capped 20) = 193 max. A
+  // journey milestone from someone you both follow AND whose journey you
+  // follow easily clears 70+ on its own, so seenPenalty=70 still left it
+  // net-positive and outranking fresh, unboosted content indefinitely —
+  // exactly the "same post for 3 days straight" report. 220 exceeds the
+  // full 193-point ceiling with margin, so ANY seen item scores negative
+  // regardless of how many boosts stack on it, guaranteeing it sorts below
+  // literally any unseen item (which starts at 0 and only goes up from
+  // recencyBoost/other boosts) — as long as at least one unseen candidate
+  // exists. A seen item can still surface (at the bottom) if genuinely
+  // nothing unseen is available, which is correct: better than an empty
+  // feed.
+  seenPenalty: 220,
 };
 
 const VALID_TABS = new Set(["for-you", "following", "journeys", "learning", "jobs"]);
@@ -165,6 +169,57 @@ const buildCircleProof = (comments = [], circleSet, viewerId) => {
     // it inline in the same card instead of just "X commented" with no
     // content.
     commentText: relevant[0].text || "",
+  };
+};
+
+// Like-based counterpart to buildCircleProof above — powers the "Liked by
+// [name] and N others" row + avatar stack on JourneyCard.jsx/PostCard.jsx
+// (distinct from the comment-based SocialProofBanner). Unlike circleProof,
+// this returns a proof for ANY likes (not just when a circle member liked)
+// — matching the universal Instagram-style "Liked by" row — but still
+// prefers to name a circle member first when one exists, both as the named
+// primaryUser and first in the avatar stack.
+//
+// `likeSources` accepts either an array of like documents with a populated
+// `.user` (journey milestones — JourneyMilestoneLike has `user` +
+// `createdAt`) or an array of already-populated user docs directly (posts —
+// Post.likes is a plain `[ObjectId ref: User]`, so `source.user` is
+// undefined and this falls back to treating the source itself as the user).
+const buildLikeProof = (likeSources = [], circleSet, viewerId) => {
+  const viewerIdStr = getId(viewerId);
+  const seen = new Set();
+  const people = [];
+
+  for (const source of likeSources || []) {
+    const user = source?.user || source;
+    const uid = getId(user);
+    if (!uid || uid === viewerIdStr || seen.has(uid)) continue;
+    seen.add(uid);
+
+    people.push({
+      _id: user?._id,
+      fullName: user?.fullName || user?.name || user?.username || "Someone",
+      username: user?.username || "",
+      avatar: user?.avatar || user?.profilePicture || user?.profileImage || "",
+      isCircle: circleSet.has(uid),
+      likedAt: source?.likedAt || source?.createdAt || null,
+    });
+  }
+
+  if (!people.length) return null;
+
+  // Circle members first (both for the named primaryUser and for which
+  // avatars lead the stack), most recent within each group.
+  people.sort((a, b) => {
+    if (a.isCircle !== b.isCircle) return a.isCircle ? -1 : 1;
+    return new Date(b.likedAt || 0) - new Date(a.likedAt || 0);
+  });
+
+  return {
+    primaryUser: people[0],
+    avatars: people.slice(0, 3),
+    othersCount: Math.max(people.length - 1, 0),
+    totalCount: people.length,
   };
 };
 
@@ -367,6 +422,7 @@ const fetchCandidates = async ({ tab, page, limit, cursor, followingIds, circleI
         .populate("author", authorFields)
         .populate("reposts.user", authorFields)
         .populate("comments.user", commenterFields)
+        .populate("likes", commenterFields)
         .sort({ createdAt: -1, _id: -1 })
         .limit(cap)
     );
@@ -493,6 +549,7 @@ const attachViewerState = async ({
     myMilestoneReposts,
     myMilestoneSaves,
     milestoneComments,
+    milestoneLikes,
   ] = await Promise.all([
     learningIds.length ? LearningLike.find({ user: userId, learning: { $in: learningIds } }).select("learning") : [],
     learningIds.length
@@ -518,6 +575,15 @@ const attachViewerState = async ({
           .sort({ createdAt: -1 })
           .limit(500)
       : [],
+    // Batched across every milestone in this page, same pattern as
+    // milestoneComments above — one query for the whole page instead of one
+    // per card, capped so a single viral milestone can't blow this up.
+    milestoneIds.length
+      ? JourneyMilestoneLike.find({ milestone: { $in: milestoneIds } })
+          .populate("user", commenterFields)
+          .sort({ createdAt: -1 })
+          .limit(500)
+      : [],
   ]);
 
   const setFrom = (docs, field) => new Set(docs.map((doc) => getId(doc[field])));
@@ -535,6 +601,13 @@ const attachViewerState = async ({
     const id = getId(comment.milestone);
     if (!milestoneCommentsMap.has(id)) milestoneCommentsMap.set(id, []);
     milestoneCommentsMap.get(id).push(comment);
+  }
+
+  const milestoneLikesMap = new Map();
+  for (const like of milestoneLikes) {
+    const id = getId(like.milestone);
+    if (!milestoneLikesMap.has(id)) milestoneLikesMap.set(id, []);
+    milestoneLikesMap.get(id).push(like);
   }
 
   return items.map((item) => {
@@ -563,6 +636,7 @@ const attachViewerState = async ({
         repostText: getRepostText(myRepost),
         myRepost,
         circleProof: buildCircleProof(data.comments, circleSet, userId),
+        likeProof: buildLikeProof(data.likes, circleSet, userId),
       };
     }
 
@@ -584,6 +658,7 @@ const attachViewerState = async ({
       const journeyId = getId(data.journey);
       const myRepost = milestoneRepostMap.get(id);
       const comments = milestoneCommentsMap.get(id) || [];
+      const likes = milestoneLikesMap.get(id) || [];
       const latestComment = comments.find((comment) => !comment.isDeleted && comment.user);
 
       data = {
@@ -596,6 +671,7 @@ const attachViewerState = async ({
         repliesCount: comments.length,
         commentsCount: comments.length,
         circleProof: buildCircleProof(comments, circleSet, userId),
+        likeProof: buildLikeProof(likes, circleSet, userId),
         topComment: latestComment
           ? {
               text: latestComment.text,

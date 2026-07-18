@@ -61,31 +61,71 @@ export function getSessionUser() {
   };
 }
 
-// A user only needs to pass through the mandatory first-login profile setup
-// once. `onboardingCompleted` is the authoritative flag set by the backend
-// once every required field is filled in — see hasRequiredBasics() in
+// A user only needs to pass through the MANDATORY part of onboarding once —
+// the mandatory part is now just fullName + username (basicOnboardingCompleted
+// in the product spec). `onboardingCompleted` is the authoritative flag set
+// by the backend — see hasRequiredBasics() in
 // backend/src/controllers/profile.controller.js, which this fallback must
-// mirror exactly: fullName (a real one, not the "BN User" placeholder every
-// account is created with before setup), username, gender, and
-// primaryInterest. The fallback exists only for accounts created before
+// mirror exactly. This intentionally does NOT check gender, primaryInterest,
+// dob, or location.city — those are all optional profile fields now, and
+// requiring any of them here meant a user who skipped one (which the UI
+// explicitly invites them to do via "Skip for now" / "(optional)" labels)
+// could save successfully but still fail this check on every page load —
+// since ProtectedRoute redirects to /profile-setup whenever this returns
+// false, that was an unescapable redirect loop. The fallback (the
+// fullName/username check) exists only for accounts created before
 // onboardingCompleted/isProfileCompleted existed as fields.
-//
-// NOTE: dob and location.city are deliberately NOT checked here, even
-// though earlier versions of this function required both. Both are labeled
-// "(optional)" in the profile setup form's own UI (BasicInfo.jsx /
-// LocationField), but requiring them here meant a user who trusted that
-// label and left either blank could save their profile successfully and
-// still fail this check on every single page load — since ProtectedRoute
-// redirects to /profile-setup whenever this returns false, that was an
-// unescapable redirect loop for anyone who skipped either field.
 export function isOnboardingComplete(user) {
   return Boolean(
     user?.onboardingCompleted ||
       user?.isProfileCompleted ||
-      (user?.fullName &&
-        user.fullName !== "BN User" &&
-        user?.username &&
-        user?.gender &&
-        user?.primaryInterest)
+      (user?.fullName && user.fullName !== "BN User" && user?.username)
+  );
+}
+
+// Separate from the mandatory gate above — this is the "encourage, don't
+// block" signal used for discoverability messaging (People recommendations,
+// Discover eligibility, Search relevance, Circle recommendations) and for
+// deciding whether to show the profile-completion nudge card on Home.
+// Never used to gate route access.
+//
+// NOTE: the User schema (backend/src/models/User.js) stores a single
+// `primaryInterest` string, not an `interests` array — this checks that
+// field rather than a nonexistent `interests` array, since introducing a
+// mismatched field name here would make this permanently false for every
+// user and silently block a feature that already works.
+export function hasDiscoverabilityBasics(user) {
+  const location = user?.location;
+  const hasLocation = Boolean(
+    location?.city || location?.name || (typeof location === "string" && location.trim())
+  );
+
+  return Boolean(
+    (user?.headline?.trim() || user?.tagline?.trim()) &&
+      user?.primaryInterest?.trim() &&
+      hasLocation
+  );
+}
+
+// The publish-gate check — tagline (headline) + interest + location, all
+// three required before a person can publish content. Adapted to the real
+// User schema: `primaryInterest` (single string) stands in for the spec's
+// "at least one interest" since there is no separate `interests` array.
+// Browsing, liking, replying, following, circle requests, search, and
+// messages are NEVER gated by this — only publishing new content (posts,
+// journey updates, learning posts, reposts with thoughts). See
+// [[canPublishContent]] usage in CreatePost/CreateJourney/CreateLearning.
+export function canPublishContent(profile) {
+  const location = profile?.location;
+  const hasLocation = Boolean(
+    location?.city ||
+      location?.name ||
+      (typeof location === "string" && location.trim())
+  );
+
+  return Boolean(
+    (profile?.tagline?.trim() || profile?.headline?.trim()) &&
+      profile?.primaryInterest?.trim() &&
+      hasLocation
   );
 }

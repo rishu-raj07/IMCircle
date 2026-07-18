@@ -234,7 +234,69 @@ export const sendMobileOtp = async (req, res) => {
       });
     }
 
-    const msg91Response = await sendOtpSms(mobile);
+    // Backend-enforced 30s-per-phone cooldown, independent of the frontend
+    // timer (which resets to its default on a page refresh and can't be
+    // trusted alone) and independent of otpLimiter (which is IP-keyed, not
+    // phone-keyed — see rateLimit.middleware.js). If a duplicate request
+    // lands inside the cooldown window, this returns WITHOUT calling MSG91
+    // again — matches the spec's "don't call MSG91 again during cooldown"
+    // requirement and is also what actually prevents ever tripping MSG91's
+    // own 311 ("OTP already sent, too soon") error in normal use.
+    const OTP_COOLDOWN_MS = 30 * 1000;
+    if (user.lastOtpSentAt) {
+      const elapsedMs = Date.now() - new Date(user.lastOtpSentAt).getTime();
+      if (elapsedMs < OTP_COOLDOWN_MS) {
+        const retryAfter = Math.ceil((OTP_COOLDOWN_MS - elapsedMs) / 1000);
+        return res.status(429).json({
+          success: false,
+          cooldown: true,
+          retryAfter,
+          message: "Please wait before requesting another OTP.",
+        });
+      }
+    }
+
+    let msg91Response;
+    try {
+      msg91Response = await sendOtpSms(mobile);
+    } catch (msg91Error) {
+      // MSG91 error 311 = "OTP already sent for this number, too soon to
+      // resend" — this is MSG91's OWN cooldown protection kicking in
+      // (expected to still be reachable as a fallback even with the
+      // backend cooldown above, e.g. clock drift or a very fast double
+      // request racing past the check). Never remove/bypass this — surface
+      // it as the same friendly cooldown response instead of a raw
+      // provider error or a generic 500.
+      const providerType = msg91Error.response?.data?.type;
+      const providerMessage = String(msg91Error.response?.data?.message || "");
+      const isCooldownError =
+        providerType === "311" ||
+        providerMessage.includes("311") ||
+        /already.*sent|too soon|wait/i.test(providerMessage);
+
+      console.error(
+        "MSG91 send-otp error:",
+        msg91Error.response?.status,
+        msg91Error.response?.data || msg91Error.message
+      );
+
+      if (isCooldownError) {
+        return res.status(429).json({
+          success: false,
+          cooldown: true,
+          retryAfter: 30,
+          message: "OTP was already requested. Please wait a few seconds and check your messages.",
+        });
+      }
+
+      return res.status(502).json({
+        success: false,
+        message: "Could not send OTP right now. Please try again in a moment.",
+      });
+    }
+
+    user.lastOtpSentAt = new Date();
+    await user.save({ validateBeforeSave: false });
 
     // MSG91's raw response is logged server-side only (useful while
     // debugging a real integration issue) and never returned to the

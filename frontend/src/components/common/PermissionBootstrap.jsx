@@ -33,22 +33,29 @@ function canRequestPermissions(pathname) {
   );
 }
 
-// This used to show a custom "Connect IMCircle" bottom-sheet first, with its
-// own "Allow permissions" button the person had to tap before the real
-// browser/OS permission dialog even appeared — an extra in-app step in front
-// of a native prompt. Removed: this component now renders nothing and just
-// triggers the native prompts (camera/mic via getUserMedia, contacts via the
-// Contact Picker API) directly, the same way any native app would ask,
-// once the person lands on a real screen post-login.
+// PREVIOUSLY: this fired automatically ~450ms after landing on any
+// non-auth screen (including Home, on every fresh login/app-open) and
+// silently requested camera+mic (getUserMedia) and contacts (Contact
+// Picker API) permission with no user action behind it — before it, this
+// used to show its own "Connect IMCircle" bottom-sheet first. Both are
+// exactly the "unsolicited permission prompt on app/home load" pattern
+// the product spec calls out to remove: permissions should only be
+// requested at the moment they're actually needed (camera/gallery when
+// uploading media — already handled natively by the upload flows in
+// CreatePost/Chat/etc, which is why removing this doesn't lose that
+// capability; contacts when the person explicitly chooses to sync them).
 //
-// Note: the Contact Picker API requires a genuine user gesture in some
-// browsers (Chrome enforces "transient activation"), so calling it here
-// outside a click can be silently rejected in those browsers — it degrades
-// to the same "denied" outcome as before with no visible error, it just
-// can't force that particular native prompt open without a tap to anchor
-// it to. Camera/mic (getUserMedia) has no such restriction and always
-// prompts natively.
+// Disabled the automatic trigger rather than deleting the component/logic
+// outright, so `requestPermissions()` below stays available to be wired to
+// an explicit user action (e.g. a future "Find friends from contacts"
+// button) without redoing this. Nothing currently calls it, so this
+// component is now a deliberate no-op.
 export default function PermissionBootstrap() {
+  return null;
+}
+
+// eslint-disable-next-line no-unused-vars
+function useDisabledAutoPermissionPrompt() {
   const location = useLocation();
 
   useEffect(() => {

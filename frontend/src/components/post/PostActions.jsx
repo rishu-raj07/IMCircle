@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import { Heart, Repeat2, Send, Bookmark } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import CommentSheet from "../common/CommentSheet";
 import RepostSheet from "../common/RepostSheet";
-import ReplyPreview from "./ReplyPreview";
+import LikersSheet from "../common/LikersSheet";
+import SocialActionBar from "./SocialActionBar";
+
+import { formatRelativeTime } from "../../utils/relativeTime";
 
 import {
   likePost,
@@ -12,6 +14,7 @@ import {
   savePost,
   commentOnPost,
   getPostComments,
+  getPostLikers,
   replyPostComment,
   likePostComment,
   deletePostComment,
@@ -66,6 +69,7 @@ function PostActions({ post = {}, type = "post" }) {
 
   const [showReplies, setShowReplies] = useState(false);
   const [showRepost, setShowRepost] = useState(false);
+  const [showLikers, setShowLikers] = useState(false);
 
   useEffect(() => {
     setLikes(post.likesCount || post.likes?.length || 0);
@@ -89,17 +93,6 @@ function PostActions({ post = {}, type = "post" }) {
     post.viewerState?.reposted,
     post.viewerState?.saved,
   ]);
-
-  const topComment = useMemo(() => {
-    const list = Array.isArray(post.comments) ? post.comments : [];
-    const visible = list.filter((c) => c && !c.isDeleted && c.user);
-
-    if (visible.length === 0) return null;
-
-    return [...visible].sort(
-      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-    )[0];
-  }, [post.comments]);
 
   const loadReplies = async () => {
     if (!itemId) return { comments: [] };
@@ -317,38 +310,38 @@ function PostActions({ post = {}, type = "post" }) {
 
   return (
     <>
-      <div className="mt-2.5 flex items-center gap-7 border-t border-[var(--imc-border)] pt-2.5">
-        <Action icon={Heart} count={likes} active={liked} onClick={handleLike} tone="like" />
+      <SocialActionBar
+        liked={liked}
+        likesCount={likes}
+        onLike={handleLike}
+        commentsCount={replies}
+        reposted={reposted}
+        repostsCount={reposts}
+        onRepost={() => {
+          if (reposted) handleRemoveRepost();
+          else setShowRepost(true);
+        }}
+        saved={saved}
+        savesCount={saves}
+        onSave={handleSave}
+        onShare={handleShare}
+        onOpenComments={() => setShowReplies(true)}
+        onOpenLikers={() => setShowLikers(true)}
+        likeProof={post.likeProof}
+        timestamp={formatRelativeTime(post.createdAt || post.updatedAt)}
+        onQuickComment={(text) =>
+          addReply(text).then((res) => {
+            setReplies((prev) => prev + 1);
+            return res;
+          })
+        }
+      />
 
-        <Action
-          icon={Repeat2}
-          count={reposts}
-          active={reposted}
-          onClick={() => {
-            if (reposted) handleRemoveRepost();
-            else setShowRepost(true);
-          }}
-        />
-
-        <Action
-          icon={Bookmark}
-          count={saves}
-          active={saved}
-          onClick={handleSave}
-        />
-
-        <button
-          onClick={handleShare}
-          className="ml-auto grid h-10 w-10 place-items-center rounded-full text-[var(--imc-text-muted)] active:scale-95"
-        >
-          <Send size={19} />
-        </button>
-      </div>
-
-      <ReplyPreview
-        count={replies}
-        topComment={topComment}
-        onOpen={() => setShowReplies(true)}
+      <LikersSheet
+        open={showLikers}
+        onClose={() => setShowLikers(false)}
+        title="Liked by"
+        loadLikers={() => getPostLikers(itemId)}
       />
 
       <CommentSheet
@@ -379,33 +372,6 @@ function PostActions({ post = {}, type = "post" }) {
         onRepostWithThought={(payload) => handleRepost(payload)}
       />
     </>
-  );
-}
-
-// "tone" lets the like button break from the shared indigo "active" look —
-// a heart turning indigo doesn't read as "liked" the way red universally
-// does everywhere else (Instagram, Twitter/X, etc.), so `tone="like"` swaps
-// in the app's danger/red token for just this one action while repost/save
-// keep the normal indigo chip style.
-// Flat icon + count, no border/background chip — reads as a plain action
-// row (comment/repost/upvote style) rather than a row of buttons, with just
-// the icon (and text, when active) picking up color to show state.
-function Action({ icon: Icon, count, active, label, onClick, tone }) {
-  const isLike = tone === "like";
-  const activeColor = isLike ? "var(--imc-danger)" : "var(--imc-indigo-text)";
-
-  return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-1.5 text-[12.5px] font-semibold active:scale-95"
-      style={{ color: active ? activeColor : "var(--imc-text-muted)" }}
-    >
-      <Icon size={17} fill={active ? "currentColor" : "none"} />
-      <span>
-        {formatCount(count)}
-        {label ? ` ${label}` : ""}
-      </span>
-    </button>
   );
 }
 

@@ -40,6 +40,14 @@ const userSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // Backend-enforced OTP send cooldown — see sendMobileOtp() in
+    // auth.controller.js. Safe additive field: defaults to null/undefined
+    // for every existing user, treated as "no cooldown active" until the
+    // first OTP send after this field existed.
+    lastOtpSentAt: {
+      type: Date,
+    },
+
     googleId: {
       type: String,
       unique: true,

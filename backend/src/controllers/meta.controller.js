@@ -255,6 +255,17 @@ export const createCompany = async (req, res) => {
 // what Android release this backend expects. See useVersionCheck.js on the
 // frontend for how this gets compared against the currently-loaded bundle
 // to show the "New version available" banner.
+// Native (Android/Capacitor) equivalent of the web version-check above.
+// A bundled APK can't hot-swap its own JS the way a web tab can (see
+// useVersionCheck.js's comment on that), so instead of "reload", the native
+// app compares its OWN installed versionCode (read via @capacitor/app's
+// App.getInfo() on-device) against these backend-controlled values and
+// prompts to update via the Play Store when it's behind. Backend-controlled
+// via env vars so a force-update or updated copy doesn't require a new app
+// release — only forceUpdate/minimumSupportedVersionCode ever need to
+// change without a fresh Play Store submission.
+const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.imcircle.app";
+
 export const getVersionInfo = async (req, res) => {
   res.status(200).json({
     frontendVersion: FRONTEND_VERSION,
@@ -263,5 +274,25 @@ export const getVersionInfo = async (req, res) => {
     commitHash: COMMIT_HASH,
     androidVersionName: ANDROID_VERSION_NAME,
     androidVersionCode: ANDROID_VERSION_CODE,
+
+    // Native app-update fields.
+    platform: "android",
+    latestVersionCode: ANDROID_VERSION_CODE,
+    latestVersionName: ANDROID_VERSION_NAME,
+    // Unset (0) by default = nothing is force-blocked. Set
+    // MIN_SUPPORTED_ANDROID_VERSION_CODE in the environment to the lowest
+    // versionCode still allowed to use the API once older builds must stop
+    // working (e.g. after a breaking API change) — anything below it shows
+    // the non-dismissible required-update screen.
+    minimumSupportedVersionCode: Number(process.env.MIN_SUPPORTED_ANDROID_VERSION_CODE) || 0,
+    // Independent manual kill-switch for forcing every installed build to
+    // update immediately, regardless of version comparison — e.g. a
+    // critical bug. Off by default.
+    forceUpdate: process.env.FORCE_ANDROID_UPDATE === "true",
+    updateTitle: process.env.ANDROID_UPDATE_TITLE || "A new version of IMCircle is available",
+    updateMessage:
+      process.env.ANDROID_UPDATE_MESSAGE ||
+      "Update now to get the latest improvements and fixes.",
+    playStoreUrl: PLAY_STORE_URL,
   });
 };

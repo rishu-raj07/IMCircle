@@ -106,6 +106,11 @@ export const unlikeMilestone = async (milestoneId) => {
   return res.data;
 };
 
+export const getMilestoneLikers = async (milestoneId) => {
+  const res = await api.get(`/journeys/milestone/${milestoneId}/likes`);
+  return res.data;
+};
+
 export const repostMilestone = async (milestoneId, caption = "") => {
   const res = await api.patch(`/journeys/milestone/${milestoneId}/repost`, {
     caption,

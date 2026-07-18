@@ -1,5 +1,6 @@
 import Post from "../models/Post.js";
 import User from "../models/User.js";
+import CircleRequest from "../models/CircleRequest.js";
 import cloudinary from "../config/cloudinary.js";
 import { processContentText } from "../services/contentParsing.service.js";
 import notificationService from "../services/notification.service.js";
@@ -657,6 +658,63 @@ const buildCommentTree = (comments = [], currentUserId) => {
       };
     })
     .reverse();
+};
+
+// Full likers list for a post, circle members sorted first — same pattern
+// as getMilestoneLikers in journey.controller.js, see that for the full
+// rationale. Powers the "Liked by [name] and N others" row on PostCard.jsx
+// and the sheet it opens into (Message for a circle member, +Circle
+// otherwise).
+export const getPostLikers = async (req, res) => {
+  try {
+    const viewerId = req.user._id;
+    const myCircleIds = new Set((req.user.circle || []).map((id) => id.toString()));
+
+    const post = await Post.findById(req.params.postId)
+      .select("likes")
+      .populate("likes", authorFields);
+
+    if (!post) {
+      return res.status(404).json({
+        success: false,
+        message: "Post not found",
+      });
+    }
+
+    const likers = (post.likes || []).filter(Boolean);
+    const likerIds = likers.map((user) => user._id.toString());
+
+    const pendingRequests = await CircleRequest.find({
+      sender: viewerId,
+      receiver: { $in: likerIds },
+      status: "pending",
+    }).select("receiver");
+    const pendingSet = new Set(pendingRequests.map((item) => item.receiver.toString()));
+
+    const annotated = likers.map((user) => {
+      const id = user._id.toString();
+      return {
+        ...user.toObject(),
+        isInCircle: myCircleIds.has(id),
+        isRequested: pendingSet.has(id),
+      };
+    });
+
+    annotated.sort((a, b) => Number(b.isInCircle) - Number(a.isInCircle));
+
+    return res.status(200).json({
+      success: true,
+      count: annotated.length,
+      likers: annotated,
+    });
+  } catch (error) {
+    console.error("Get post likers error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
 };
 
 export const getPostComments = async (req, res) => {

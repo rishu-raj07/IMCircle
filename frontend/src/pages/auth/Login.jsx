@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Phone } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import heroImg from "../../assets/images/login-hero.webp";
@@ -14,6 +14,11 @@ function Login() {
   const [error, setError] = useState("");
   const [devOtp, setDevOtp] = useState("");
   const [loading, setLoading] = useState(false);
+  // Extra guard against a double-fire beyond just the disabled button state
+  // (e.g. a very fast double-tap before React re-renders with loading=true)
+  // — spec: "Prevent double-clicks... allow only one active OTP request per
+  // number."
+  const otpRequestInProgress = useRef(false);
 
   const navigate = useNavigate();
 
@@ -26,6 +31,9 @@ function Login() {
       setError("Enter valid 10 digit Indian mobile number");
       return;
     }
+
+    if (otpRequestInProgress.current) return;
+    otpRequestInProgress.current = true;
 
     try {
       setLoading(true);
@@ -40,9 +48,27 @@ function Login() {
 
       navigate("/verify");
     } catch (err) {
+      // A cooldown response (rapid double-tap, or a very recent OTP already
+      // sent to this number) still means a valid, usable OTP is sitting in
+      // the person's messages right now — send them straight to Verify to
+      // enter it instead of stranding them here on an error. retryAfter
+      // seeds Verify's own resend countdown so it doesn't show a fresh 60s
+      // when the real remaining wait might be much shorter.
+      if (err.response?.data?.cooldown) {
+        setPendingRegister({
+          mobile,
+          authType: "mobile-login",
+          devOtp: "",
+          retryAfter: Number(err.response.data.retryAfter) || 30,
+        });
+        navigate("/verify");
+        return;
+      }
+
       setError(err.response?.data?.message || "Failed to send OTP");
     } finally {
       setLoading(false);
+      otpRequestInProgress.current = false;
     }
   };
 

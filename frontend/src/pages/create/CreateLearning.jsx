@@ -4,6 +4,9 @@ import { useNavigate } from "react-router-dom";
 
 import { createLearning } from "../../api/learningApi";
 import { trackEvent } from "../../utils/analyticsTracker";
+import { currentUser } from "../../store/authStore";
+import { canPublishContent } from "../../utils/sessionUser";
+import PublishGateModal from "../../components/common/PublishGateModal";
 
 const MAX_LESSON_LENGTH = 3000;
 
@@ -17,6 +20,7 @@ function CreateLearning() {
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPublishGate, setShowPublishGate] = useState(false);
 
   const cleanTags = useMemo(() => {
     return tag
@@ -50,6 +54,14 @@ function CreateLearning() {
   const handleSubmit = async () => {
     if (!lesson.trim()) {
       alert("Please write what you learned today.");
+      return;
+    }
+
+    // Publish guard — browsing learnings is never blocked, only actually
+    // publishing a new one requires tagline + interest + location. See
+    // canPublishContent() in utils/sessionUser.js.
+    if (!canPublishContent(currentUser())) {
+      setShowPublishGate(true);
       return;
     }
 
@@ -236,6 +248,11 @@ function CreateLearning() {
           />
         </div>
       </main>
+
+      <PublishGateModal
+        open={showPublishGate}
+        onClose={() => setShowPublishGate(false)}
+      />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import Journey from "./Journey.js";
-import Notification from "./Notification.js";
 import User from "./User.js";
+import notificationService from "../services/notification.service.js";
 
 const journeyFollowerSchema = new mongoose.Schema(
   {
@@ -63,36 +63,29 @@ async function createJourneyFollowNotification(doc) {
 
     if (!ownerId || String(ownerId) === String(actorId)) return;
 
-    const existing = await Notification.findOne({
-      recipient: ownerId,
-      sender: actorId,
-      type: "journey_follow",
-      "data.journey": journey._id,
-    });
-
-    if (existing) return;
-
     // Every other notification in the app includes the actor's name in the
     // message itself (the frontend renders this string as-is rather than
     // re-composing it) — this hook was the one place that didn't, which
     // made it show up as a bare, nameless "started following your journey"
-    // with no indication of who.
+    // with no indication of who. It also called Notification.create()
+    // directly instead of notificationService.create() — see the identical
+    // fix + explanation in JourneyMilestoneLike.js — which meant a journey
+    // follow never triggered the live socket badge, the notification
+    // sound, or an actual phone push; only the Notifications page's own
+    // list ever showed it.
     const actor = await User.findById(actorId).select("fullName").lean();
     const actorName = actor?.fullName || "Someone";
 
-    await Notification.create({
-      recipient: ownerId,
-      receiver: ownerId,
-      user: ownerId,
-      sender: actorId,
-      actor: actorId,
+    await notificationService.create({
+      recipientId: ownerId,
+      actorId,
       type: "journey_follow",
+      entityType: "journey",
+      entityId: journey._id,
       title: "New journey follower",
       message: `${actorName} started following your journey`,
-      link: `/journey/${journey._id}`,
-      data: {
-        journey: journey._id,
-      },
+      metadata: { journey: journey._id },
+      dedupe: true,
     });
   } catch (error) {
     console.error("Journey follow notification failed:", error.message);

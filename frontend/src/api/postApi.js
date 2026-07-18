@@ -21,6 +21,11 @@ export const likePost = async (postId) => {
   return res.data;
 };
 
+export const getPostLikers = async (postId) => {
+  const res = await api.get(`/posts/${postId}/likes`);
+  return res.data;
+};
+
 export const repostPost = async (postId, data = {}) => {
   const res = await api.patch(`/posts/${postId}/repost`, data);
   return res.data;

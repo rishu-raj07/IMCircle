@@ -27,11 +27,28 @@ async function createJourneyReminder(label) {
       status: "active",
     }).select("_id creator title createdAt targetDays totalDays");
 
+    // Temporary visibility, same pattern as push.service.js — this cron
+    // firing correctly and finding zero eligible journeys (e.g. everyone's
+    // journey is private, or already posted today, or past its target day
+    // count) looks IDENTICAL from a user's perspective to the cron never
+    // running at all: no notification either way. This makes the two
+    // distinguishable in `pm2 logs` instead of only ever seeing silence.
+    console.log(
+      `[journeyReminder] "${label}" run: ${journeys.length} active/public journey(s) found.`
+    );
+
+    let sent = 0;
+    let skippedAlreadyPosted = 0;
+    let skippedPastTarget = 0;
+
     for (const journey of journeys) {
       const dayNumber = getJourneyDay(journey.createdAt);
       const maxDays = journey.targetDays || journey.totalDays || 100;
 
-      if (dayNumber > maxDays) continue;
+      if (dayNumber > maxDays) {
+        skippedPastTarget += 1;
+        continue;
+      }
 
       const alreadyPosted = await JourneyMilestone.findOne({
         journey: journey._id,
@@ -40,7 +57,10 @@ async function createJourneyReminder(label) {
         isDeleted: false,
       }).select("_id");
 
-      if (alreadyPosted) continue;
+      if (alreadyPosted) {
+        skippedAlreadyPosted += 1;
+        continue;
+      }
 
       const title = `Update your Day ${dayNumber} journey`;
 
@@ -76,7 +96,13 @@ async function createJourneyReminder(label) {
         dedupe: true,
         allowSelf: true,
       });
+
+      sent += 1;
     }
+
+    console.log(
+      `[journeyReminder] "${label}" done: ${sent} sent, ${skippedAlreadyPosted} already posted today, ${skippedPastTarget} past their target day count.`
+    );
   } catch (error) {
     console.error("Journey reminder error:", error);
   }

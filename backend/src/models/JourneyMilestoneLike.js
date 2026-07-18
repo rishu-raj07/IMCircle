@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import JourneyMilestone from "./JourneyMilestone.js";
-import Notification from "./Notification.js";
 import User from "./User.js";
+import notificationService from "../services/notification.service.js";
 
 const journeyMilestoneLikeSchema = new mongoose.Schema(
   {
@@ -68,34 +68,32 @@ async function createJourneyLikeNotification(doc) {
 
     if (!ownerId || String(ownerId) === String(actorId)) return;
 
-    const existing = await Notification.findOne({
-      recipient: ownerId,
-      sender: actorId,
-      type: "journey_like",
-      "data.milestone": milestone._id,
-    });
-
-    if (existing) return;
-
     // See JourneyFollower.js for the same fix and full explanation — this
-    // hook had the identical bug (message with no actor name at all).
+    // hook had the identical bug (message with no actor name at all), PLUS
+    // a second one: it called Notification.create() directly instead of
+    // going through notificationService.create(), which is the one place
+    // that also fires the socket "new_notification" event (live badge +
+    // sound while the app is open) and the actual phone push (see
+    // push.service.js). Bypassing it meant a journey like only ever showed
+    // up if you happened to manually open the Notifications page — no
+    // push, no sound, no live badge, unlike every other notification type.
     const actor = await User.findById(actorId).select("fullName").lean();
     const actorName = actor?.fullName || "Someone";
 
-    await Notification.create({
-      recipient: ownerId,
-      receiver: ownerId,
-      user: ownerId,
-      sender: actorId,
-      actor: actorId,
+    await notificationService.create({
+      recipientId: ownerId,
+      actorId,
       type: "journey_like",
+      entityType: "journey_milestone",
+      entityId: milestone._id,
       title: "New journey like",
       message: `${actorName} liked your journey`,
-      link: journey?._id ? `/journey/${journey._id}` : "",
-      data: {
+      metadata: {
+        journeyId: journey?._id,
         journey: journey?._id,
         milestone: milestone?._id,
       },
+      dedupe: true,
     });
   } catch (error) {
     console.error("Journey like notification failed:", error.message);

@@ -127,6 +127,10 @@ function ProfileSetup() {
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Live availability status lifted up from UsernameField (via BasicInfo) so
+  // the mandatory step-1 "Next" button can be disabled until the username is
+  // confirmed available — spec: "Disable Next until both fields are valid."
+  const [usernameStatus, setUsernameStatus] = useState("idle");
 
   useEffect(() => {
     const loadProfileForEdit = async () => {
@@ -134,10 +138,16 @@ function ProfileSetup() {
         const data = await getMyProfile();
         const user = data?.user || data?.data?.user || data?.data || data;
 
+        // "Editing an existing profile" now just means the mandatory step
+        // (fullName + username) is already done — gender/primaryInterest are
+        // optional now and shouldn't factor into this, otherwise a user who
+        // did only the mandatory step and came back here later would
+        // incorrectly see the fresh-onboarding "Complete Profile" copy
+        // instead of "Edit Profile".
         setIsEditingExisting(
           Boolean(
             user?.onboardingCompleted ||
-              (user?.username && user?.gender && user?.primaryInterest)
+              (user?.fullName && user.fullName !== "BN User" && user?.username)
           )
         );
 
@@ -189,34 +199,22 @@ function ProfileSetup() {
     }
   }, [searchParams]);
 
-  // Profile photo, tagline, dob, and location are all optional — only these
-  // fields actually gate finishing setup. Missing photo/tagline/dob/location
-  // no longer blocks "Continue" (Issue 3: location must be completely
-  // optional; dob is labeled "(optional)" in BasicInfo.jsx's own form and
-  // used to be required here anyway, which meant leaving it blank could
-  // save fine but then loop the user back to this page forever via
-  // isOnboardingComplete() — see the note there).
-  const hasBasicInfo = Boolean(
-    fullName.trim() &&
-      username.trim() &&
-      gender.trim() &&
-      primaryInterest.trim()
-  );
+  // basicOnboardingCompleted = fullName + username ONLY — mirrors
+  // hasRequiredBasics() in backend/src/controllers/profile.controller.js and
+  // isOnboardingComplete() in utils/sessionUser.js exactly. Gender, DOB,
+  // tagline, location, and primaryInterest are all optional and never gate
+  // finishing setup or reaching the app.
+  const hasBasicInfo = Boolean(fullName.trim() && username.trim());
 
   const isStudentCategory = primaryInterest.trim().toLowerCase() === "student";
 
-  // Required onboarding fields = 50%, photo/tagline/skills = 10% each.
-  // Student category: Education is 20% and there's no Experience item at
-  // all. Everyone else: Education 10% + Experience 10%.
+  // Mandatory fields (name + username) = 50%, photo/tagline/skills = 10%
+  // each. Student category: Education is 20% and there's no Experience item
+  // at all. Everyone else: Education 10% + Experience 10%.
   const progress = useMemo(() => {
     let score = 0;
 
-    if (
-      fullName.trim() &&
-      username.trim() &&
-      gender.trim() &&
-      primaryInterest.trim()
-    ) {
+    if (fullName.trim() && username.trim()) {
       score += 50;
     }
 
@@ -230,10 +228,6 @@ function ProfileSetup() {
   }, [
     fullName,
     username,
-    dob,
-    location,
-    gender,
-    primaryInterest,
     isStudentCategory,
     profileImage,
     tagline,
@@ -261,30 +255,121 @@ function ProfileSetup() {
     return "Add experience, education or skills from your profile";
   }, [progress, hasBasicInfo, missingItems]);
 
+  const buildProfilePayload = () => ({
+    fullName: fullName.trim(),
+    username: username.trim().toLowerCase(),
+    usernameChangeConfirmed:
+      usernameEditUnlocked &&
+      Boolean(originalUsername) &&
+      username.trim().toLowerCase() !== originalUsername.toLowerCase(),
+    dob,
+    headline: tagline.trim(),
+    location: {
+      city: location.city.trim(),
+      state: location.state.trim(),
+      country: (location.country || "India").trim(),
+      coordinates: { lat: location.lat, lng: location.lng },
+    },
+    gender,
+    primaryInterest,
+    avatar: profileImage,
+    profileImage,
+    experience,
+    education,
+    skills: skills.map((skill) => ({
+      name: skill,
+      level: 50,
+    })),
+  });
+
+  const usernameFormatValid = /^[a-z0-9_]{3,30}$/.test(username.trim().toLowerCase());
+
+  // An already-registered username (editing an existing, complete profile —
+  // field is locked or just unchanged) never runs UsernameField's live
+  // availability check, so `usernameStatus` stays "idle" for it. That's
+  // still valid, since it's already saved under this account. A brand-new
+  // username must come back "available" from the live check before Next is
+  // allowed — spec: "Disable Next until both fields are valid."
+  const usernameConfirmedOk = originalUsername ? true : usernameStatus === "available";
+  const step1Valid = Boolean(fullName.trim()) && usernameFormatValid && usernameConfirmedOk;
+
+  // Saves whatever's been entered so far and advances — used by both the
+  // mandatory step 1 (spec: "Immediately save... mark basic onboarding
+  // completed... redirect to the next optional onboarding step") and the
+  // optional steps 2/3's own "Next". Saving on every step (not just the
+  // final one) means closing the app mid-onboarding never loses progress.
+  const saveStepAndAdvance = async (nextStep) => {
+    setError("");
+
+    try {
+      setLoading(true);
+
+      const data = await updateProfile(buildProfilePayload());
+
+      if (data?.user) {
+        // Keep the global/local-storage auth user in sync with what the
+        // server just persisted, so any other screen reading the cached
+        // user (e.g. ProtectedRoute's onboarding check) sees fresh data
+        // immediately — this is what actually unblocks the rest of the app
+        // the instant step 1 is saved.
+        setUser(data.user);
+      }
+
+      setSetupStep(nextStep);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err) {
+      setError(err.response?.data?.message || "Could not save — try again");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleNextStep = () => {
     setError("");
 
     if (setupStep === 1) {
-      if (!fullName.trim()) {
-        setError("Add your name before continuing");
-        return;
+      if (!fullName.trim()) return setError("Add your name before continuing");
+      if (!username.trim()) return setError("Choose a username before continuing");
+      if (!usernameFormatValid) {
+        return setError("Username must be 3-30 letters, numbers, or underscores");
       }
+      if (!usernameConfirmedOk) {
+        return setError(
+          usernameStatus === "taken"
+            ? "That username is already taken — try another"
+            : usernameStatus === "checking"
+            ? "Still checking availability — one moment"
+            : "Choose a valid, available username before continuing"
+        );
+      }
+
+      saveStepAndAdvance(2);
+      return;
     }
 
-    if (setupStep === 2) {
-      if (!username.trim()) {
-        setError("Choose a username before continuing");
-        return;
-      }
-      if (!/^[a-z0-9_]{3,30}$/.test(username.trim().toLowerCase())) {
-        setError("Username must be 3-30 letters, numbers, or underscores");
-        return;
-      }
-      // Date of birth and gender are optional — no block here.
-    }
+    // Steps 2 and 3 are entirely optional — nothing here blocks "Next",
+    // just save whatever's been filled in and move on.
+    saveStepAndAdvance(Math.min(3, setupStep + 1));
+  };
 
-    setSetupStep((current) => Math.min(3, current + 1));
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  // "Skip for now" — shown on every optional screen (steps 2 and 3). Spec:
+  // "save anything they already entered and redirect them to the home
+  // page" — note this goes straight to home, not to the next optional step.
+  const handleSkip = async () => {
+    setError("");
+
+    try {
+      setLoading(true);
+      const data = await updateProfile(buildProfilePayload());
+      if (data?.user) setUser(data.user);
+    } catch {
+      // Best-effort — a failed partial save of optional fields should never
+      // trap the person on this screen. fullName/username were already
+      // saved and confirmed back in step 1 regardless.
+    } finally {
+      setLoading(false);
+      navigate("/home", { replace: true });
+    }
   };
 
   const handlePreviousStep = () => {
@@ -296,61 +381,30 @@ function ProfileSetup() {
   const handleSave = async () => {
     setError("");
 
+    // Only fullName + username are actually required — everything else on
+    // this final (optional) step, including primaryInterest, can be blank.
     if (!fullName.trim()) return setError("Name is required");
     if (!username.trim()) return setError("Username is required");
-    if (!/^[a-z0-9_]{3,30}$/.test(username.trim().toLowerCase())) {
+    if (!usernameFormatValid) {
       return setError(
         "Username must be 3-30 characters: letters, numbers or underscore only"
       );
-    }
-    // Date of birth, gender, and location are all optional — no block here.
-    if (!primaryInterest.trim()) {
-      return setError("Select an interest, or write your interest in the Other field");
     }
 
     try {
       setLoading(true);
 
-      const payload = {
-        fullName: fullName.trim(),
-        username: username.trim().toLowerCase(),
-        usernameChangeConfirmed:
-          usernameEditUnlocked &&
-          Boolean(originalUsername) &&
-          username.trim().toLowerCase() !== originalUsername.toLowerCase(),
-        dob,
-        headline: tagline.trim(),
-        location: {
-          city: location.city.trim(),
-          state: location.state.trim(),
-          country: (location.country || "India").trim(),
-          coordinates: { lat: location.lat, lng: location.lng },
-        },
-        gender,
-        primaryInterest,
-        avatar: profileImage,
-        profileImage,
-        experience,
-        education,
-        skills: skills.map((skill) => ({
-          name: skill,
-          level: 50,
-        })),
-      };
-
-      const data = await updateProfile(payload);
+      const data = await updateProfile(buildProfilePayload());
 
       if (data?.user) {
-        // Keep the global/local-storage auth user in sync with what the
-        // server just persisted, so any other screen reading the cached
-        // user (e.g. ProtectedRoute's onboarding check) sees fresh data
-        // immediately instead of the stale pre-setup snapshot.
         setUser(data.user);
       }
 
-      // Always land back on /profile after saving so the person sees their
-      // just-saved data right away — for both first-time setup and edits.
-      navigate("/profile", { replace: true });
+      // Fresh onboarding finishes on Home — the whole point of this rework
+      // is getting new users into the app, not back onto a profile form.
+      // Editing an already-complete profile still returns to /profile so
+      // the person sees their just-saved changes right away.
+      navigate(isEditingExisting ? "/profile" : "/home", { replace: true });
     } catch (err) {
       setError(err.response?.data?.message || "Profile setup failed");
     } finally {
@@ -436,17 +490,17 @@ function ProfileSetup() {
           title={isEditingExisting ? "Edit Profile" : "Complete Profile"}
           subtitle={
             setupStep === 1
-              ? "Start with what people will see"
+              ? "Just your name and username to start"
               : setupStep === 2
-              ? "Choose your unique IMCircle identity"
-              : "Personalize your IMCircle experience"
+              ? "Optional — add a photo and tagline, or skip"
+              : "Optional — help people discover you, or skip"
           }
           progress={(setupStep / 3) * 100}
           step={setupStep}
           totalSteps={3}
         />
 
-        {setupStep === 1 && (
+        {setupStep === 2 && (
           <ImageUploader
             name={fullName}
             imageUrl={profileImage}
@@ -454,7 +508,7 @@ function ProfileSetup() {
           />
         )}
 
-        {setupStep === 1 && !profileImage && (
+        {setupStep === 2 && !profileImage && (
           <p className="mt-2 text-center text-[11px] font-medium text-[var(--imc-text-faint)]">
             Profile photo is optional — you can add one later.
           </p>
@@ -470,6 +524,7 @@ function ProfileSetup() {
           usernameEditUnlocked={usernameEditUnlocked}
           setUsernameEditUnlocked={setUsernameEditUnlocked}
           usernameLastChangedAt={usernameLastChangedAt}
+          onUsernameStatusChange={setUsernameStatus}
           dob={dob}
           setDob={setDob}
           tagline={tagline}
@@ -488,6 +543,22 @@ function ProfileSetup() {
           </div>
         )}
 
+        {/* "Skip for now" — every optional screen (steps 2 and 3) shows
+            this, separate from Back/Next, and it always jumps straight to
+            Home rather than to the next optional step (see handleSkip). Not
+            shown for someone editing an already-complete profile — there's
+            nothing to "skip" for them, they're just editing. */}
+        {setupStep > 1 && !isEditingExisting && (
+          <button
+            type="button"
+            onClick={handleSkip}
+            disabled={loading}
+            className="mt-4 w-full text-center text-[12.5px] font-black text-[var(--imc-text-faint)] underline decoration-dotted underline-offset-4 disabled:opacity-60"
+          >
+            Skip for now
+          </button>
+        )}
+
         <div className="sticky bottom-0 z-20 -mx-2 mt-8 flex gap-2.5 border-t border-[var(--imc-border)] bg-[color:var(--imc-bg)] px-2 pb-[max(16px,env(safe-area-inset-bottom))] pt-3">
           {setupStep > 1 && (
             <button
@@ -504,7 +575,7 @@ function ProfileSetup() {
           <button
             type="button"
             onClick={setupStep === 3 ? handleSave : handleNextStep}
-            disabled={loading}
+            disabled={loading || (setupStep === 1 && !step1Valid)}
             className="flex h-[50px] flex-1 items-center justify-center gap-2 rounded-[16px] border border-[rgba(67,56,202,0.24)] bg-[rgba(67,56,202,0.10)] text-[14px] font-bold text-[var(--imc-indigo-text)] shadow-[0_6px_18px_rgba(67,56,202,0.08)] transition active:scale-[0.98] active:bg-[rgba(67,56,202,0.16)] disabled:opacity-60"
           >
             {loading

@@ -304,3 +304,16 @@ export const emitMessagesUnsent = (conversationId, messageIds = []) => {
     messageIds: messageIds.map(String),
   });
 };
+
+// Reactions previously only updated via the REST response for whoever
+// tapped the emoji — the other participant never found out until their next
+// full refetch of the conversation. This closes that gap so a reaction
+// shows up live on both sides, the way it does on Instagram/WhatsApp.
+export const emitMessageReacted = (conversationId, message) => {
+  if (!io || !conversationId || !message) return;
+  io.to(conversationId.toString()).emit("message_reacted", {
+    conversationId: conversationId.toString(),
+    messageId: message._id?.toString ? message._id.toString() : String(message._id),
+    reactions: message.reactions || [],
+  });
+};

@@ -14,6 +14,7 @@ import {
   getMyPosts,
   getSavedPosts,
   getPostComments,
+  getPostLikers,
 replyPostComment,
 likePostComment,
 deletePostComment,
@@ -65,6 +66,7 @@ router.delete(
   deletePostComment
 );
 router.patch("/:postId/like", protect, postIdValidator, validate, likePost);
+router.get("/:postId/likes", protect, postIdValidator, validate, getPostLikers);
 router.patch("/:postId/repost", protect, postIdValidator, validate, repostPost);
 router.patch("/:postId/share", protect, postIdValidator, validate, sharePost);
 

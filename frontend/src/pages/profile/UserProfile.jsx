@@ -1095,7 +1095,7 @@ function UserProfile() {
                     ? "Requested"
                     : circleStatus === "incoming"
                     ? "Accept Request"
-                    : "+ Circle"}
+                    : "Circle"}
                 </button>
               )}
 
@@ -1438,7 +1438,7 @@ function UserProfile() {
                   ? "Request sent"
                   : circleStatus === "incoming"
                   ? "Accept Request"
-                  : "+ Circle"}
+                  : "Circle"}
               </button>
             </div>
           </div>

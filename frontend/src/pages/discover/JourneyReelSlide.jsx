@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Heart,
   MessageCircle,
+  MessageCirclePlus,
   Repeat2,
   Bookmark,
   Send,
@@ -615,23 +616,26 @@ function JourneyReelSlide({ milestone = {} }) {
         {/* pl-11 = avatar width (h-9 = 36px) + the gap-2 next to it (8px)
             above, so this row's text starts directly under the username
             instead of flush with the screen edge — the two rows read as one
-            aligned block instead of a jagged left edge. */}
-        <div className="mt-1.5 flex min-w-0 items-center gap-2 pl-11">
-          {/* Plain text instead of a filled pill/chip — one less solid
-              background block stacked under the username row keeps this
-              from reading as two duplicate "identity" rows. */}
-          <span className="flex min-w-0 items-center gap-1">
-            <Flame size={12} style={{ color: "#EC9A1E" }} />
-            <span className="truncate text-[12px] font-semibold text-white/90">
-              {finalTitle}
-            </span>
-          </span>
+            aligned block instead of a jagged left edge.
 
-          {/* Follows the journey's own update feed — shown any time the
-              viewer hasn't already followed it, independent of whether they
-              follow the creator's account above. Sized and styled to match
-              the account Follow button above exactly, instead of a slightly
-              smaller icon/shorter height. */}
+            The journey title used to share this row with the Follow
+            Journey button — on a long title ("Weight loss journey-21 days
+            challenge") there wasn't enough room left for the button even
+            with truncate + whitespace-nowrap, so it visibly squashed. Title
+            now gets the row entirely to itself so it can truncate freely
+            with zero pressure from anything sharing the line. */}
+        <div className="mt-1.5 flex min-w-0 items-center gap-1 pl-11">
+          <Flame size={12} className="shrink-0" style={{ color: "#EC9A1E" }} />
+          <span className="min-w-0 truncate text-[12px] font-semibold text-white/90">
+            {finalTitle}
+          </span>
+        </div>
+
+        {/* Action row — Follow Journey and the new Add Thought button live
+            here together, now that the title isn't sharing space with
+            anything. Both are shrink-0 + whitespace-nowrap so neither can
+            ever collapse regardless of label length. */}
+        <div className="mt-2 flex min-w-0 items-center gap-2 pl-11">
           {!isOwnJourney && (
             <button
               onClick={handleFollow}
@@ -642,19 +646,28 @@ function JourneyReelSlide({ milestone = {} }) {
                   : { background: "rgba(0,0,0,0.20)" }
               }
             >
-              {/* whitespace-nowrap (button + this span) plus the title
-                  span above having min-w-0 + truncate is what actually
-                  guarantees this button never collapses — shrink-0 alone
-                  stops the BOX from shrinking, but without whitespace-nowrap
-                  the text inside could still wrap onto a second line and get
-                  clipped by the fixed h-8 height, which is what "the follow
-                  journey button collapsing" was. */}
               <span className="flex items-center gap-1 whitespace-nowrap">
                 {following ? <Check size={11} /> : <UserPlus size={11} />}
                 {following ? "Following" : "Follow Journey"}
               </span>
             </button>
           )}
+
+          {/* Opens the same comment sheet the message-circle rail icon
+              does — a second, more inviting entry point for leaving a
+              reply, worded to match what you're actually doing here
+              ("adding a thought" on someone's journey update) rather than
+              the generic "Reply". */}
+          <button
+            onClick={() => setShowReplies(true)}
+            className="h-8 shrink-0 whitespace-nowrap rounded-full border border-white/35 px-3 text-[10px] font-bold text-white active:scale-95"
+            style={{ background: "rgba(0,0,0,0.20)" }}
+          >
+            <span className="flex items-center gap-1 whitespace-nowrap">
+              <MessageCirclePlus size={12} />
+              Add thought
+            </span>
+          </button>
         </div>
 
         {/* Journey description dropped here — the update caption below

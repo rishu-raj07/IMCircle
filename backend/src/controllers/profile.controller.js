@@ -100,22 +100,18 @@ const isStudentUser = (user) => {
   return String(user.primaryInterest || "").trim().toLowerCase() === "student";
 };
 
-// Location and DOB are intentionally NOT part of this check. Location was
-// made fully optional in Issue 3 (never required to finish onboarding,
-// never blocks 100% profile completion, no validation error when blank).
-// DOB is labeled "(optional)" in BasicInfo.jsx's own form UI, but used to
-// still be required here — meaning a user who trusted that label and left
-// it blank could save successfully but would NEVER pass this check, so
-// ProtectedRoute (frontend) kept redirecting them back to /profile-setup
-// forever with no way out. Removed to actually match the "(optional)"
-// label.
+// basicOnboardingCompleted = fullName + username ONLY. Everything else
+// (gender, primaryInterest, dob, location, tagline, photo) is optional and
+// must never gate access to the app — this is the "3-phase onboarding was
+// causing signup drop-off" fix. gender/primaryInterest used to be required
+// here, which meant a user who only entered their name and username (the
+// new mandatory first screen) could never pass this check and would be
+// stuck bouncing back to /profile-setup forever. Location and DOB were
+// already removed from this check in an earlier fix for the same reason —
+// see the git history on this function for that context.
 const hasRequiredBasics = (user) => {
   return Boolean(
-    user.fullName &&
-      user.fullName !== "BN User" &&
-      user.username &&
-      user.gender &&
-      user.primaryInterest
+    user.fullName && user.fullName !== "BN User" && user.username
   );
 };
 

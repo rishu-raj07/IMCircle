@@ -21,6 +21,9 @@ import {
   updateJourneyCover,
 } from "../../api/journeyApi";
 import { trackEvent } from "../../utils/analyticsTracker";
+import { currentUser } from "../../store/authStore";
+import { canPublishContent } from "../../utils/sessionUser";
+import PublishGateModal from "../../components/common/PublishGateModal";
 
 const dayOptions = [7, 14, 21, 30, 50, 75, 100, 180, 365];
 const MAX_ABOUT = 100;
@@ -44,6 +47,7 @@ function CreateJourney() {
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPublishGate, setShowPublishGate] = useState(false);
   const [error, setError] = useState("");
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraStarting, setCameraStarting] = useState(false);
@@ -265,6 +269,14 @@ function CreateJourney() {
 
     if (!imageFile) {
       setError("Capture a live progress photo to publish your journey.");
+      return;
+    }
+
+    // Publish guard — browsing/following journeys is never blocked, only
+    // actually publishing a new journey requires tagline + interest +
+    // location. See canPublishContent() in utils/sessionUser.js.
+    if (!canPublishContent(currentUser())) {
+      setShowPublishGate(true);
       return;
     }
 
@@ -719,6 +731,11 @@ function CreateJourney() {
       )}
 
       </div>
+
+      <PublishGateModal
+        open={showPublishGate}
+        onClose={() => setShowPublishGate(false)}
+      />
     </div>
   );
 }

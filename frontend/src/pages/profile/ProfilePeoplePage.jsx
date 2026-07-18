@@ -424,7 +424,7 @@ export default function ProfilePeoplePage() {
                   ? "..."
                   : circleGateRequested
                   ? "Request sent"
-                  : "+ Circle"}
+                  : "Circle"}
               </button>
             </div>
           ) : filteredItems.length > 0 ? (

@@ -5,6 +5,7 @@ import DeepLinkListener from "./components/common/DeepLinkListener";
 import SplashIntro from "./components/common/SplashIntro";
 import PushNotificationListener from "./components/common/PushNotificationListener";
 import VersionUpdateBanner from "./components/common/VersionUpdateBanner";
+import AppUpdateModal from "./components/common/AppUpdateModal";
 
 function App() {
   return (
@@ -14,6 +15,9 @@ function App() {
           app is already ready the moment the intro fades out. */}
       <SplashIntro />
       <VersionUpdateBanner />
+      {/* Native-only counterpart to VersionUpdateBanner above — see
+          AppUpdateModal.jsx / useNativeUpdateCheck.js. */}
+      <AppUpdateModal />
       <PermissionBootstrap />
       <DeepLinkListener />
       <PushNotificationListener />

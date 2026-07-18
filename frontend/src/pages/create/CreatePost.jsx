@@ -18,6 +18,8 @@ import { currentUser } from "../../store/authStore";
 import { trackEvent } from "../../utils/analyticsTracker";
 import MentionSuggestions from "../../components/common/MentionSuggestions";
 import HashtagSuggestions from "../../components/common/HashtagSuggestions";
+import PublishGateModal from "../../components/common/PublishGateModal";
+import { canPublishContent } from "../../utils/sessionUser";
 import { getGenderAvatarIcon } from "../../utils/avatar";
 import {
   setStoredPermissionState,
@@ -66,6 +68,7 @@ function CreatePost() {
   const [post, setPost] = useState("");
   const [mediaFiles, setMediaFiles] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [showPublishGate, setShowPublishGate] = useState(false);
   const [avatarBroken, setAvatarBroken] = useState(false);
   const [purpose, setPurpose] = useState("general");
   const [visibilityOpen, setVisibilityOpen] = useState(false);
@@ -265,6 +268,14 @@ function CreatePost() {
 
     if (cleanPost.length > MAX_TEXT) {
       alert("Post cannot be more than 1500 characters.");
+      return;
+    }
+
+    // Publish guard — browsing/liking/replying/following are never blocked,
+    // only actually publishing new content requires tagline + interest +
+    // location. See canPublishContent() in utils/sessionUser.js.
+    if (!canPublishContent(currentUser())) {
+      setShowPublishGate(true);
       return;
     }
 
@@ -544,6 +555,11 @@ function CreatePost() {
         </div>
       ) : null}
       </div>
+
+      <PublishGateModal
+        open={showPublishGate}
+        onClose={() => setShowPublishGate(false)}
+      />
     </div>
   );
 }

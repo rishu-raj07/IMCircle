@@ -7,6 +7,7 @@ import JourneyMilestoneLike from "../models/JourneyMilestoneLike.js";
 import JourneyMilestoneComment from "../models/JourneyMilestoneComment.js";
 import JourneyMilestoneRepost from "../models/JourneyMilestoneRepost.js";
 import JourneyMilestoneSave from "../models/JourneyMilestoneSave.js";
+import CircleRequest from "../models/CircleRequest.js";
 import cloudinary from "../config/cloudinary.js";
 import { addBuilderScore } from "../services/builderScore.service.js";
 import { sendMail } from "../utils/mailer.js";
@@ -1588,6 +1589,63 @@ export const commentMilestone = async (req, res) => {
     });
   } catch (error) {
     console.error("Comment milestone error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+// Full likers list for a milestone, one circle member sorted first — powers
+// the "Liked by [circle member] +N more" row on the journey card (see
+// JourneyCard.jsx) and the page it opens into. Each person is annotated
+// with the viewer's actual relationship to them so the frontend can render
+// "Message" for an existing circle member or "+Circle" for anyone else,
+// without a second round-trip per row.
+export const getMilestoneLikers = async (req, res) => {
+  try {
+    const viewerId = req.user._id;
+    const myCircleIds = new Set((req.user.circle || []).map((id) => id.toString()));
+
+    const likes = await JourneyMilestoneLike.find({ milestone: req.params.milestoneId })
+      .populate("user", userFields)
+      .sort({ createdAt: -1 });
+
+    const likers = likes.map((like) => like.user).filter(Boolean);
+    const likerIds = likers.map((user) => user._id.toString());
+
+    // Only need the viewer's OWN outgoing pending requests — a liker who
+    // isn't in myCircleIds but has a pending request from me should show
+    // "Requested", not "+Circle" again.
+    const pendingRequests = await CircleRequest.find({
+      sender: viewerId,
+      receiver: { $in: likerIds },
+      status: "pending",
+    }).select("receiver");
+    const pendingSet = new Set(pendingRequests.map((item) => item.receiver.toString()));
+
+    const annotated = likers.map((user) => {
+      const id = user._id.toString();
+      return {
+        ...user.toObject(),
+        isInCircle: myCircleIds.has(id),
+        isRequested: pendingSet.has(id),
+      };
+    });
+
+    // Circle members first — the whole point of this list is "who I know
+    // liked this," so a stranger at the top (even if they liked it first)
+    // buries the more relevant signal.
+    annotated.sort((a, b) => Number(b.isInCircle) - Number(a.isInCircle));
+
+    return res.status(200).json({
+      success: true,
+      count: annotated.length,
+      likers: annotated,
+    });
+  } catch (error) {
+    console.error("Get milestone likers error:", error);
 
     return res.status(500).json({
       success: false,
