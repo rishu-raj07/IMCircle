@@ -198,7 +198,20 @@ function MessageStatus({ status }) {
   );
 }
 
-const MESSAGE_REACTIONS = ["❤️", "😂", "😮", "😢", "👍"];
+const MESSAGE_REACTIONS = ["❤️", "😂", "😮", "😢", "😠", "👍", "💡", "👏"];
+
+// Curated fallback grid shown behind the "+" button — a broad-but-compact
+// set of common reactions so tapping any one of them reacts instantly,
+// without pulling in a full emoji-picker dependency. The text input below
+// the grid (wired to the OS's own emoji keyboard) stays as a secondary way
+// to react with something outside this set.
+const EMOJI_GRID = [
+  "❤️", "😂", "😮", "😢", "😠", "👍", "💡", "👏",
+  "🔥", "🎉", "😍", "🙏", "😅", "🤔", "👎", "💯",
+  "😎", "🥳", "😭", "🤝", "👀", "✨", "💪", "🙌",
+  "😁", "😊", "😘", "🥰", "😜", "🤣", "👋", "🤗",
+  "😴", "😇", "💔", "🎯", "🚀", "⭐", "🫡", "😳",
+];
 
 function SmallAvatar({ user }) {
   const avatar = getAvatarUrl(user);
@@ -324,6 +337,31 @@ function Chat() {
     wasOtherOnlineRef.current = isOtherOnline;
   }, [isOtherOnline, otherUserId]);
 
+  // Self-heal for the "always shows Decrypting…" case: if this chat loaded
+  // with no E2EE public key on file for the other participant (so their
+  // messages can never be decrypted on this device — see the decrypt
+  // effect above), and they then come online, silently re-fetch the
+  // conversation once. E2EEKeyInitializer uploads a key pair the instant
+  // their app/tab launches, so this catches the common cause — they were
+  // simply on an older cached build without the key uploaded yet — without
+  // making the user leave and reopen the chat.
+  const keyRecoveryAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (!isOtherOnline || !otherUserId) return;
+    if (otherUser?.publicKey) return;
+    if (keyRecoveryAttemptedRef.current) return;
+
+    keyRecoveryAttemptedRef.current = true;
+
+    getMessages(conversationId)
+      .then((res) => {
+        if (res?.conversation) setConversation(res.conversation);
+      })
+      .catch(() => {
+        keyRecoveryAttemptedRef.current = false;
+      });
+  }, [isOtherOnline, otherUserId, otherUser?.publicKey, conversationId]);
+
   const isSelecting = selectedMessageIds.length > 0;
   const canUnsendSelected = selectedMessageIds.length > 0 && selectedMessageIds.every((id) => {
     const message = messages.find((item) => item._id === id);
@@ -342,8 +380,6 @@ function Chat() {
   // other person hasn't published a public key), in which case those
   // bubbles just show "Couldn't decrypt this message" via the render below.
   useEffect(() => {
-    if (!otherUser?.publicKey) return;
-
     const pending = [];
     const seen = new Set();
 
@@ -361,6 +397,22 @@ function Chat() {
     });
 
     if (pending.length === 0) return;
+
+    // No public key on file for the other participant at all — this isn't
+    // a "still loading" state, it's permanent until they open the app
+    // again and re-upload one (see E2EEKeyInitializer.jsx), so resolve
+    // these straight to the "unavailable" state instead of leaving them
+    // stuck on an infinite "Decrypting…" spinner (previously they'd never
+    // get an entry in decryptedMap at all, since this effect used to bail
+    // out early here without touching the map).
+    if (!otherUser?.publicKey) {
+      const updates = {};
+      pending.forEach((item) => {
+        updates[item._id] = "";
+      });
+      setDecryptedMap((prev) => ({ ...prev, ...updates }));
+      return;
+    }
 
     let cancelled = false;
 
@@ -679,18 +731,19 @@ function Chat() {
     setText("");
   };
 
-  // Encrypts `plaintext` for the other participant if this device and the
-  // conversation support it, otherwise returns null so the caller falls
-  // back to plain text — see utils/encryption.js. Never throws.
-  const tryEncrypt = async (plaintext) => {
-    if (!isEncryptionSupported() || !otherUser?.publicKey) return null;
-
-    try {
-      return await encryptForRecipient(otherUser.publicKey, plaintext);
-    } catch {
-      return null;
-    }
-  };
+  // E2EE for new outgoing messages is turned off (by product decision —
+  // encrypted messages depended on both devices having a matching key on
+  // file, and any mismatch/reset/never-uploaded-key permanently showed as
+  // undecryptable, which was worse than just sending plain text like a
+  // normal chat). This always returns null now so every send/edit below
+  // goes down the plain `text` path and shows instantly on the other
+  // side — no waiting on keys, no "Not available on this device".
+  //
+  // The decrypt side (utils/encryption.js, the decrypt effect above, and
+  // Inbox.jsx's preview decryption) is intentionally left in place so
+  // messages that were already encrypted under the old flow keep working
+  // exactly as before — this only stops NEW messages from being encrypted.
+  const tryEncrypt = async () => null;
 
   const handleSaveEdit = async () => {
     const cleanText = text.trim();
@@ -1242,10 +1295,10 @@ function Chat() {
                   <Lock size={24} strokeWidth={1.8} />
                 </div>
                 <h2 className="mt-4 text-[15px] font-black text-[var(--imc-text)]">
-                  Messages are end-to-end encrypted
+                  Your messages are private
                 </h2>
                 <p className="mt-1 text-[12px] font-semibold text-[var(--imc-text-muted)]">
-                  No one outside this chat — not even IMCircle — can read them. Say hi to {getName(otherUser)} to get started.
+                  Say hi to {getName(otherUser)} to get started.
                 </p>
               </div>
             </div>
@@ -1532,14 +1585,14 @@ function Chat() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.85, y: -6 }}
               transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-              className="absolute left-1/2 top-[88px] z-40 flex -translate-x-1/2 items-center gap-1 rounded-full border border-[var(--imc-border)] bg-[var(--imc-surface)] px-2 py-1.5 shadow-2xl"
+              className="no-scrollbar absolute left-1/2 top-[88px] z-40 flex max-w-[calc(100%-32px)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-full border border-[var(--imc-border)] bg-[var(--imc-surface)] px-2 py-1.5 shadow-2xl"
             >
               {MESSAGE_REACTIONS.map((reaction) => (
                 <motion.button
                   key={reaction}
                   onClick={() => handleReact(reaction)}
                   whileTap={{ scale: 0.8 }}
-                  className="grid h-10 w-10 place-items-center rounded-full text-[20px]"
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-[20px]"
                 >
                   {reaction}
                 </motion.button>
@@ -1555,7 +1608,7 @@ function Chat() {
                       setReactionTarget(null);
                     }}
                     aria-label="Edit message"
-                    className="grid h-10 w-10 place-items-center rounded-full text-[var(--imc-text-muted)]"
+                    className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-[var(--imc-text-muted)]"
                   >
                     <Pencil size={17} />
                   </motion.button>
@@ -1563,12 +1616,9 @@ function Chat() {
               <motion.button
                 type="button"
                 whileTap={{ scale: 0.8 }}
-                onClick={() => {
-                  setShowEmojiPicker(true);
-                  window.setTimeout(() => emojiInputRef.current?.focus(), 40);
-                }}
-                aria-label="Choose another emoji"
-                className="grid h-10 w-10 place-items-center rounded-full border text-[var(--imc-indigo-text)]"
+                onClick={() => setShowEmojiPicker(true)}
+                aria-label="More reactions"
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-full border text-[var(--imc-indigo-text)]"
                 style={{ background: "var(--imc-action-soft)", borderColor: "var(--imc-action-border)" }}
               >
                 <Plus size={17} strokeWidth={2.5} />
@@ -1581,6 +1631,7 @@ function Chat() {
           {reactionTarget && showEmojiPicker && (
             <motion.div
               key="emoji-picker"
+              onClick={(e) => e.stopPropagation()}
               initial={{ opacity: 0, scale: 0.92, y: -6 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.92, y: -6 }}
@@ -1588,31 +1639,45 @@ function Chat() {
               className="absolute left-1/2 top-[146px] z-50 w-[300px] max-w-[calc(100%-32px)] -translate-x-1/2 rounded-[18px] border p-3 shadow-2xl"
               style={{ background: "var(--imc-surface)", borderColor: "var(--imc-border)" }}
             >
-              <p className="mb-2 text-[10px] font-bold text-[var(--imc-text-muted)]">Open your emoji keyboard and choose any emoji</p>
-              <div className="flex gap-2">
+              {/* Tap any icon to react instantly — this is the "keyboard icon
+                  list" itself, not a preview. The text field below is only a
+                  fallback for reacting with something outside this set. */}
+              <div className="grid max-h-[176px] grid-cols-8 gap-0.5 overflow-y-auto">
+                {EMOJI_GRID.map((emoji, index) => (
+                  <motion.button
+                    key={`${emoji}-${index}`}
+                    type="button"
+                    whileTap={{ scale: 0.8 }}
+                    onClick={() => handleReact(emoji)}
+                    className="grid h-8 w-8 place-items-center rounded-lg text-[18px]"
+                  >
+                    {emoji}
+                  </motion.button>
+                ))}
+              </div>
+              <div className="mt-2 flex gap-2 border-t pt-2" style={{ borderColor: "var(--imc-border)" }}>
                 <input
                   ref={emojiInputRef}
                   value={customReaction}
-                  onChange={(event) => setCustomReaction(event.target.value.slice(0, 16))}
+                  onChange={(event) => {
+                    const next = event.target.value.slice(0, 16);
+                    setCustomReaction(next);
+                    // The OS emoji keyboard inserts the character the
+                    // instant it's tapped — react immediately on that
+                    // input, same as tapping a grid icon above, instead of
+                    // waiting for a separate confirm tap.
+                    if (next.trim()) handleReact(next.trim());
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && customReaction.trim()) handleReact(customReaction.trim());
                   }}
                   inputMode="text"
                   enterKeyHint="done"
                   maxLength={16}
-                  placeholder="😀"
-                  className="h-11 min-w-0 flex-1 rounded-[14px] border bg-[var(--imc-surface-2)] px-3 text-center text-[22px] outline-none"
+                  placeholder="Or type any emoji…"
+                  className="h-10 min-w-0 flex-1 rounded-[14px] border bg-[var(--imc-surface-2)] px-3 text-center text-[18px] outline-none"
                   style={{ borderColor: "var(--imc-border)", color: "var(--imc-text)" }}
                 />
-                <button
-                  type="button"
-                  disabled={!customReaction.trim()}
-                  onClick={() => handleReact(customReaction.trim())}
-                  className="h-11 rounded-[14px] px-4 text-[11px] font-black disabled:opacity-40"
-                  style={{ background: "var(--imc-action-soft)", color: "var(--imc-indigo-text)", border: "1px solid var(--imc-action-border)" }}
-                >
-                  React
-                </button>
               </div>
             </motion.div>
           )}

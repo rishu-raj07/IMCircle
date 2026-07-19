@@ -14,6 +14,7 @@ import CircleAction from "../common/CircleAction";
 import ProfileCompleteBadge from "../badges/ProfileCompleteBadge";
 import RichText from "../common/RichText";
 import LinkPreviewCard from "../common/LinkPreviewCard";
+import { votePostPoll, getPostPollVoters } from "../../api/postApi";
 import { trackEvent } from "../../utils/analyticsTracker";
 import { formatRelativeTime } from "../../utils/relativeTime";
 import { getGenderAvatarIcon } from "../../utils/avatar";
@@ -407,6 +408,10 @@ function PostCard({ post = {}, type = "post", currentUser = null }) {
             )}
 
             <LinkPreviewCard text={content} />
+
+            {post.poll?.options?.length > 0 && (
+              <PostPoll post={post} currentUserId={currentUserId} isOwner={isMe} />
+            )}
           </div>
         </div>
 
@@ -463,6 +468,167 @@ function PostCard({ post = {}, type = "post", currentUser = null }) {
         title={type === "learning" ? "Learning Impressions" : "Post Impressions"}
       />
     </>
+  );
+}
+
+function PostPoll({ post, currentUserId, isOwner }) {
+  const poll = post?.poll;
+  const postId = getId(post);
+
+  const initialCounts = (poll?.options || []).map((o) => o.votes?.length || 0);
+  const initialMyVote = (poll?.options || []).findIndex((o) =>
+    (o.votes || []).some((v) => getId(v) === currentUserId)
+  );
+
+  const [counts, setCounts] = useState(initialCounts);
+  const [myVoteIndex, setMyVoteIndex] = useState(
+    initialMyVote === -1 ? null : initialMyVote
+  );
+  const [voting, setVoting] = useState(false);
+  const [voterAvatars, setVoterAvatars] = useState({});
+
+  const hasVoted = myVoteIndex !== null;
+  const showResults = isOwner || hasVoted;
+  const totalVotes = counts.reduce((sum, n) => sum + n, 0);
+
+  useEffect(() => {
+    if (!showResults || !poll?.options?.length) return;
+    let cancelled = false;
+
+    poll.options.forEach((_, index) => {
+      getPostPollVoters(postId, index)
+        .then((res) => {
+          if (!cancelled) {
+            setVoterAvatars((prev) => ({ ...prev, [index]: res?.voters || [] }));
+          }
+        })
+        .catch(() => {});
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showResults, postId]);
+
+  if (!poll?.options?.length) return null;
+
+  const handleVote = async (index) => {
+    if (voting) return;
+    setVoting(true);
+
+    const prevCounts = counts;
+    const prevMyVote = myVoteIndex;
+    const isUnvote = prevMyVote === index;
+
+    const next = [...counts];
+    if (prevMyVote !== null) next[prevMyVote] = Math.max(0, next[prevMyVote] - 1);
+    if (!isUnvote) next[index] += 1;
+    setCounts(next);
+    setMyVoteIndex(isUnvote ? null : index);
+
+    try {
+      const res = await votePostPoll(postId, index);
+      if (res?.poll?.options) {
+        setCounts(res.poll.options.map((o) => o.votesCount));
+      }
+      setMyVoteIndex(res?.myVoteIndex ?? null);
+    } catch {
+      setCounts(prevCounts);
+      setMyVoteIndex(prevMyVote);
+    } finally {
+      setVoting(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 space-y-2">
+      {poll.options.map((option, index) => {
+        const count = counts[index] || 0;
+        const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+        const isMine = myVoteIndex === index;
+        const avatars = (voterAvatars[index] || []).slice(0, 4);
+
+        return (
+          <button
+            key={index}
+            type="button"
+            disabled={voting}
+            onClick={() => handleVote(index)}
+            className="relative w-full overflow-hidden rounded-[14px] text-left disabled:opacity-70"
+            style={{
+              border: `1px solid ${isMine ? "#4338CA" : "var(--imc-border)"}`,
+            }}
+          >
+            {showResults && (
+              <div
+                className="absolute inset-y-0 left-0 transition-all"
+                style={{
+                  width: `${pct}%`,
+                  background: isMine
+                    ? "var(--imc-indigo-soft)"
+                    : "var(--imc-surface-2)",
+                }}
+              />
+            )}
+            <div className="relative flex items-center justify-between gap-2 px-3.5 py-2.5">
+              <span
+                className="text-[13px] font-bold"
+                style={{ color: "var(--imc-text)" }}
+              >
+                {option.text}
+              </span>
+              {showResults && (
+                <span
+                  className="shrink-0 text-[12px] font-black"
+                  style={{ color: "var(--imc-text-muted)" }}
+                >
+                  {pct}%
+                </span>
+              )}
+            </div>
+            {showResults && avatars.length > 0 && (
+              <div className="relative flex items-center gap-1 px-3.5 pb-2">
+                <div className="flex -space-x-1.5">
+                  {avatars.map((voter) => (
+                    <img
+                      key={getId(voter)}
+                      src={
+                        getImageUrl(
+                          voter?.avatar ||
+                            voter?.profileImage ||
+                            voter?.profilePicture ||
+                            voter?.photo ||
+                            voter?.picture
+                        ) || getGenderAvatarIcon(voter)
+                      }
+                      alt=""
+                      className="h-5 w-5 rounded-full ring-2"
+                      style={{ "--tw-ring-color": "var(--imc-surface)" }}
+                    />
+                  ))}
+                </div>
+                <span
+                  className="text-[10.5px] font-bold"
+                  style={{ color: "var(--imc-text-muted)" }}
+                >
+                  {count} vote{count === 1 ? "" : "s"}
+                </span>
+              </div>
+            )}
+          </button>
+        );
+      })}
+
+      {showResults && (
+        <p
+          className="text-[11px] font-semibold"
+          style={{ color: "var(--imc-text-faint)" }}
+        >
+          {totalVotes} vote{totalVotes === 1 ? "" : "s"} total
+        </p>
+      )}
+    </div>
   );
 }
 

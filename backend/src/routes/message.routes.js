@@ -36,12 +36,15 @@ router.patch("/:conversationId/unblock", protect, unblockConversation);
 
 router.delete("/:conversationId", protect, deleteConversationForMe);
 
-router.patch("/message/:messageId/reaction", protect, reactToMessage);
+// Same messageLimiter budget as sending — edit/react/delete are just as
+// easy to script-flood as sending itself, and were previously the only
+// message mutations with no rate limit at all.
+router.patch("/message/:messageId/reaction", protect, messageLimiter, reactToMessage);
 
-router.patch("/message/:messageId", protect, editMessage);
+router.patch("/message/:messageId", protect, messageLimiter, editMessage);
 
-router.delete("/messages/bulk", protect, deleteMessages);
+router.delete("/messages/bulk", protect, messageLimiter, deleteMessages);
 
-router.delete("/message/:messageId", protect, deleteMessage);
+router.delete("/message/:messageId", protect, messageLimiter, deleteMessage);
 
 export default router;
