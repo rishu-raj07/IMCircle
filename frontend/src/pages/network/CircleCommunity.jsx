@@ -49,10 +49,7 @@ import { getMyCircleList } from "../../api/connectionApi";
 import api from "../../api/axios";
 import { getGenderAvatarIcon } from "../../utils/avatar";
 import { getCommunityCoverIcon } from "../../utils/media";
-import {
-  setStoredPermissionState,
-  shouldAttemptPermission,
-} from "../../utils/permissions";
+import { setStoredPermissionState } from "../../utils/permissions";
 import VoiceMessagePlayer from "../../components/common/VoiceMessagePlayer";
 import RichText from "../../components/common/RichText";
 import LinkPreviewCard from "../../components/common/LinkPreviewCard";
@@ -603,17 +600,10 @@ function CircleCommunity() {
       return;
     }
 
-    // Respect an already-known denial instead of calling getUserMedia again
-    // on every tap — same guard Chat.jsx's mic button uses.
-    const canAttempt = await shouldAttemptPermission("microphone");
-
-    if (!canAttempt) {
-      alert(
-        "Microphone access is turned off for IMCircle. Enable it in your device settings to record voice notes."
-      );
-      return;
-    }
-
+    // Always attempt getUserMedia live rather than gating on a cached
+    // "denied" flag — see the matching comment in Chat.jsx's toggleRecording
+    // for why the stale-cache gate is what caused "still errors even after
+    // granting permission" on Android WebView.
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       setStoredPermissionState("microphone", "granted");
@@ -647,7 +637,9 @@ function CircleCommunity() {
       setRecording(true);
     } catch (recordError) {
       setStoredPermissionState("microphone", "denied");
-      alert("Microphone permission is needed to record voice notes.");
+      alert(
+        "Microphone permission is needed to record voice notes. If you already enabled it in your device Settings, fully close and reopen IMCircle — Android WebView sometimes needs a fresh app launch to pick up a newly granted permission."
+      );
     }
   };
 

@@ -355,7 +355,7 @@ export default function ProfilePeoplePage() {
   return (
     <div className="flex min-h-screen justify-center bg-[var(--imc-surface)]">
       <div className="relative min-h-screen w-full max-w-[430px] bg-[var(--imc-surface)] pb-24">
-        <header className="border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-5 pb-4 pt-5">
+        <header className="border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-5 pb-4 pt-2">
           <div className="flex items-center justify-between">
             <button
               type="button"

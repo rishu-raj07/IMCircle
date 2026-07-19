@@ -231,7 +231,7 @@ function Inbox() {
             // effect above (which reacts to this same conversations state
             // update) — this is just the placeholder shown until then.
             lastMessage: message.isEncrypted
-              ? "🔒 Message"
+              ? "New message"
               : message.text ||
                 (message.attachments?.some((item) => item.type === "audio")
                   ? "Voice message"
@@ -340,7 +340,7 @@ function Inbox() {
   return (
     <div className="min-h-screen bg-[var(--imc-bg)] flex justify-center">
       <div className="relative min-h-screen w-full max-w-[430px] bg-[var(--imc-surface)]">
-        <div className="border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 py-4">
+        <div className="border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 pb-4 pt-2">
           <div className="flex items-center justify-between">
             <button
               onClick={() => navigate(-1)}

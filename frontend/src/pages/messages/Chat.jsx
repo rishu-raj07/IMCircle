@@ -35,10 +35,7 @@ import { socket } from "../../socket/socket";
 import { getSessionUser } from "../../utils/sessionUser";
 import { getGenderAvatarIcon } from "../../utils/avatar";
 import { trackEvent } from "../../utils/analyticsTracker";
-import {
-  setStoredPermissionState,
-  shouldAttemptPermission,
-} from "../../utils/permissions";
+import { setStoredPermissionState } from "../../utils/permissions";
 import ImageLoader from "../../components/common/ImageLoader";
 import VoiceMessagePlayer from "../../components/common/VoiceMessagePlayer";
 import RichText from "../../components/common/RichText";
@@ -1048,18 +1045,17 @@ function Chat() {
       return;
     }
 
-    // Respect an already-known denial instead of calling getUserMedia again
-    // on every tap of the mic button — repeatedly calling it after a real
-    // denial is what used to surface a fresh permission prompt each time.
-    const canAttempt = await shouldAttemptPermission("microphone");
-
-    if (!canAttempt) {
-      alert(
-        "Microphone access is turned off for IMCircle. Enable it in your device settings to record voice notes."
-      );
-      return;
-    }
-
+    // Always attempt getUserMedia live instead of gating on a cached
+    // "denied" flag — the previous version skipped straight to the "enable
+    // it in settings" alert whenever permissions.js's stored state said
+    // "denied", even after the user had since granted the OS-level
+    // permission. On Android WebView, the live navigator.permissions.query
+    // read for 'microphone' is unreliable (unsupported/stale on some
+    // WebView versions), so trusting it — or a local cache that can only
+    // get more stale over time — over just trying the real API is what
+    // caused "still shows the error even after granting permission". A
+    // real getUserMedia() call is cheap and is the only source of truth
+    // that can't be wrong.
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       setStoredPermissionState("microphone", "granted");
@@ -1093,7 +1089,9 @@ function Chat() {
       setRecording(true);
     } catch (error) {
       setStoredPermissionState("microphone", "denied");
-      alert("Microphone permission is needed to record voice notes.");
+      alert(
+        "Microphone permission is needed to record voice notes. If you already enabled it in your device Settings, fully close and reopen IMCircle — Android WebView sometimes needs a fresh app launch to pick up a newly granted permission."
+      );
     }
   };
     return (

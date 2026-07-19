@@ -27,3 +27,8 @@
 .idea
 .DS_Store
 *.swp
+
+# Stray temp files a FUSE/GVFS-backed file sync leaves behind mid-save —
+# not real source, safe to ignore. (Cleaned out of history 2026-07-19 after
+# `git add -A` accidentally committed 51 of them.)
+.fuse_hidden*

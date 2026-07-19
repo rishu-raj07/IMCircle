@@ -1518,20 +1518,6 @@ function Home() {
 function JourneyUpdatePrompt({ journeys, onUpdate }) {
   return (
     <section className="px-3 pb-2">
-      <div className="mb-2 flex items-end justify-between px-1">
-        <div>
-          <p className="text-[12px] font-black" style={{ color: "var(--imc-text)" }}>
-            Continue your journeys
-          </p>
-          <p className="text-[9.5px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>
-            Share today&apos;s progress for each active journey
-          </p>
-        </div>
-        <span className="rounded-full px-2 py-1 text-[9px] font-black" style={{ background: "var(--imc-action-soft)", color: "var(--imc-indigo-text)" }}>
-          {journeys.length} due
-        </span>
-      </div>
-
       <div className="no-scrollbar flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1">
         {journeys.map((journey) => {
           const id = journey?._id || journey?.id;

@@ -442,8 +442,13 @@ export const sendMessage = async (req, res) => {
     // getConversations, which already returns the full latestMessage doc);
     // this string is just a safe fallback for anything that reads
     // conversation.lastMessage directly without decrypting.
+    // Deliberately no lock emoji here — a raw "🔒 Message" reads as scary/
+    // broken to users who don't know why. This is only what shows while (or
+    // if) the frontend's own client-side decrypt (see Inbox.jsx) hasn't
+    // resolved yet or genuinely can't for this device — same neutral
+    // wording as Chat.jsx's "Not available on this device" bubble state.
     const preview = hasValidEncryptedContent
-      ? "🔒 Message"
+      ? "New message"
       : getPreviewText(text, formattedAttachments);
 
     conversation.lastMessage = preview;
