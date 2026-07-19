@@ -33,6 +33,6 @@ cat <<'EOF'
 3. Release notes: summarize this session's changes for end users, e.g.
    "Improved notifications, fixed profile location requirement, bug fixes."
 4. Save -> Review release -> Start rollout.
-5. Confirm the versionCode (15) is higher than whatever's currently live —
+5. Confirm the versionCode (22) is higher than whatever's currently live —
    Play Console will reject an upload with a versionCode already used.
 EOF
