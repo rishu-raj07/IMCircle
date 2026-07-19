@@ -151,7 +151,7 @@ function SocialActionBar({
           <p className="text-left text-[12px] font-medium" style={{ color: "var(--imc-text-muted)" }}>
             Liked by{" "}
             <span className="font-bold" style={{ color: "var(--imc-text)" }}>
-              {likeProof?.primaryUser?.fullName || "someone"}
+              {likeProof?.primaryUser?.fullName || (liked ? "me" : "someone")}
             </span>
             {likeProof?.othersCount > 0 ? (
               <>
