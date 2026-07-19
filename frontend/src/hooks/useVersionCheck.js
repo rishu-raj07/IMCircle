@@ -65,6 +65,20 @@ export function useVersionCheck() {
     // enough since there's no cache layer to invalidate first.
     if (typeof window.__imcUpdateServiceWorker === "function") {
       window.__imcUpdateServiceWorker();
+
+      // Safety net: `updateAvailable` can also flip true purely from the
+      // version-poll path (backend reports a newer version than this
+      // bundle's baked-in __APP_VERSION__) even when there's no actual new
+      // service worker waiting to activate yet — e.g. the backend deployed
+      // fine but a frontend build failed partway through and never
+      // published new static assets/sw.js. In that case updateSW(true) has
+      // nothing to do and silently no-ops, leaving the button looking
+      // broken ("I clicked Update and nothing happened"). If the page
+      // hasn't already navigated away from a real SW activation within a
+      // couple seconds, force a hard reload so this always gets the user
+      // unstuck one way or another instead of leaving them stranded on a
+      // stale bundle with a dead button.
+      window.setTimeout(() => window.location.reload(), 2500);
     } else {
       window.location.reload();
     }
