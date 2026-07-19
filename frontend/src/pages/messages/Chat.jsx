@@ -523,21 +523,30 @@ function Chat() {
   useEffect(() => {
     if (!currentUserId || !conversationId) return;
 
+    // Rejoin this conversation's room on every (re)connect, not just once
+    // at mount. A reconnect — mobile app backgrounded then foregrounded,
+    // a wifi blip, an idle websocket getting dropped by a proxy — gets a
+    // brand-new socket.id server-side, which starts in NO rooms at all.
+    // The room this tab joined earlier is gone, so `receive_message` (and
+    // every other event scoped to this conversation) silently stops
+    // arriving here, even though the chat still looks "connected". This
+    // was the actual cause of "I don't get live messages, I have to leave
+    // the chat and come back" — leaving and reopening just force-remounts
+    // this effect, which happens to re-join the room too. Listening for
+    // "connect" directly closes that gap instead of relying on a remount.
+    const joinRoom = () => {
+      socket.emit("user_online", currentUserId);
+      socket.emit("join_chat", conversationId);
+      socket.emit("get_online_users");
+    };
+
     socket.connect();
-    socket.emit("user_online", currentUserId);
-    socket.emit("join_chat", conversationId);
+    joinRoom();
+    socket.on("connect", joinRoom);
 
     socket.on("online_users", (users) => {
       setOnlineUsers(users || []);
     });
-
-    // See the matching comment in backend/src/socket/socket.js — without
-    // this, a socket that was already connected before this page mounted
-    // (the normal case, since it stays connected across navigation) never
-    // gets told who's currently online, and this chat shows "Offline" for
-    // someone who's actually online until an unrelated connect/disconnect
-    // happens to occur elsewhere in the app.
-    socket.emit("get_online_users");
 
     socket.on("receive_message", (message) => {
       if (message.conversation !== conversationId) return;
@@ -674,6 +683,7 @@ function Chat() {
 
     return () => {
       socket.emit("leave_chat", conversationId);
+      socket.off("connect", joinRoom);
       socket.off("online_users");
       socket.off("receive_message");
       socket.off("message_delivered_update");

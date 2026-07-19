@@ -53,6 +53,7 @@ import { setStoredPermissionState } from "../../utils/permissions";
 import VoiceMessagePlayer from "../../components/common/VoiceMessagePlayer";
 import RichText from "../../components/common/RichText";
 import LinkPreviewCard from "../../components/common/LinkPreviewCard";
+import MediaLightbox from "../../components/common/MediaLightbox";
 
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "😢"];
 
@@ -1804,6 +1805,7 @@ function PostBubble({ post, viewerId, canModerate, onReply, onReact, onDelete, o
   const [isEditing, setIsEditing] = useState(false);
   const [editDraft, setEditDraft] = useState(post?.content || "");
   const [savingEdit, setSavingEdit] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   const bubbleRef = useRef(null);
   const pressTimer = useRef(null);
@@ -2029,12 +2031,22 @@ function PostBubble({ post, viewerId, canModerate, onReply, onReact, onDelete, o
           )}
 
           {hasImage && (
-            <img
-              src={getImageUrl(post.image)}
-              alt="Shared"
-              draggable={false}
-              className="mt-2 max-h-[220px] w-full select-none rounded-[14px] object-cover"
-            />
+            <button
+              type="button"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                setLightboxOpen(true);
+              }}
+              className="mt-2 block w-full active:scale-[0.99] transition-transform"
+            >
+              <img
+                src={getImageUrl(post.image)}
+                alt="Shared"
+                draggable={false}
+                className="max-h-[220px] w-full select-none rounded-[14px] object-cover"
+              />
+            </button>
           )}
 
           {hasAudio && (
@@ -2146,6 +2158,13 @@ function PostBubble({ post, viewerId, canModerate, onReply, onReact, onDelete, o
           </div>
         )}
       </div>
+
+      {lightboxOpen && hasImage && (
+        <MediaLightbox
+          media={[{ url: getImageUrl(post.image), type: "image" }]}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
     </motion.div>
   );
 }

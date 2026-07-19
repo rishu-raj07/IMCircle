@@ -107,25 +107,19 @@ export function hasDiscoverabilityBasics(user) {
   );
 }
 
-// The publish-gate check — tagline (headline) + interest + location, all
-// three required before a person can publish content. Adapted to the real
-// User schema: `primaryInterest` (single string) stands in for the spec's
-// "at least one interest" since there is no separate `interests` array.
+// The publish-gate check. Used to also require tagline + interest +
+// location before letting anyone post — that turned out to be the actual
+// cause of a real bug report ("some users can't post"): location search
+// was broken (India-only, fixed separately), so anyone it failed for was
+// silently blocked from posting at all with no clear error, just a modal
+// asking them to fill in a field they couldn't fill in. Narrowed to just
+// requiring a username, which every account already has from signup (see
+// [[hasDiscoverabilityBasics]] just above for the profile-completeness
+// check other features still use — this one only gates publishing).
 // Browsing, liking, replying, following, circle requests, search, and
 // messages are NEVER gated by this — only publishing new content (posts,
 // journey updates, learning posts, reposts with thoughts). See
 // [[canPublishContent]] usage in CreatePost/CreateJourney/CreateLearning.
 export function canPublishContent(profile) {
-  const location = profile?.location;
-  const hasLocation = Boolean(
-    location?.city ||
-      location?.name ||
-      (typeof location === "string" && location.trim())
-  );
-
-  return Boolean(
-    (profile?.tagline?.trim() || profile?.headline?.trim()) &&
-      profile?.primaryInterest?.trim() &&
-      hasLocation
-  );
+  return Boolean(profile?.username?.trim());
 }
