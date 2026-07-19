@@ -169,7 +169,7 @@ function SocialActionBar({
       )}
 
       {timestamp && (
-        <p className="mt-1 text-[10.5px] font-medium uppercase tracking-wide" style={{ color: "var(--imc-text-faint)" }}>
+        <p className="mt-1 text-[10.5px] font-medium tracking-wide" style={{ color: "var(--imc-text-faint)" }}>
           {timestamp}
         </p>
       )}
