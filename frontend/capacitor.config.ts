@@ -35,7 +35,10 @@ const config: CapacitorConfig = {
       // which takes over immediately after this hides.
       launchShowDuration: 400,
       launchAutoHide: true,
-      backgroundColor: '#FFFCF7',
+      // Brand ink tone (start of the gradient baked into drawable*/splash.png
+      // and animated in SplashIntro.jsx) — used as a fallback flat color if
+      // this plugin ever re-shows the splash programmatically.
+      backgroundColor: '#12141C',
       androidSplashResourceName: 'splash',
       androidScaleType: 'CENTER_CROP',
       showSpinner: false,
@@ -43,6 +46,12 @@ const config: CapacitorConfig = {
       splashImmersive: true,
     },
     StatusBar: {
+      // Left as-is deliberately: unlike SplashScreen, nothing in the app
+      // ever calls StatusBar.setStyle/setBackgroundColor at runtime, so
+      // this value is the status bar's color for the ENTIRE app session,
+      // not just the splash. Changing it here would recolor the OS status
+      // bar on every screen, not just the splash intro — out of scope for
+      // "make the splash colorful."
       style: 'DEFAULT',
       backgroundColor: '#FFFCF7',
       overlaysWebView: false,
