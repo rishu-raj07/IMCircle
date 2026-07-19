@@ -9,7 +9,6 @@ import {
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import BottomNav from "../../components/navigation/BottomNav";
 import Avatar from "../../components/common/Avatar";
 import { getMyProfile } from "../../api/profileApi";
 import {
@@ -397,7 +396,7 @@ export default function ProfilePeoplePage() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto px-5 pb-24">
+        <main className="flex-1 overflow-y-auto px-5 pb-[max(20px,env(safe-area-inset-bottom))]">
           {loading ? (
             <div className="flex h-[300px] items-center justify-center">
               <p className="text-[13px] font-black text-[var(--imc-indigo-text)]">
@@ -584,8 +583,6 @@ export default function ProfilePeoplePage() {
             </div>
           )}
         </main>
-
-        <BottomNav />
       </div>
     </div>
   );
