@@ -31,6 +31,38 @@ export const createPostValidator = [
     .optional()
     .isIn(["general", "achievement", "question", "query", "opportunity"])
     .withMessage("Invalid post purpose"),
+
+  // `poll` arrives as a JSON string (multipart/form-data can't carry a real
+  // array field) — parsed and validated here so createPost's controller
+  // body can assume it's already either undefined or a clean array of 2-4
+  // trimmed, non-empty option strings.
+  body("poll").custom((value) => {
+    if (value === undefined || value === "" || value === null) return true;
+
+    let parsed;
+    try {
+      parsed = typeof value === "string" ? JSON.parse(value) : value;
+    } catch {
+      throw new Error("Invalid poll data");
+    }
+
+    const options = Array.isArray(parsed?.options) ? parsed.options : null;
+    if (!options) throw new Error("A poll needs at least 2 options");
+
+    const cleaned = options
+      .map((option) => String(option || "").trim())
+      .filter(Boolean);
+
+    if (cleaned.length < 2 || cleaned.length > 4) {
+      throw new Error("A poll needs between 2 and 4 options");
+    }
+
+    if (cleaned.some((option) => option.length > 80)) {
+      throw new Error("Poll options must be 80 characters or fewer");
+    }
+
+    return true;
+  }),
 ];
 
 export const commentValidator = [

@@ -39,6 +39,37 @@ const postSchema = new mongoose.Schema(
       index: true,
     },
 
+    // Optional poll — currently only offered from the "Question" post type
+    // composer, but stored independently of `purpose` so nothing breaks if
+    // that's ever loosened. `votes` on each option is a plain ObjectId
+    // array, same convention as `likes`/`saves` above (raw ids sent to the
+    // client, `votesCount`/`hasVoted` computed there) — the identity of who
+    // voted for which option is only ever exposed via the dedicated
+    // getPostPollVoters endpoint (mirrors getPostLikers), not on every feed
+    // fetch. `default: undefined` at the top level (not `null`) keeps the
+    // key entirely absent from documents that don't have a poll, matching
+    // how optional subdocuments are already handled elsewhere in this app.
+    poll: {
+      type: {
+        options: [
+          {
+            text: {
+              type: String,
+              trim: true,
+              maxlength: 80,
+            },
+            votes: [
+              {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "User",
+              },
+            ],
+          },
+        ],
+      },
+      default: undefined,
+    },
+
     media: [
       {
         url: String,

@@ -16,6 +16,8 @@ import {
   getSavedPosts,
   getPostComments,
   getPostLikers,
+  votePostPoll,
+  getPostPollVoters,
 replyPostComment,
 likePostComment,
 deletePostComment,
@@ -68,6 +70,8 @@ router.delete(
 );
 router.patch("/:postId/like", protect, postIdValidator, validate, likePost);
 router.get("/:postId/likes", protect, postIdValidator, validate, getPostLikers);
+router.patch("/:postId/poll/vote", protect, postIdValidator, validate, votePostPoll);
+router.get("/:postId/poll/voters", protect, postIdValidator, validate, getPostPollVoters);
 router.patch("/:postId/repost", protect, postIdValidator, validate, repostPost);
 router.patch("/:postId/share", protect, postIdValidator, validate, sharePost);
 

@@ -11,6 +11,8 @@ import {
   CircleHelp,
   Lightbulb,
   Megaphone,
+  BarChart3,
+  Plus,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { createPost } from "../../api/postApi";
@@ -74,6 +76,13 @@ function CreatePost() {
   const [visibilityOpen, setVisibilityOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+
+  // Poll — only offered from the "Question" post type (see POST_PURPOSES),
+  // since that's what it's for: asking the community to pick an answer.
+  // Switching away from Question clears it so a stray poll can't get
+  // submitted under a different post type.
+  const [pollOpen, setPollOpen] = useState(false);
+  const [pollOptions, setPollOptions] = useState(["", ""]);
 
   const userName =
     user?.name ||
@@ -255,8 +264,40 @@ function CreatePost() {
     recordingStartedAtRef.current = null;
   };
 
+  const updatePollOption = (index, value) => {
+    setPollOptions((prev) =>
+      prev.map((option, i) => (i === index ? value.slice(0, 80) : option))
+    );
+  };
+
+  const addPollOption = () => {
+    setPollOptions((prev) => (prev.length >= 4 ? prev : [...prev, ""]));
+  };
+
+  const removePollOption = (index) => {
+    setPollOptions((prev) =>
+      prev.length <= 2 ? prev : prev.filter((_, i) => i !== index)
+    );
+  };
+
+  const changePurpose = (id) => {
+    setPurpose(id);
+    if (id !== "question") {
+      setPollOpen(false);
+      setPollOptions(["", ""]);
+    }
+  };
+
   const handleSubmit = async () => {
     const cleanPost = post.trim();
+    const cleanPollOptions = pollOpen
+      ? pollOptions.map((option) => option.trim()).filter(Boolean)
+      : [];
+
+    if (pollOpen && cleanPollOptions.length < 2) {
+      alert("A poll needs at least 2 options.");
+      return;
+    }
 
     // Text is optional — an image-only or voice-only post is allowed. The
     // only real requirement is having SOMETHING (text or media), plus the
@@ -286,6 +327,10 @@ function CreatePost() {
       formData.append("content", cleanPost);
       formData.append("visibility", "public");
       formData.append("purpose", purpose);
+
+      if (cleanPollOptions.length >= 2) {
+        formData.append("poll", JSON.stringify({ options: cleanPollOptions }));
+      }
 
       mediaFiles.forEach((item) => {
         formData.append("media", item.file);
@@ -398,7 +443,7 @@ function CreatePost() {
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => setPurpose(item.id)}
+                    onClick={() => changePurpose(item.id)}
                     className="flex min-h-[62px] items-center gap-2.5 rounded-[16px] px-3 py-2.5 text-left active:scale-[0.98]"
                     style={{
                       background: active ? "var(--imc-indigo-soft)" : "var(--imc-surface)",
@@ -484,7 +529,60 @@ function CreatePost() {
               </div>
             ))}
 
-          <div className="mt-3 flex items-center gap-2 border-t border-[var(--imc-border)] pt-3">
+          {purpose === "question" && pollOpen && (
+            <div className="mt-3 rounded-[18px] bg-[var(--imc-surface-2)] p-3.5">
+              <div className="mb-2.5 flex items-center justify-between">
+                <p className="text-[11px] font-black text-[var(--imc-text)]">Poll options</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPollOpen(false);
+                    setPollOptions(["", ""]);
+                  }}
+                  className="grid h-7 w-7 place-items-center rounded-full bg-[var(--imc-surface)] text-[var(--imc-text-muted)]"
+                  aria-label="Remove poll"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {pollOptions.map((option, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <input
+                      value={option}
+                      onChange={(e) => updatePollOption(index, e.target.value)}
+                      placeholder={`Option ${index + 1}`}
+                      className="h-10 w-full rounded-xl bg-[var(--imc-surface)] px-3 text-[13px] font-semibold text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)]"
+                      style={{ border: "1px solid var(--imc-border)" }}
+                    />
+                    {pollOptions.length > 2 && (
+                      <button
+                        type="button"
+                        onClick={() => removePollOption(index)}
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--imc-surface)] text-[var(--imc-text-muted)]"
+                        aria-label="Remove option"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {pollOptions.length < 4 && (
+                <button
+                  type="button"
+                  onClick={addPollOption}
+                  className="mt-2.5 flex items-center gap-1.5 text-[11.5px] font-black text-[var(--imc-indigo-text)]"
+                >
+                  <Plus size={14} /> Add option
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--imc-border)] pt-3">
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
@@ -493,6 +591,17 @@ function CreatePost() {
             >
               <Image size={16} /> Photo
             </button>
+
+            {purpose === "question" && !pollOpen && (
+              <button
+                type="button"
+                onClick={() => setPollOpen(true)}
+                className="flex h-10 items-center gap-2 rounded-full bg-[var(--imc-surface-2)] px-3.5 text-[10.5px] font-black text-[var(--imc-text-muted)] active:scale-95"
+                aria-label="Add poll"
+              >
+                <BarChart3 size={16} /> Poll
+              </button>
+            )}
 
             {recording ? (
               <button

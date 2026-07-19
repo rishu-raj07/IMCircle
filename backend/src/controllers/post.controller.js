@@ -11,6 +11,27 @@ export const createPost = async (req, res) => {
   try {
     const { content, visibility = "public", purpose = "general" } = req.body;
 
+    // Already shape-validated by createPostValidator — just parse and
+    // rebuild into the clean { options: [{text, votes: []}] } the schema
+    // expects, dropping any extra/unexpected fields the client sent.
+    let poll;
+    if (req.body.poll) {
+      try {
+        const parsed =
+          typeof req.body.poll === "string" ? JSON.parse(req.body.poll) : req.body.poll;
+        const cleanedOptions = (parsed?.options || [])
+          .map((option) => String(option || "").trim())
+          .filter(Boolean)
+          .slice(0, 4);
+
+        if (cleanedOptions.length >= 2) {
+          poll = { options: cleanedOptions.map((text) => ({ text, votes: [] })) };
+        }
+      } catch {
+        // validator already guards against this; fall through with no poll
+      }
+    }
+
     const files = req.files || [];
     const media = [];
 
@@ -47,6 +68,7 @@ export const createPost = async (req, res) => {
       visibility,
       purpose,
       media,
+      ...(poll ? { poll } : {}),
     });
 
     await User.findByIdAndUpdate(req.user._id, {
@@ -779,6 +801,108 @@ export const getPostLikers = async (req, res) => {
     });
   } catch (error) {
     console.error("Get post likers error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+// Casts (or retracts, tapping the same option again) a single-select poll
+// vote. Voting for a different option automatically removes any previous
+// vote by this user — a person can only ever occupy one option's votes
+// array at a time, same "one active choice" behavior as every mainstream
+// poll feature (Instagram/Twitter/WhatsApp). Returns lightweight counts
+// only (no voter identities) — see getPostPollVoters below for the
+// on-demand "who voted" list, same split as likes/getPostLikers.
+export const votePostPoll = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const optionIndex = Number(req.body.optionIndex);
+    const userId = req.user._id;
+
+    const post = await Post.findById(postId);
+
+    if (!post || post.isDeleted) {
+      return res.status(404).json({ success: false, message: "Post not found." });
+    }
+
+    const options = post.poll?.options;
+    if (!Array.isArray(options) || !options.length) {
+      return res.status(400).json({ success: false, message: "This post doesn't have a poll." });
+    }
+
+    if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= options.length) {
+      return res.status(400).json({ success: false, message: "Invalid poll option." });
+    }
+
+    const userIdStr = userId.toString();
+    const alreadyOnThisOption = options[optionIndex].votes.some(
+      (id) => id.toString() === userIdStr
+    );
+
+    options.forEach((option) => {
+      option.votes = option.votes.filter((id) => id.toString() !== userIdStr);
+    });
+
+    if (!alreadyOnThisOption) {
+      options[optionIndex].votes.push(userId);
+    }
+
+    await post.save();
+
+    const results = options.map((option) => ({
+      text: option.text,
+      votesCount: option.votes.length,
+    }));
+    const myVoteIndex = alreadyOnThisOption
+      ? null
+      : optionIndex;
+
+    return res.status(200).json({
+      success: true,
+      poll: { options: results },
+      myVoteIndex,
+    });
+  } catch (error) {
+    console.error("Vote post poll error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+// On-demand voter list for one poll option — same "avatars only when
+// tapped, not on every feed fetch" pattern as getPostLikers above.
+export const getPostPollVoters = async (req, res) => {
+  try {
+    const optionIndex = Number(req.query.optionIndex);
+
+    const post = await Post.findById(req.params.postId)
+      .select("poll")
+      .populate("poll.options.votes", authorFields);
+
+    if (!post) {
+      return res.status(404).json({ success: false, message: "Post not found." });
+    }
+
+    const options = post.poll?.options;
+    if (!Array.isArray(options) || !Number.isInteger(optionIndex) || !options[optionIndex]) {
+      return res.status(400).json({ success: false, message: "Invalid poll option." });
+    }
+
+    const voters = (options[optionIndex].votes || []).filter(Boolean);
+
+    return res.status(200).json({
+      success: true,
+      count: voters.length,
+      voters,
+    });
+  } catch (error) {
+    console.error("Get post poll voters error:", error);
 
     return res.status(500).json({
       success: false,

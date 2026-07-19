@@ -33,6 +33,18 @@ export const getPostLikers = async (postId) => {
   return res.data;
 };
 
+export const votePostPoll = async (postId, optionIndex) => {
+  const res = await api.patch(`/posts/${postId}/poll/vote`, { optionIndex });
+  return res.data;
+};
+
+export const getPostPollVoters = async (postId, optionIndex) => {
+  const res = await api.get(`/posts/${postId}/poll/voters`, {
+    params: { optionIndex },
+  });
+  return res.data;
+};
+
 export const repostPost = async (postId, data = {}) => {
   const res = await api.patch(`/posts/${postId}/repost`, data);
   return res.data;
