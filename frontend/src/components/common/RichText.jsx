@@ -8,14 +8,37 @@ import { sendCircleRequest } from "../../api/circleRequestApi";
 import { getGenderAvatarIcon } from "../../utils/avatar";
 import { getSessionUser } from "../../utils/sessionUser";
 
+// Domain-only links (typed without "http(s)://", e.g. "imcircle.com") used
+// to be completely invisible to this regex — the old pattern only matched
+// tokens that already started with "https?://", so anything typed the way
+// a person actually types it in a post ("check out imcircle.com") rendered
+// as flat, non-clickable text. This fragment matches a bare
+// label(.label)*.tld shape against a small curated TLD list (avoids
+// false-positives like "e.g." or "v1.2" that a bare `\w+\.\w+` pattern would
+// wrongly linkify), with subdomains and an optional path. The `(?<![\w@.])`
+// guard stops it from matching mid-email ("user@imcircle.com") or
+// mid-larger-token.
+const BARE_DOMAIN_SOURCE =
+  "(?:www\\.)?[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\\.(?:com|net|org|io|co|in|dev|app|ai|me|info|biz|edu|gov|us|uk|ca|xyz|tech|store|online|site|club|live|world|studio|shop)\\b(?:\\/[^\\s<.,:;!?'\")\\]]*)?";
+
+// Tests a single already-split token against the bare-domain shape above
+// (anchored, whole-string) — used at render time to decide whether a plain
+// token like "imcircle.com" should render as a link.
+const BARE_DOMAIN_TEST = new RegExp(`^${BARE_DOMAIN_SOURCE}$`, "i");
+
 // One combined regex with capture groups so String.split() keeps the
 // matched delimiters in the result array, in order — @mention, #hashtag,
-// and bare URLs all render as tappable inline elements, everything else
-// stays as plain text. Deliberately does NOT touch existing markdown
-// rendering elsewhere in the app; this only affects plain post/learning/
-// journey/circle-post text, which was always rendered as a flat string.
-const TOKEN_REGEX =
-  /(@[a-z0-9_]{3,30}|#[a-z0-9_]{2,50}|https?:\/\/[^\s<]+[^\s<.,:;!?'")\]])/gi;
+// full https?:// URLs, and now bare domains all render as tappable inline
+// elements, everything else stays as plain text. Deliberately does NOT
+// touch existing markdown rendering elsewhere in the app; this only affects
+// plain post/learning/journey/circle-post text, which was always rendered
+// as a flat string. The https?:// alternative is listed first so a full
+// URL like "https://imcircle.com/x" is consumed whole by that branch
+// instead of also (partially) matching the bare-domain branch.
+const TOKEN_REGEX = new RegExp(
+  `(@[a-z0-9_]{3,30}|#[a-z0-9_]{2,50}|https?:\\/\\/[^\\s<]+[^\\s<.,:;!?'")\\]]|(?<![\\w@.])${BARE_DOMAIN_SOURCE})`,
+  "gi"
+);
 
 function shortenUrl(url) {
   try {
@@ -228,6 +251,26 @@ function RichText({ text = "", className = "" }) {
               style={{ color: "var(--imc-indigo-text)" }}
             >
               {shortenUrl(part)}
+            </a>
+          );
+        }
+
+        if (BARE_DOMAIN_TEST.test(part)) {
+          // Typed without a protocol (e.g. "imcircle.com") — the link
+          // itself still needs one to actually navigate anywhere; the
+          // visible label stays exactly what the person typed.
+          const href = `https://${part}`;
+          return (
+            <a
+              key={index}
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(event) => event.stopPropagation()}
+              className="font-bold underline underline-offset-2"
+              style={{ color: "var(--imc-indigo-text)" }}
+            >
+              {shortenUrl(href)}
             </a>
           );
         }

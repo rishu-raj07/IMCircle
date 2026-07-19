@@ -47,6 +47,38 @@ const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api
 const HOME_FEED_CACHE_PREFIX = "home_feed_cache_v2";
 const HOME_TAB_STORAGE_KEY = "imcircle_home_tab";
 const FEED_LIMIT = 10;
+const FEED_SESSION_KEY = "imcircle_feed_session_id";
+const FEED_SESSION_TS_KEY = "imcircle_feed_session_started_at";
+// The backend excludes impressions from the CURRENT sessionId when deciding
+// what's "seen" (so items don't vanish mid-scroll while you're still
+// scrolling through them) — see FEED_WEIGHTS.seenPenalty in
+// feed.controller.js. That only works if the session id actually resets.
+// In a normal browser tab, sessionStorage clears when the tab closes; but a
+// Capacitor Android WebView stays alive for days across backgrounding, so
+// the old "generate once, store in sessionStorage forever" id never
+// rotated — every post you'd ever viewed stayed permanently exempt from the
+// seen-penalty, which is exactly why the same post could sit at the top of
+// the feed for days. Time-boxing the session id (and force-rotating it on
+// pull-to-refresh) is what makes "reopen the app" or "swipe down" actually
+// sink already-seen posts again.
+const FEED_SESSION_TTL_MS = 30 * 60 * 1000;
+
+function getFeedSessionId(forceNew = false) {
+  const now = Date.now();
+  const storedId = sessionStorage.getItem(FEED_SESSION_KEY);
+  const storedTs = Number(sessionStorage.getItem(FEED_SESSION_TS_KEY)) || 0;
+  const expired = !storedTs || now - storedTs > FEED_SESSION_TTL_MS;
+
+  if (!forceNew && storedId && !expired) {
+    sessionStorage.setItem(FEED_SESSION_TS_KEY, String(now));
+    return storedId;
+  }
+
+  const freshId = `feed_${now}_${Math.random().toString(36).slice(2)}`;
+  sessionStorage.setItem(FEED_SESSION_KEY, freshId);
+  sessionStorage.setItem(FEED_SESSION_TS_KEY, String(now));
+  return freshId;
+}
 // Dismissible "complete your profile" nudge — non-blocking, never a
 // full-screen takeover. Dismissing it snoozes it for 24h rather than
 // forever, so it resurfaces as a gentle reminder rather than disappearing
@@ -364,10 +396,7 @@ function Home() {
   const itemObserverRef = useRef(null);
   const requestSeqRef = useRef(0);
   const loadingMoreRef = useRef(false);
-  const sessionIdRef = useRef(
-    sessionStorage.getItem("imcircle_feed_session_id") ||
-      `feed_${Date.now()}_${Math.random().toString(36).slice(2)}`
-  );
+  const sessionIdRef = useRef(getFeedSessionId());
 
   const learningItems = items.filter((item) => item?.type === "learning");
   const feedItems = balanceFeedRhythm(items.filter((item) => item?.type !== "learning"));
@@ -394,7 +423,6 @@ function Home() {
   }, [builderScore?.currentStreak, location.pathname, location.state, navigate]);
 
   useEffect(() => {
-    sessionStorage.setItem("imcircle_feed_session_id", sessionIdRef.current);
     trackEvent("feed_open", { metadata: { tab: activeTab } }).catch(() => {});
   }, []);
 
@@ -525,6 +553,15 @@ function Home() {
     const isMore = mode === "more";
 
     if (isMore && (loadingMoreRef.current || !hasMore)) return;
+
+    // Rotate the session id here — not just once at component mount — since
+    // Home can stay mounted for days in a Capacitor WebView. "initial" (app
+    // opened/tab switched) rotates only if the previous session expired;
+    // "refresh" (pull-to-refresh) always force-rotates so a manual refresh
+    // reliably sinks posts you've already seen. Pagination ("more") keeps
+    // the in-flight session id unchanged.
+    if (isInitial) sessionIdRef.current = getFeedSessionId();
+    if (isRefresh) sessionIdRef.current = getFeedSessionId(true);
 
     const seq = requestSeqRef.current + 1;
     requestSeqRef.current = seq;
@@ -1507,7 +1544,7 @@ function JourneyUpdatePrompt({ journeys, onUpdate }) {
               key={id}
               type="button"
               onClick={() => onUpdate(id)}
-              className="relative flex min-h-[56px] w-[88%] shrink-0 snap-start items-center gap-2.5 overflow-hidden rounded-[16px] border px-3 py-2 text-left active:scale-[0.99]"
+              className="relative flex min-h-[56px] w-full shrink-0 snap-start items-center gap-2.5 overflow-hidden rounded-[16px] border px-3 py-2 text-left active:scale-[0.99]"
               style={{ background: "var(--imc-surface)", borderColor: "var(--imc-border)" }}
             >
               <div className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-[11px]" style={{ background: "var(--imc-action-soft)", color: "var(--imc-indigo-text)" }}>

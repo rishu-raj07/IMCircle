@@ -78,6 +78,76 @@ export const createPost = async (req, res) => {
     });
   }
 };
+
+// Caption-only edit — deliberately does not touch media/purpose/visibility,
+// only `content`. Re-runs the same hashtag/mention parsing createPost does
+// so a hashtag typed for the first time during an edit still gets indexed
+// and mentioned users still get notified, exactly as if it had been typed
+// at creation time.
+export const updatePost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const { content } = req.body;
+
+    if (typeof content !== "string" || !content.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "A caption is required.",
+      });
+    }
+
+    const cleanContent = content.trim();
+    if (cleanContent.length > 2000) {
+      return res.status(400).json({
+        success: false,
+        message: "Caption is too long (2000 characters max).",
+      });
+    }
+
+    const post = await Post.findById(postId);
+
+    if (!post || post.isDeleted) {
+      return res.status(404).json({ success: false, message: "Post not found." });
+    }
+
+    if (post.author.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only edit your own posts.",
+      });
+    }
+
+    post.content = cleanContent;
+    post.isEdited = true;
+    post.editedAt = new Date();
+    await post.save();
+
+    processContentText({
+      text: cleanContent,
+      authorId: req.user._id,
+      contentType: "post",
+      contentId: post._id,
+      link: `/post/${post._id}`,
+    }).catch(() => {});
+
+    const populatedPost = await Post.findById(post._id).populate(
+      "author",
+      authorFields
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Post updated.",
+      post: populatedPost,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
 export const getFeed = async (req, res) => {
   try {
     const page = Number(req.query.page) || 1;

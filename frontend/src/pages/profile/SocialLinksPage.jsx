@@ -70,7 +70,7 @@ function SocialLinksPage({ value, onBack, onSave }) {
   return (
     <div className="min-h-screen bg-[var(--imc-bg)]">
       <div className="mx-auto min-h-screen w-full max-w-[430px] px-5 pb-8">
-        <div className="sticky top-0 z-30 -mx-5 flex h-[72px] items-center justify-between border-b border-[rgba(18,20,28,0.08)] bg-[var(--imc-surface-2)] px-5">
+        <div className="-mx-5 flex h-[72px] items-center justify-between border-b border-[rgba(18,20,28,0.08)] bg-[var(--imc-surface-2)] px-5">
           <button type="button" onClick={onBack}>
             <ArrowLeft size={27} />
           </button>

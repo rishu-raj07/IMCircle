@@ -299,6 +299,34 @@ function Chat() {
 
   const otherUserId = getUserId(otherUser);
   const isOtherOnline = onlineUsers.includes(otherUserId);
+
+  // `otherUser.lastActiveAt` is a REST snapshot taken once when this chat
+  // loaded — nothing re-fetches it afterward, so without this, "Last seen"
+  // keeps showing whatever stale time was true at page-load forever, even
+  // after the other person has since come online and gone offline again
+  // right in front of you (exactly the "they just messaged me but it still
+  // says Last seen 20 minutes ago" bug). The live "online_users" socket
+  // event DOES tell us the instant they actually disconnect, so on that
+  // exact transition we stamp lastActiveAt to now — accurate to the second,
+  // no extra network round trip needed.
+  const wasOtherOnlineRef = useRef(false);
+  useEffect(() => {
+    if (wasOtherOnlineRef.current && !isOtherOnline && otherUserId) {
+      setConversation((prev) => {
+        if (!prev?.participants) return prev;
+        return {
+          ...prev,
+          participants: prev.participants.map((participant) =>
+            getUserId(participant) === otherUserId
+              ? { ...participant, lastActiveAt: new Date().toISOString() }
+              : participant
+          ),
+        };
+      });
+    }
+    wasOtherOnlineRef.current = isOtherOnline;
+  }, [isOtherOnline, otherUserId]);
+
   const isSelecting = selectedMessageIds.length > 0;
   const canUnsendSelected = selectedMessageIds.length > 0 && selectedMessageIds.every((id) => {
     const message = messages.find((item) => item._id === id);
@@ -1363,7 +1391,7 @@ function Chat() {
                                 ? "This message was deleted"
                                 : message.replyTo.isEncrypted
                                 ? decryptedMap[message.replyTo._id] === ""
-                                  ? "Couldn't decrypt this message"
+                                  ? "Not available on this device"
                                   : decryptedMap[message.replyTo._id] || "Decrypting…"
                                 : message.replyTo.text ||
                                   (message.replyTo.attachments?.length
@@ -1375,15 +1403,30 @@ function Chat() {
 
                         {message.isEncrypted ? (
                           decryptedMap[message._id] === "" ? (
-                            <p className="whitespace-pre-wrap text-[13px] leading-6">
-                              Couldn't decrypt this message
+                            // Not a broken/error state to the reader — this
+                            // happens when the message was encrypted from a
+                            // different device/session than the one
+                            // viewing it right now (no multi-device key
+                            // sync in this version, by design). Styled as a
+                            // quiet, expected notice rather than a bold
+                            // error string.
+                            <p
+                              className="flex items-center gap-1.5 text-[12.5px] italic"
+                              style={{ color: isSent ? "rgba(255,255,255,0.75)" : "var(--imc-text-muted)" }}
+                            >
+                              <Lock size={12} className="shrink-0" strokeWidth={2} />
+                              Not available on this device
                             </p>
                           ) : decryptedMap[message._id] ? (
                             <p className="whitespace-pre-wrap text-[13px] leading-6">
                               <RichText text={resolvedText} />
                             </p>
                           ) : (
-                            <p className="whitespace-pre-wrap text-[13px] leading-6">
+                            <p
+                              className="flex items-center gap-1.5 text-[12.5px] italic"
+                              style={{ color: isSent ? "rgba(255,255,255,0.75)" : "var(--imc-text-muted)" }}
+                            >
+                              <Lock size={12} className="shrink-0 animate-pulse" strokeWidth={2} />
                               Decrypting…
                             </p>
                           )
@@ -1665,7 +1708,7 @@ function Chat() {
                   <p className="truncate text-[12px] font-semibold text-[var(--imc-text-muted)]">
                     {replyTarget.isEncrypted
                       ? decryptedMap[replyTarget._id] === ""
-                        ? "Couldn't decrypt this message"
+                        ? "Not available on this device"
                         : decryptedMap[replyTarget._id] || "Decrypting…"
                       : replyTarget.text ||
                         (replyTarget.attachments?.length ? "🎤 Voice message" : "")}

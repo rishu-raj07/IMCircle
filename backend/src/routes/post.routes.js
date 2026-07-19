@@ -2,6 +2,7 @@ import express from "express";
 
 import {
   createPost,
+  updatePost,
   getFeed,
   getSinglePost,
   likePost,
@@ -80,6 +81,7 @@ router.post(
 );
 
 router.patch("/:postId/save", protect, postIdValidator, validate, savePost);
+router.patch("/:postId", protect, postIdValidator, validate, updatePost);
 router.delete("/:postId", protect, postIdValidator, validate, deletePost);
 router.post("/:postId/report", protect, actionLimiter, postIdValidator, validate, reportPost);
 router.get("/:postId", protect, postIdValidator, validate, getSinglePost);

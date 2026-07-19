@@ -126,7 +126,7 @@ function CreateProject() {
 
   return (
     <div className="min-h-screen bg-[var(--imc-bg)] pb-24">
-      <div className="sticky top-0 z-20 border-b border-[rgba(18,20,28,0.08)] bg-white/95 px-4 py-4 backdrop-blur-xl">
+      <div className="border-b border-[rgba(18,20,28,0.08)] bg-white/95 px-4 py-4 backdrop-blur-xl">
         <div className="flex items-center justify-between">
           <button
             onClick={() => navigate(-1)}

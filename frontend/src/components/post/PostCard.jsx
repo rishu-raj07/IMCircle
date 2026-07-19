@@ -191,11 +191,19 @@ function PostCard({ post = {}, type = "post", currentUser = null }) {
 
   const repostText = getRepostText(post);
 
+  // Local override so an edit shows up immediately without needing the
+  // parent's feed/list state to be touched — same lightweight pattern
+  // already used for `deleted` above (setDeleted(true) doesn't mutate the
+  // parent list either).
+  const [editedContent, setEditedContent] = useState(null);
+  const [editedFlag, setEditedFlag] = useState(false);
+
   const content =
-    post.content ||
-    post.description ||
-    post.text ||
-    "Shared a new update on IMCircle.";
+    editedContent ??
+    (post.content ||
+      post.description ||
+      post.text ||
+      "Shared a new update on IMCircle.");
 
   const occupation =
     author?.headline ||
@@ -344,6 +352,7 @@ function PostCard({ post = {}, type = "post", currentUser = null }) {
                   </div>
 
                   <span className="shrink-0 text-[11px] font-medium" style={{ color: "var(--imc-text-muted)" }}>
+                    {(editedFlag || post?.isEdited) && "edited · "}
                     {formatTime(post)}
                   </span>
                 </div>
@@ -355,6 +364,10 @@ function PostCard({ post = {}, type = "post", currentUser = null }) {
               type={type}
               isMine={isMe}
               onDeleted={() => setDeleted(true)}
+              onEdited={(newContent) => {
+                setEditedContent(newContent);
+                setEditedFlag(true);
+              }}
             />
           </div>
 

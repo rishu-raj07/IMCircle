@@ -16,6 +16,19 @@
          what the in-app permission prompt says. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!-- Without an explicit override, Android infers `android.hardware.*`
+         as REQUIRED from the permissions above — a device with no
+         microphone (or no GPS) becomes ineligible to even see/install the
+         app on the Play Store. Voice messages and location are both
+         optional features (the rest of the app works fine without either;
+         see utils/permissions.js and the location fixes elsewhere in the
+         app), so these are explicitly marked not required. This is exactly
+         what caused Play Console's "no longer supports N devices" warning
+         the moment RECORD_AUDIO was added without this override. -->
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <uses-feature android:name="android.hardware.location" android:required="false" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"

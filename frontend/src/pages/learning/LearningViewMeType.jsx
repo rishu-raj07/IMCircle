@@ -343,7 +343,7 @@ export default function LearningViewMeType() {
         }}
       >
         <div
-          className="sticky top-0 z-20 px-4 pb-4 pt-4 backdrop-blur-xl"
+          className="px-4 pb-4 pt-4 backdrop-blur-xl"
           style={{ borderBottom: "1px solid rgba(255,255,255,0.18)" }}
         >
           <div className="flex items-center justify-between gap-2">

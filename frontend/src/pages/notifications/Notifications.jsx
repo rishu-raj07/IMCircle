@@ -495,7 +495,7 @@ function Notifications() {
   return (
     <div className="flex min-h-screen justify-center" style={{ background: "var(--imc-bg)" }}>
       <div className="min-h-screen w-full max-w-[430px]" style={{ background: PAPER }}>
-        <header className="sticky top-0 z-20 border-b px-4 py-4 backdrop-blur-xl" style={{ borderColor: LINE, background: SURFACE }}>
+        <header className="border-b px-4 py-4 backdrop-blur-xl" style={{ borderColor: LINE, background: SURFACE }}>
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate(-1)}

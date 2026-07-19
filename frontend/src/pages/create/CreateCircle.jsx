@@ -181,7 +181,7 @@ function CreateCircle() {
         className="relative min-h-screen w-full max-w-[430px] overflow-hidden pb-28"
         style={{ background: "var(--imc-bg)" }}
       >
-        <div className="relative sticky top-0 z-20 border-b px-4 py-4 backdrop-blur-xl" style={{ borderColor: LINE, background: "color-mix(in srgb, var(--imc-surface) 92%, transparent)" }}>
+        <div className="relative border-b px-4 py-4 backdrop-blur-xl" style={{ borderColor: LINE, background: "color-mix(in srgb, var(--imc-surface) 92%, transparent)" }}>
           <div className="flex items-center justify-between">
             <button
               onClick={() => navigate(-1)}

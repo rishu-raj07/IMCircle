@@ -332,7 +332,7 @@ function ExperiencePage({ value, onBack, onSave }) {
   return (
     <div className="min-h-screen bg-[var(--imc-bg)]">
       <div className="mx-auto min-h-screen w-full max-w-[430px] bg-[var(--imc-bg)] px-5 pb-8">
-        <div className="sticky top-0 z-30 -mx-5 border-b border-[var(--imc-border)] bg-[var(--imc-bg)] px-5 pb-4 pt-2">
+        <div className="-mx-5 border-b border-[var(--imc-border)] bg-[var(--imc-bg)] px-5 pb-4 pt-2">
           <div className="flex h-12 items-center justify-between">
           <button
             type="button"

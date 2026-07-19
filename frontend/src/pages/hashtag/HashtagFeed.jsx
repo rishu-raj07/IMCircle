@@ -51,7 +51,7 @@ function HashtagFeed() {
     <div className="flex min-h-screen justify-center" style={{ background: "var(--imc-bg)" }}>
       <div className="relative min-h-screen w-full max-w-[430px] pb-24" style={{ background: "var(--imc-bg)" }}>
         <div
-          className="sticky top-0 z-20 px-4 py-4"
+          className="px-4 py-4"
           style={{ background: "var(--imc-bg)", borderBottom: "1px solid var(--imc-border)" }}
         >
           <div className="flex items-center gap-3">

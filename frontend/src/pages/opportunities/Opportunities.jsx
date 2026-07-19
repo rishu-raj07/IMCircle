@@ -73,7 +73,7 @@ function Opportunities() {
 
   return (
     <div className="min-h-screen bg-[var(--imc-bg)] pb-24">
-      <div className="sticky top-0 z-30 border-b border-[var(--imc-border)] bg-white/95 px-4 py-4 backdrop-blur-xl">
+      <div className="border-b border-[var(--imc-border)] bg-white/95 px-4 py-4 backdrop-blur-xl">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-[22px] font-black text-[var(--imc-text)]">

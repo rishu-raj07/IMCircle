@@ -657,14 +657,17 @@ function JourneyReelSlide({ milestone = {} }) {
               does — a second, more inviting entry point for leaving a
               reply, worded to match what you're actually doing here
               ("adding a thought" on someone's journey update) rather than
-              the generic "Reply". */}
+              the generic "Reply". flex-1 (instead of shrink-0) so it fills
+              whatever width Follow Journey doesn't use — and when there's
+              no Follow Journey button at all (own journey), it's the only
+              child in the row and naturally spans the full width. */}
           <button
             onClick={() => setShowReplies(true)}
-            className="h-8 shrink-0 whitespace-nowrap rounded-full border border-white/35 px-3 text-[10px] font-bold text-white active:scale-95"
+            className="h-9 min-w-0 flex-1 whitespace-nowrap rounded-full border border-white/35 px-3 text-[11px] font-bold text-white active:scale-95"
             style={{ background: "rgba(0,0,0,0.20)" }}
           >
-            <span className="flex items-center gap-1 whitespace-nowrap">
-              <MessageCirclePlus size={12} />
+            <span className="flex items-center justify-center gap-1.5 whitespace-nowrap">
+              <MessageCirclePlus size={13} />
               Add thought
             </span>
           </button>

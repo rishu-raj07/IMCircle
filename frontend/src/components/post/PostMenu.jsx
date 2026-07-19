@@ -11,9 +11,10 @@ import {
   UserX,
   ImageOff,
   Trash2,
+  Pencil,
 } from "lucide-react";
 
-import { reportPost, deletePost } from "../../api/postApi";
+import { reportPost, deletePost, updatePost } from "../../api/postApi";
 import { deleteLearning } from "../../api/learningApi";
 
 const reportOptions = [
@@ -24,7 +25,7 @@ const reportOptions = [
   { key: "impersonation", label: "Impersonation", icon: UserX },
 ];
 
-function PostMenu({ post = {}, type = "post", isMine = false, onDeleted }) {
+function PostMenu({ post = {}, type = "post", isMine = false, onDeleted, onEdited }) {
   const [open, setOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reported, setReported] = useState(false);
@@ -34,7 +35,35 @@ function PostMenu({ post = {}, type = "post", isMine = false, onDeleted }) {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
 
+  // Caption-only editing — feed posts only (type === "post"), never
+  // learnings/journeys, which have their own dedicated edit flows already.
+  const [editOpen, setEditOpen] = useState(false);
+  const [editDraft, setEditDraft] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState("");
+
   const postId = post?._id;
+
+  const submitEdit = async () => {
+    const cleanContent = editDraft.trim();
+    if (!cleanContent || savingEdit) return;
+
+    setSavingEdit(true);
+    setEditError("");
+
+    try {
+      const res = await updatePost(postId, cleanContent);
+      onEdited?.(res?.post?.content ?? cleanContent);
+      setEditOpen(false);
+      setOpen(false);
+    } catch (error) {
+      setEditError(
+        error?.response?.data?.message || "Couldn't save your changes. Try again."
+      );
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   const copyLink = async () => {
     const url = `${window.location.origin}/${
@@ -123,6 +152,18 @@ function PostMenu({ post = {}, type = "post", isMine = false, onDeleted }) {
                 onClick={handleNotInterested}
               />
 
+              {isMine && type === "post" && (
+                <MenuItem
+                  icon={Pencil}
+                  label="Edit post"
+                  onClick={() => {
+                    setEditError("");
+                    setEditDraft(post?.content || "");
+                    setEditOpen(true);
+                  }}
+                />
+              )}
+
               {isMine ? (
                 <MenuItem
                   icon={Trash2}
@@ -208,6 +249,76 @@ function PostMenu({ post = {}, type = "post", isMine = false, onDeleted }) {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {editOpen && (
+        <div
+          className="fixed inset-0 z-[999] flex items-end justify-center bg-black/35 backdrop-blur-[2px]"
+          onClick={() => !savingEdit && setEditOpen(false)}
+        >
+          <div
+            className="w-full max-w-[430px] rounded-t-[30px] bg-[var(--imc-surface-2)] px-5 pb-6 pt-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-start justify-between">
+              <div>
+                <h2 className="text-[18px] font-black text-[var(--imc-text)]">
+                  Edit post
+                </h2>
+                <p className="mt-1 text-[12px] font-semibold text-[var(--imc-text-muted)]">
+                  Only the caption can be edited — photos, videos, and voice notes stay as posted.
+                </p>
+              </div>
+
+              <button
+                onClick={() => !savingEdit && setEditOpen(false)}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--imc-surface-2)] text-[var(--imc-text)]"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {editError && (
+              <div className="mb-3 rounded-[18px] bg-red-50 p-3 text-[12px] font-black text-red-600">
+                {editError}
+              </div>
+            )}
+
+            <textarea
+              value={editDraft}
+              onChange={(event) => setEditDraft(event.target.value.slice(0, 2000))}
+              autoFocus
+              rows={5}
+              placeholder="Write a caption... use #hashtags to help people find it"
+              className="w-full resize-none rounded-[20px] bg-[var(--imc-surface)] p-4 text-[13.5px] font-semibold leading-5 outline-none ring-1 ring-[var(--imc-border)]"
+              style={{ color: "var(--imc-text)" }}
+            />
+
+            <div className="mt-1 text-right text-[10.5px] font-bold text-[var(--imc-text-faint)]">
+              {editDraft.length}/2000
+            </div>
+
+            <div className="mt-3 flex gap-2.5">
+              <button
+                type="button"
+                onClick={() => setEditOpen(false)}
+                disabled={savingEdit}
+                className="h-11 flex-1 rounded-2xl bg-[var(--imc-surface)] text-[13px] font-black text-[var(--imc-text)] active:scale-[0.99] disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitEdit}
+                disabled={savingEdit || !editDraft.trim()}
+                className="h-11 flex-1 rounded-2xl text-[13px] font-black text-white active:scale-[0.99] disabled:opacity-60"
+                style={{ background: "var(--imc-indigo)" }}
+              >
+                {savingEdit ? "Saving..." : "Save"}
+              </button>
+            </div>
           </div>
         </div>
       )}

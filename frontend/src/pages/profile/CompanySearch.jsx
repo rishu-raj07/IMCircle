@@ -84,7 +84,7 @@ export default function CompanySearch({ open, value, onClose, onSelect }) {
   return (
     <div className="fixed inset-0 z-50 bg-[var(--imc-bg)]">
       <div className="mx-auto min-h-screen w-full max-w-[430px] px-5 pb-8">
-        <div className="sticky top-0 z-20 -mx-5 flex h-[72px] items-center justify-between border-b border-[var(--imc-border)] bg-[var(--imc-bg)] px-5">
+        <div className="-mx-5 flex h-[72px] items-center justify-between border-b border-[var(--imc-border)] bg-[var(--imc-bg)] px-5">
           <button
             type="button"
             onClick={onClose}

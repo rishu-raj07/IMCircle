@@ -23,7 +23,7 @@ android {
         applicationId "com.imcircle.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-         versionCode 20
+         versionCode 21
          versionName "1.1.4"
         manifestPlaceholders = [mapsApiKey: mapsApiKey]
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -47,6 +47,14 @@ android {
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.release
+            // Bundles a native-debug-symbols.zip into the AAB automatically
+            // so Play Console can symbolicate crashes/ANRs from the native
+            // (Capacitor/WebView) side without a manual upload step — this
+            // is what clears the "you've not uploaded debug symbols"
+            // warning in the Play Console release screen.
+            ndk {
+                debugSymbolLevel 'FULL'
+            }
         }
     }
 }

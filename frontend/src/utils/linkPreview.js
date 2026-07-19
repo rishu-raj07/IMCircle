@@ -6,9 +6,21 @@ import api from "../api/axios";
 // two regexes silently drifting apart.
 const URL_REGEX = /https?:\/\/[^\s<]+[^\s<.,:;!?'")\]]/i;
 
+// Same bare-domain shape as RichText.jsx's BARE_DOMAIN_SOURCE (e.g.
+// "imcircle.com" typed with no protocol) — kept as a literal duplicate
+// rather than a shared import to avoid a cross-directory coupling between
+// components/ and utils/ for one regex; if you change one, change both.
+const BARE_DOMAIN_REGEX =
+  /(?:www\.)?[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\.(?:com|net|org|io|co|in|dev|app|ai|me|info|biz|edu|gov|us|uk|ca|xyz|tech|store|online|site|club|live|world|studio|shop)\b(?:\/[^\s<.,:;!?'")\]]*)?/i;
+
 export function extractFirstUrl(text = "") {
-  const match = String(text || "").match(URL_REGEX);
-  return match ? match[0] : "";
+  const value = String(text || "");
+
+  const fullMatch = value.match(URL_REGEX);
+  if (fullMatch) return fullMatch[0];
+
+  const bareMatch = value.match(BARE_DOMAIN_REGEX);
+  return bareMatch ? `https://${bareMatch[0]}` : "";
 }
 
 // Backed by GET /api/link-preview (backend/src/controllers/linkPreview.controller.js)

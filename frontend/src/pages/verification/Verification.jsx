@@ -59,7 +59,7 @@ function Verification() {
   return (
     <div className="min-h-screen bg-[var(--imc-bg)] flex justify-center">
       <div className="relative min-h-screen w-full max-w-[430px] bg-[var(--imc-surface)] pb-24">
-        <div className="sticky top-0 z-20 border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 py-4">
+        <div className="border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 py-4">
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate(-1)}

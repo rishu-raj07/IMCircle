@@ -359,7 +359,7 @@ function JourneyProfile() {
     <div className="min-h-screen pb-28" style={{ background: "var(--imc-bg)" }}>
       <div className="mx-auto min-h-screen w-full max-w-[430px]">
       <header
-        className="sticky top-0 z-30 px-4 pb-3 pt-[14px] backdrop-blur-xl"
+        className="px-4 pb-3 pt-[14px] backdrop-blur-xl"
         style={{ borderBottom: "1px solid var(--imc-border)", background: "color-mix(in srgb, var(--imc-bg) 94%, transparent)" }}
       >
         <div className="flex items-center gap-3">

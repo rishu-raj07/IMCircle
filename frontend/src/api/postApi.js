@@ -16,6 +16,13 @@ export const createPost = async (formData) => {
   return res.data;
 };
 
+// Caption-only edit — media/purpose/visibility can't be changed after
+// publish, only the text (matches the DM/community message edit pattern).
+export const updatePost = async (postId, content) => {
+  const res = await api.patch(`/posts/${postId}`, { content });
+  return res.data;
+};
+
 export const likePost = async (postId) => {
   const res = await api.patch(`/posts/${postId}/like`);
   return res.data;

@@ -180,7 +180,7 @@ export default function BrowseCircles() {
         <style>{`.no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; } .imc-press:active { transform: scale(0.97); }`}</style>
 
         <header
-          className="sticky top-0 z-20 flex items-center gap-3 px-4 py-3"
+          className="flex items-center gap-3 px-4 py-3"
           style={{ background: "var(--imc-bg)", borderBottom: `1px solid ${LINE}` }}
         >
           <button

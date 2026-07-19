@@ -394,7 +394,7 @@ function Search() {
   return (
     <div className="flex min-h-screen justify-center" style={{ background: "var(--imc-bg)" }}>
       <div className="min-h-screen w-full max-w-[430px] pb-24" style={{ background: "var(--imc-bg)" }}>
-        <header className="sticky top-0 z-20 border-b px-4 pb-4 pt-[16px] backdrop-blur-xl" style={{ borderColor: "var(--imc-border)", background: "color-mix(in srgb, var(--imc-bg) 92%, transparent)" }}>
+        <header className="border-b px-4 pb-4 pt-[16px] backdrop-blur-xl" style={{ borderColor: "var(--imc-border)", background: "color-mix(in srgb, var(--imc-bg) 92%, transparent)" }}>
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate(-1)}

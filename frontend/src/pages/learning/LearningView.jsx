@@ -886,7 +886,7 @@ export default function LearningView() {
         {/* Sticky progress + header — normal document flow, never overlaps
             the hero image or the title beneath it. */}
         <div
-          className="sticky top-0 z-30 px-4 pb-3 pt-3 backdrop-blur-xl"
+          className="px-4 pb-3 pt-3 backdrop-blur-xl"
           style={{ background: "color-mix(in srgb, var(--imc-learning-bg) 90%, transparent)" }}
         >
           <div className="flex gap-1.5">

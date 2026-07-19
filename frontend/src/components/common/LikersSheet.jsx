@@ -6,6 +6,7 @@ import { Loader2, MessageCircle, X } from "lucide-react";
 import CircleAction from "./CircleAction";
 import { getGenderAvatarIcon } from "../../utils/avatar";
 import { createConversation } from "../../api/messageApi";
+import { getSessionUser } from "../../utils/sessionUser";
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
 
@@ -44,7 +45,7 @@ function getId(value) {
 // "Message" shortcut, anyone else gets the same +Circle action used
 // everywhere else in the app (CircleAction — already handles
 // none/pending/circle state and its own optimistic update).
-function LikerRow({ user, onClose }) {
+function LikerRow({ user, onClose, isSelf }) {
   const navigate = useNavigate();
   const userId = getId(user);
   const [messaging, setMessaging] = useState(false);
@@ -100,7 +101,11 @@ function LikerRow({ user, onClose }) {
       </div>
 
       <div onClick={(event) => event.stopPropagation()} className="shrink-0">
-        {user?.isInCircle ? (
+        {isSelf ? (
+          <span className="text-[11px] font-black" style={{ color: "var(--imc-text-muted)" }}>
+            You
+          </span>
+        ) : user?.isInCircle ? (
           <button
             type="button"
             onClick={handleMessage}
@@ -131,6 +136,7 @@ export default function LikersSheet({ open, onClose, title = "Liked by", loadLik
   const [likers, setLikers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const currentUserId = getId(getSessionUser());
 
   useEffect(() => {
     if (!open) return;
@@ -205,7 +211,12 @@ export default function LikersSheet({ open, onClose, title = "Liked by", loadLik
           {!loading &&
             !error &&
             likers.map((user) => (
-              <LikerRow key={getId(user)} user={user} onClose={onClose} />
+              <LikerRow
+                key={getId(user)}
+                user={user}
+                onClose={onClose}
+                isSelf={Boolean(currentUserId) && getId(user) === currentUserId}
+              />
             ))}
         </div>
       </div>

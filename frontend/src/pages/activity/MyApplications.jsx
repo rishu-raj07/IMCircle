@@ -72,7 +72,7 @@ function MyApplications() {
   return (
     <div className="min-h-screen bg-[var(--imc-bg)]">
       <div className="mx-auto min-h-screen max-w-[430px] bg-[var(--imc-surface)] pb-28">
-        <div className="sticky top-0 z-30 border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-5 py-4">
+        <div className="border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-5 py-4">
           <div className="flex items-center justify-between">
             <button
               onClick={() => navigate(-1)}

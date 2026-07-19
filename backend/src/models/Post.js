@@ -19,6 +19,19 @@ const postSchema = new mongoose.Schema(
       maxlength: 2000,
     },
 
+    // Caption-only editing (updatePost in post.controller.js) — media/
+    // purpose/visibility are deliberately NOT editable after publish, only
+    // the text. Mirrors the isEdited/editedAt pattern already used on
+    // Message.js for DM edits.
+    isEdited: {
+      type: Boolean,
+      default: false,
+    },
+    editedAt: {
+      type: Date,
+      default: null,
+    },
+
     purpose: {
       type: String,
       enum: ["general", "achievement", "question", "query", "opportunity"],

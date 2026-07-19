@@ -16,6 +16,7 @@ import { getSessionUser } from "../../utils/sessionUser";
 import ImageLoader from "../../components/common/ImageLoader";
 import { formatRelativeTime } from "../../utils/relativeTime";
 import { getGenderAvatarIcon } from "../../utils/avatar";
+import { isEncryptionSupported, decryptFromUser } from "../../utils/encryption";
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
 
@@ -54,15 +55,21 @@ function formatChatTime(date) {
   return formatRelativeTime(date) || "now";
 }
 
-function getUnreadText(conversation) {
+// `decryptedText` overrides the generic "🔒 Message" placeholder with the
+// real text once it's been decrypted client-side (see the decryptedPreviews
+// effect below) — undefined means "not decrypted (yet or at all)", so the
+// generic placeholder from conversation.lastMessage is shown in the
+// meantime rather than nothing.
+function getUnreadText(conversation, decryptedText) {
   const unreadCount = conversation.unreadCount || 0;
+  const fallback = decryptedText || conversation.lastMessage || "";
 
   if (unreadCount <= 0) {
-    return conversation.lastMessage || "No messages yet";
+    return fallback || "No messages yet";
   }
 
   if (unreadCount === 1) {
-    return conversation.lastMessage || "1 new message";
+    return fallback || "1 new message";
   }
 
   if (unreadCount >= 5) {
@@ -104,6 +111,12 @@ function Inbox() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const loadStartedRef = useRef(false);
+  // conversationId -> decrypted latest-message text. Decryption happens
+  // entirely client-side with keys already in this browser (same mechanism
+  // as Chat.jsx) — nothing here weakens E2EE, it just means the list can
+  // show the real preview instead of a generic "🔒 Message" placeholder for
+  // conversations this device is actually able to decrypt.
+  const [decryptedPreviews, setDecryptedPreviews] = useState({});
 
   const currentUserId = getUserId(currentUser);
 
@@ -135,6 +148,61 @@ function Inbox() {
   }, []);
 
   useEffect(() => {
+    if (!isEncryptionSupported() || !currentUserId) return;
+
+    let cancelled = false;
+
+    // Keyed by the LATEST MESSAGE's id, not the conversation's — a new
+    // incoming encrypted message must trigger a fresh decrypt, not keep
+    // showing whatever the previous latest message decrypted to.
+    const pending = conversations.filter((conversation) => {
+      const latest = conversation.latestMessage;
+      if (!latest?._id || !latest?.isEncrypted || !latest?.encryptedContent) return false;
+      if (decryptedPreviews[latest._id] !== undefined) return false;
+
+      const otherUser = conversation.participants?.find(
+        (user) => getUserId(user) !== currentUserId
+      );
+      return Boolean(otherUser?.publicKey);
+    });
+
+    if (pending.length === 0) return;
+
+    Promise.all(
+      pending.map(async (conversation) => {
+        const otherUser = conversation.participants?.find(
+          (user) => getUserId(user) !== currentUserId
+        );
+
+        try {
+          const text = await decryptFromUser(
+            otherUser.publicKey,
+            conversation.latestMessage.encryptedContent
+          );
+          return [conversation.latestMessage._id, text];
+        } catch {
+          // Encrypted from a different device/session than this one — see
+          // encryption.js's documented multi-device trade-off. Recorded as
+          // "" (tried, failed) rather than left undefined, so this
+          // message isn't retried on every future render — the generic
+          // lock placeholder shows instead of a broken-looking row.
+          return [conversation.latestMessage._id, ""];
+        }
+      })
+    ).then((results) => {
+      if (cancelled) return;
+      const updates = Object.fromEntries(results);
+      if (Object.keys(updates).length > 0) {
+        setDecryptedPreviews((prev) => ({ ...prev, ...updates }));
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [conversations, currentUserId, decryptedPreviews]);
+
+  useEffect(() => {
     if (!currentUserId) return;
 
     socket.connect();
@@ -159,11 +227,15 @@ function Inbox() {
           return {
             ...conv,
             latestMessage: message,
-            lastMessage:
-              message.text ||
-              (message.attachments?.some((item) => item.type === "audio")
-                ? "Voice message"
-                : "Attachment"),
+            // Real text fills in a moment later via the decryptedPreviews
+            // effect above (which reacts to this same conversations state
+            // update) — this is just the placeholder shown until then.
+            lastMessage: message.isEncrypted
+              ? "🔒 Message"
+              : message.text ||
+                (message.attachments?.some((item) => item.type === "audio")
+                  ? "Voice message"
+                  : "Attachment"),
             lastMessageAt: message.createdAt,
             lastMessageStatus: isFromOtherUser ? "" : message.status || "sent",
             unreadCount: nextUnreadCount,
@@ -268,7 +340,7 @@ function Inbox() {
   return (
     <div className="min-h-screen bg-[var(--imc-bg)] flex justify-center">
       <div className="relative min-h-screen w-full max-w-[430px] bg-[var(--imc-surface)]">
-        <div className="sticky top-0 z-20 border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 py-4">
+        <div className="border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 py-4">
           <div className="flex items-center justify-between">
             <button
               onClick={() => navigate(-1)}
@@ -340,7 +412,10 @@ function Inbox() {
                 const unreadCount = conversation.unreadCount || 0;
                 const isUnread = unreadCount > 0;
                 const unreadBadge = getUnreadBadge(unreadCount);
-                const previewText = getUnreadText(conversation);
+                const previewText = getUnreadText(
+                  conversation,
+                  decryptedPreviews[conversation.latestMessage?._id]
+                );
                 const isOnline = onlineUsers.includes(getUserId(otherUser));
                 const isBlocked = Boolean(conversation.blockedBy?.length);
                 const blockedByMe = conversation.blockedBy?.some(
