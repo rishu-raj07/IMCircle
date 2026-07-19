@@ -465,7 +465,7 @@ export const sendMessage = async (req, res) => {
     const messageObj = populatedMessage.toObject();
     messageObj.status = getMessageStatus(messageObj, receiverId);
 
-    emitMessage(conversation._id, messageObj);
+    emitMessage(conversation._id, messageObj, receiverIds);
 
     // Direct messages deliberately do NOT create a Notification document —
     // unlike likes/comments/follows/etc, a DM already lives in the chat

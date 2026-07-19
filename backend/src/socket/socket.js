@@ -213,14 +213,36 @@ export const initSocket = (server) => {
       }
     });
 
-    socket.on("typing", ({ conversationId, sender }) => {
+    // `conversationId` room delivery depends on the recipient's `join_chat`
+    // (below) having already completed — an async DB round trip with no ack,
+    // so a typing event fired right as the recipient opens/reconnects to
+    // this chat can lose the race and never arrive (Socket.IO doesn't queue
+    // room broadcasts for a socket that joins a moment late). The client now
+    // also sends `recipientId` (it already knows who the other participant
+    // is), so this can additionally emit straight to that user's own room —
+    // joined synchronously at connection time above, with no race at all.
+    // Still emits to the conversation room too, for any other tab/device.
+    socket.on("typing", ({ conversationId, sender, recipientId }) => {
       if (!conversationId) return;
       socket.to(conversationId.toString()).emit("user_typing", sender);
+      if (recipientId) {
+        socket.to(recipientId.toString()).emit("user_typing", sender);
+      }
     });
 
-    socket.on("stop_typing", (conversationId) => {
+    socket.on("stop_typing", (payload) => {
+      // Kept backward compatible with the old call shape (a bare
+      // conversationId string) alongside the new { conversationId,
+      // recipientId } object.
+      const conversationId =
+        typeof payload === "string" ? payload : payload?.conversationId;
+      const recipientId = typeof payload === "string" ? null : payload?.recipientId;
+
       if (!conversationId) return;
       socket.to(conversationId.toString()).emit("user_stop_typing");
+      if (recipientId) {
+        socket.to(recipientId.toString()).emit("user_stop_typing");
+      }
     });
 
     socket.on("disconnect", () => {
@@ -292,9 +314,25 @@ export const emitNotification = (recipientId, notification) => {
   sendPushToUser(recipientId, notification).catch(() => {});
 };
 
-export const emitMessage = (conversationId, message) => {
+export const emitMessage = (conversationId, message, participantIds = []) => {
   if (!io || !conversationId) return;
   io.to(conversationId.toString()).emit("receive_message", message);
+
+  // Belt-and-suspenders delivery: the `conversationId` room only has
+  // members once a client's `join_chat` (async, unacknowledged DB lookup)
+  // has actually completed. If the recipient just opened this chat, or
+  // just reconnected, that round trip may still be in flight when this
+  // fires — Socket.IO doesn't queue/replay room broadcasts for a socket
+  // that joins a moment late, so the message would silently never arrive
+  // until they leave and reopen the chat. Every socket also sits in a room
+  // named by its own userId from the instant it connects (see the
+  // "connection" handler above) — that join is synchronous, so mirroring
+  // the emit there guarantees delivery regardless of join_chat's timing.
+  // The frontend's receive_message handler already dedupes by message._id,
+  // so a client sitting in both rooms just drops one harmless duplicate.
+  for (const participantId of participantIds) {
+    io.to(participantId.toString()).emit("receive_message", message);
+  }
 };
 
 export const emitMessageSeen = (conversationId, userId) => {

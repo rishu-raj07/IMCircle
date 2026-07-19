@@ -310,6 +310,18 @@ function Chat() {
   const otherUserId = getUserId(otherUser);
   const isOtherOnline = onlineUsers.includes(otherUserId);
 
+  // Lets the socket effect below (which deliberately does NOT list
+  // otherUserId as a dependency — see its own comment) always read the
+  // CURRENT otherUserId instead of whatever value was in scope when its
+  // handlers were first created. Without this, opening a chat any way that
+  // doesn't pre-fill `conversation` synchronously (e.g. a deep link, or a
+  // page refresh while already in a chat) bakes in `otherUserId === ""`
+  // for the whole session, and delivered/seen ticks silently never update.
+  const otherUserIdRef = useRef(otherUserId);
+  useEffect(() => {
+    otherUserIdRef.current = otherUserId;
+  }, [otherUserId]);
+
   // `otherUser.lastActiveAt` is a REST snapshot taken once when this chat
   // loaded — nothing re-fetches it afterward, so without this, "Last seen"
   // keeps showing whatever stale time was true at page-load forever, even
@@ -548,6 +560,42 @@ function Chat() {
       setOnlineUsers(users || []);
     });
 
+    // Presence was previously "push only" — the very first snapshot came
+    // from the get_online_users call in joinRoom() above, and after that
+    // this chat only ever heard about a change if a live "online_users"
+    // broadcast happened to arrive (fired globally on ANY socket
+    // connect/disconnect anywhere in the app, not just this conversation).
+    // Any single missed broadcast — a brief network blip, a proxy hiccup —
+    // then had nothing to correct it until the next unrelated
+    // connect/disconnect happened to fire one, which could be minutes or
+    // hours away: exactly the "shows Last seen 3 hours ago while they're
+    // actively typing right now" symptom. A cheap on-demand re-request
+    // every few seconds while this chat is open makes presence self-heal
+    // quickly regardless of what caused it to fall out of sync, the same
+    // "don't rely on just one signal" approach already used for the app
+    // update banner (see useVersionCheck.js).
+    const presenceResyncInterval = setInterval(() => {
+      if (socket.connected) socket.emit("get_online_users");
+    }, 12000);
+
+    // No connection-state visibility previously existed on this page at
+    // all — if the handshake ever failed or dropped, nothing here would
+    // ever know, making exactly this class of bug ("messages/typing/
+    // presence all silently stop") invisible in logs. Dev-only, mirrors
+    // the backend's own `NODE_ENV !== "production"` connect logging.
+    const logConnectError = (error) => {
+      if (import.meta.env.DEV) {
+        console.warn("[chat socket] connect_error:", error?.message || error);
+      }
+    };
+    const logDisconnect = (reason) => {
+      if (import.meta.env.DEV) {
+        console.warn("[chat socket] disconnected:", reason);
+      }
+    };
+    socket.on("connect_error", logConnectError);
+    socket.on("disconnect", logDisconnect);
+
     socket.on("receive_message", (message) => {
       if (message.conversation !== conversationId) return;
 
@@ -597,7 +645,7 @@ function Chat() {
     });
 
     socket.on("message_delivered_update", ({ messageId, deliveredTo, userId }) => {
-      if (userId !== otherUserId) return;
+      if (userId !== otherUserIdRef.current) return;
 
       setMessages((prev) =>
         prev.map((message) => {
@@ -618,7 +666,7 @@ function Chat() {
       "message_seen_update",
       ({ conversationId: seenConversationId, userId }) => {
         if (seenConversationId !== conversationId) return;
-        if (userId !== otherUserId) return;
+        if (userId !== otherUserIdRef.current) return;
 
         setMessages((prev) =>
           prev.map((message) => {
@@ -682,6 +730,7 @@ function Chat() {
     });
 
     return () => {
+      clearInterval(presenceResyncInterval);
       socket.emit("leave_chat", conversationId);
       socket.off("connect", joinRoom);
       socket.off("online_users");
@@ -693,6 +742,8 @@ function Chat() {
       socket.off("message_edited");
       socket.off("user_typing");
       socket.off("user_stop_typing");
+      socket.off("connect_error", logConnectError);
+      socket.off("disconnect", logDisconnect);
     };
     // `otherUserId` is deliberately NOT a dependency here, even though it's
     // used inside this effect (the `join_chat` room only cares about
@@ -718,12 +769,18 @@ function Chat() {
     socket.emit("typing", {
       conversationId,
       sender: currentUser,
+      // Lets the server also deliver this straight to the other person's
+      // own room (joined the instant their socket connects), instead of
+      // relying solely on the conversation room — which only has members
+      // once their `join_chat` async DB lookup has actually finished. See
+      // the socket effect above for the same race affecting live messages.
+      recipientId: otherUserId,
     });
 
     clearTimeout(window.__typingTimer);
 
     window.__typingTimer = setTimeout(() => {
-      socket.emit("stop_typing", conversationId);
+      socket.emit("stop_typing", { conversationId, recipientId: otherUserId });
     }, 900);
   };
 
@@ -855,7 +912,7 @@ function Chat() {
         )
       );
 
-      socket.emit("stop_typing", conversationId);
+      socket.emit("stop_typing", { conversationId, recipientId: otherUserId });
     } catch (error) {
       setMessages((prev) =>
         prev.map((message) =>
