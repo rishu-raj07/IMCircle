@@ -241,7 +241,7 @@ export default function Requests() {
   return (
     <div className="min-h-screen bg-[var(--imc-bg)]">
       <div className="mx-auto min-h-screen w-full max-w-[430px] bg-[var(--imc-bg)] pb-[max(28px,env(safe-area-inset-bottom))]">
-        <header className="border-b border-[var(--imc-border)] bg-[var(--imc-bg)]/95 px-4 pb-3 pt-2 backdrop-blur-xl">
+        <header className="sticky top-0 z-20 border-b border-[var(--imc-border)] bg-[var(--imc-bg)]/95 px-4 pb-3 pt-2 backdrop-blur-xl">
           <div className="flex items-center gap-3">
             <button
               type="button"
