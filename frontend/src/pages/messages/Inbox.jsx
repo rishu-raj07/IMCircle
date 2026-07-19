@@ -338,10 +338,10 @@ function Inbox() {
   };
 
   return (
-    <div className="-mt-[calc(env(safe-area-inset-top,0px)+8px)] min-h-screen bg-[var(--imc-bg)] flex justify-center">
-      <div className="relative min-h-screen w-full max-w-[430px] bg-[var(--imc-surface)]">
+    <div className="fixed inset-0 flex justify-center bg-[var(--imc-bg)]">
+      <div className="relative flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-[var(--imc-surface)]">
         <div
-          className="sticky top-0 z-20 border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 pb-4"
+          className="shrink-0 border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-4 pb-4"
           style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
         >
           <div className="flex items-center justify-between">
@@ -370,7 +370,7 @@ function Inbox() {
           </div>
         </div>
 
-        <main className="px-4 pt-4">
+        <main className="flex-1 overflow-y-auto px-4 pt-4 pb-6">
           <div className="no-scrollbar mb-4 flex gap-2 overflow-x-auto pb-1">
             {["All", "Unread", "Blocked", "Opportunities", "Network"].map((item) => (
               <button

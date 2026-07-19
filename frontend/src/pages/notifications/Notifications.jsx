@@ -254,6 +254,7 @@ function Notifications() {
   const [loadingMore, setLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
   const sentinelRef = useRef(null);
+  const mainRef = useRef(null);
   const currentUserId = useMemo(() => {
     const user = getSessionUser();
     return user?._id || user?.id || "";
@@ -374,7 +375,7 @@ function Notifications() {
           loadMore();
         }
       },
-      { rootMargin: "200px" }
+      { root: mainRef.current, rootMargin: "200px" }
     );
 
     observer.observe(node);
@@ -493,10 +494,10 @@ function Notifications() {
   };
 
   return (
-    <div className="-mt-[calc(env(safe-area-inset-top,0px)+8px)] flex min-h-screen justify-center" style={{ background: "var(--imc-bg)" }}>
-      <div className="min-h-screen w-full max-w-[430px]" style={{ background: PAPER }}>
+    <div className="fixed inset-0 flex justify-center" style={{ background: "var(--imc-bg)" }}>
+      <div className="relative flex h-full w-full max-w-[430px] flex-col overflow-hidden" style={{ background: PAPER }}>
         <header
-          className="sticky top-0 z-20 border-b px-4 pb-4 backdrop-blur-xl"
+          className="shrink-0 border-b px-4 pb-4 backdrop-blur-xl"
           style={{ borderColor: LINE, background: SURFACE, paddingTop: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
         >
           <div className="flex items-center gap-3">
@@ -525,7 +526,7 @@ function Notifications() {
           </div>
         </header>
 
-        <main className="px-4 pt-4">
+        <main ref={mainRef} className="flex-1 overflow-y-auto px-4 pt-4 pb-6">
           <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-3">
             {["All", "Unread", "Circle", "Invite", "Journey", "Comment", "Like"].map((tab) => {
               const active = activeTab === tab;

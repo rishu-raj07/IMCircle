@@ -353,10 +353,10 @@ export default function ProfilePeoplePage() {
   };
 
   return (
-    <div className="-mt-[calc(env(safe-area-inset-top,0px)+8px)] flex min-h-screen justify-center bg-[var(--imc-surface)]">
-      <div className="relative min-h-screen w-full max-w-[430px] bg-[var(--imc-surface)] pb-24">
+    <div className="fixed inset-0 flex justify-center bg-[var(--imc-surface)]">
+      <div className="relative flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-[var(--imc-surface)]">
         <header
-          className="sticky top-0 z-20 border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-5 pb-4"
+          className="shrink-0 border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-5 pb-4"
           style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
         >
           <div className="flex items-center justify-between">
@@ -397,7 +397,7 @@ export default function ProfilePeoplePage() {
           </div>
         </header>
 
-        <main className="px-5">
+        <main className="flex-1 overflow-y-auto px-5 pb-24">
           {loading ? (
             <div className="flex h-[300px] items-center justify-center">
               <p className="text-[13px] font-black text-[var(--imc-indigo-text)]">

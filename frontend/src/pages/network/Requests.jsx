@@ -239,10 +239,10 @@ export default function Requests() {
   };
 
   return (
-    <div className="-mt-[calc(env(safe-area-inset-top,0px)+8px)] min-h-screen bg-[var(--imc-bg)]">
-      <div className="mx-auto min-h-screen w-full max-w-[430px] bg-[var(--imc-bg)] pb-[max(28px,env(safe-area-inset-bottom))]">
+    <div className="fixed inset-0 flex justify-center bg-[var(--imc-bg)]">
+      <div className="relative flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-[var(--imc-bg)]">
         <header
-          className="sticky top-0 z-20 border-b border-[var(--imc-border)] bg-[var(--imc-bg)]/95 px-4 pb-3 backdrop-blur-xl"
+          className="shrink-0 border-b border-[var(--imc-border)] bg-[var(--imc-bg)]/95 px-4 pb-3 backdrop-blur-xl"
           style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
         >
           <div className="flex items-center gap-3">
@@ -272,7 +272,7 @@ export default function Requests() {
           </label>
         </header>
 
-        <main className="space-y-7 px-4 py-5">
+        <main className="flex-1 overflow-y-auto space-y-7 px-4 pt-5 pb-[max(28px,env(safe-area-inset-bottom))]">
           <PageSection title="Requests you sent" count={filteredSent.length}>
             {loading ? <LoadingRow /> : filteredSent.length ? (
               <div className="no-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4 pb-1">

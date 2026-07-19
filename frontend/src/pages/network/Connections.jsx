@@ -45,10 +45,10 @@ function Connections() {
   ];
 
   return (
-    <div className="-mt-[calc(env(safe-area-inset-top,0px)+8px)] min-h-screen bg-[var(--imc-bg)]">
-      <div className="mx-auto min-h-screen max-w-[430px] bg-[var(--imc-bg)] pb-28">
+    <div className="fixed inset-0 flex justify-center bg-[var(--imc-bg)]">
+      <div className="relative flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-[var(--imc-bg)]">
         <div
-          className="sticky top-0 z-20 border-b border-[var(--imc-border)] bg-[var(--imc-surface-2)]/95 px-5 pb-4 backdrop-blur-xl"
+          className="shrink-0 border-b border-[var(--imc-border)] bg-[var(--imc-surface-2)]/95 px-5 pb-4 backdrop-blur-xl"
           style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
         >
           <div className="flex items-center justify-between">
@@ -82,7 +82,7 @@ function Connections() {
           </div>
         </div>
 
-        <main className="px-5 py-5">
+        <main className="flex-1 overflow-y-auto px-5 pt-5 pb-28">
           <div className="grid grid-cols-3 gap-3">
             <StatCard value="324" label="Connections" />
             <StatCard value="48" label="Active" />
