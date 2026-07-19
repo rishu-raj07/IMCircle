@@ -9,6 +9,7 @@ import {
   queryPermissionState,
   setStoredPermissionState,
 } from "../../utils/permissions";
+import { IS_NATIVE } from "../../config/platform";
 
 function formatDisplay(value) {
   if (!value?.city) return "";
@@ -114,17 +115,43 @@ function LocationField({
     }
   };
 
-  const getDevicePosition = (options) =>
-    new Promise((resolve, reject) => {
+  // The raw browser `navigator.geolocation` API is unreliable inside the
+  // Capacitor Android WebView — it needs the host app to wire up
+  // WebChromeClient.onGeolocationPermissionsShowPrompt itself, which a
+  // default Capacitor setup doesn't do, so "use my location" would just
+  // silently fail or hang forever on the phone despite the manifest
+  // already declaring ACCESS_FINE_LOCATION/ACCESS_COARSE_LOCATION and the
+  // exact same code working fine in a real browser. @capacitor/geolocation
+  // bridges directly to the native Android/iOS location APIs instead and
+  // handles the runtime permission prompt itself, so this branches to it
+  // whenever running inside the native app.
+  const getDevicePosition = async (options) => {
+    if (IS_NATIVE) {
+      const { Geolocation } = await import("@capacitor/geolocation");
+      return Geolocation.getCurrentPosition(options);
+    }
+
+    return new Promise((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(resolve, reject, options);
     });
+  };
 
   const useMyLocation = async () => {
-    if (!navigator.geolocation) return setError("Location isn't supported on this device");
+    if (!IS_NATIVE && !navigator.geolocation) {
+      return setError("Location isn't supported on this device");
+    }
+
     const permission = await queryPermissionState("geolocation");
     if (permission === "denied") {
       return setError("Location access is off. Enable it in your device settings.");
     }
+
+    // Native errors from @capacitor/geolocation don't reliably carry the
+    // Web API's `.code === 1` (PERMISSION_DENIED) shape — different
+    // platforms/versions report it as a plain message string instead — so
+    // this checks both to correctly recognize a denial either way.
+    const isPermissionDenied = (err) =>
+      err?.code === 1 || /denied/i.test(err?.message || "");
 
     setLocating(true);
     setError("");
@@ -137,7 +164,7 @@ function LocationField({
           maximumAge: 300000,
         });
       } catch (firstError) {
-        if (firstError?.code === 1) throw firstError;
+        if (isPermissionDenied(firstError)) throw firstError;
         position = await getDevicePosition({
           enableHighAccuracy: true,
           timeout: 15000,
@@ -157,9 +184,9 @@ function LocationField({
       setSuggestions([]);
       setError("");
     } catch (geoError) {
-      if (geoError?.code === 1) {
+      if (isPermissionDenied(geoError)) {
         setStoredPermissionState("geolocation", "denied");
-        setError("Location access denied. Allow it in your browser settings.");
+        setError("Location access denied. Allow it in your device settings.");
       } else {
         setError("Current location unavailable. Search and select your city instead.");
       }

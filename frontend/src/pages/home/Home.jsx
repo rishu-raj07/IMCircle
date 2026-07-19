@@ -1200,41 +1200,6 @@ function Home() {
             )}
 
             <div className="px-4 pb-1">
-              {showProfileCard && (
-                <div className="mt-1 flex items-start gap-3 rounded-2xl border border-[rgba(67,56,202,0.16)] bg-[rgba(67,56,202,0.05)] p-3.5">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[12.5px] font-black text-[var(--imc-text)]">
-                      Complete your profile
-                    </p>
-                    <p className="mt-0.5 text-[11px] font-medium leading-4 text-[var(--imc-text-muted)]">
-                      Add your tagline, interests and location so people can discover you and understand what you're building.
-                    </p>
-
-                    <div className="mt-2 flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => navigate("/profile-setup")}
-                        className="rounded-full bg-[var(--imc-indigo)] px-3.5 py-1.5 text-[11px] font-black text-white active:scale-95"
-                      >
-                        Complete profile
-                      </button>
-                      <span className="text-[10.5px] font-bold text-[var(--imc-text-faint)]">
-                        {Math.round(me?.profileCompletionPercent || 0)}% done
-                      </span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={dismissProfileCard}
-                    aria-label="Dismiss"
-                    className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[var(--imc-text-faint)] active:scale-90"
-                  >
-                    <X size={15} />
-                  </button>
-                </div>
-              )}
-
               {builderScore && activeJourneys.length === 0 && (
                 <div className="mt-1">
                   <StreakCard
@@ -1438,6 +1403,46 @@ function Home() {
           >
             <ArrowUp size={20} strokeWidth={2.4} />
           </button>
+        )}
+
+        {showProfileCard && (
+          <div
+            className="fixed left-1/2 z-40 w-full max-w-[calc(430px-32px)] -translate-x-1/2 rounded-2xl border border-[rgba(67,56,202,0.16)] bg-[var(--imc-surface)] p-3.5 shadow-2xl"
+            style={{ bottom: "calc(84px + env(safe-area-inset-bottom))" }}
+          >
+            <div className="flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-[12.5px] font-black text-[var(--imc-text)]">
+                  Complete your profile
+                </p>
+                <p className="mt-0.5 text-[11px] font-medium leading-4 text-[var(--imc-text-muted)]">
+                  Add your tagline, interests and location so people can discover you and understand what you're building.
+                </p>
+
+                <div className="mt-2 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => navigate("/profile-setup")}
+                    className="rounded-full bg-[var(--imc-indigo)] px-3.5 py-1.5 text-[11px] font-black text-white active:scale-95"
+                  >
+                    Complete profile
+                  </button>
+                  <span className="text-[10.5px] font-bold text-[var(--imc-text-faint)]">
+                    {Math.round(me?.profileCompletionPercent || 0)}% done
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={dismissProfileCard}
+                aria-label="Dismiss"
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[var(--imc-text-faint)] active:scale-90"
+              >
+                <X size={15} />
+              </button>
+            </div>
+          </div>
         )}
 
         <BottomNav />

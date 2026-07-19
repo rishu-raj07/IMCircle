@@ -127,12 +127,16 @@ const searchWithBrowserMaps = async (query) => {
     }
   }
 
+  // No `types` restriction — "(cities)" excluded anything below a whole
+  // city (a neighborhood, sub-locality, or landmark like "Badarpur
+  // border"), which was the actual cause of "it won't find my area even
+  // though it's a real place" reports. Full geocode results cover cities,
+  // states, sub-localities, and neighborhoods all together.
   return new Promise((resolve, reject) => {
     const service = new maps.places.AutocompleteService();
     service.getPlacePredictions(
       {
         input: query,
-        types: ["(cities)"],
       },
       (predictions, status) => {
         if (
