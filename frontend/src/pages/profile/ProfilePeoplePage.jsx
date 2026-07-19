@@ -353,9 +353,12 @@ export default function ProfilePeoplePage() {
   };
 
   return (
-    <div className="flex min-h-screen justify-center bg-[var(--imc-surface)]">
+    <div className="-mt-[calc(env(safe-area-inset-top,0px)+8px)] flex min-h-screen justify-center bg-[var(--imc-surface)]">
       <div className="relative min-h-screen w-full max-w-[430px] bg-[var(--imc-surface)] pb-24">
-        <header className="sticky top-0 z-20 border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-5 pb-4 pt-2">
+        <header
+          className="sticky top-0 z-20 border-b border-[var(--imc-border)] bg-[var(--imc-surface)] px-5 pb-4"
+          style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
+        >
           <div className="flex items-center justify-between">
             <button
               type="button"

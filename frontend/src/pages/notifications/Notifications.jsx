@@ -493,9 +493,12 @@ function Notifications() {
   };
 
   return (
-    <div className="flex min-h-screen justify-center" style={{ background: "var(--imc-bg)" }}>
+    <div className="-mt-[calc(env(safe-area-inset-top,0px)+8px)] flex min-h-screen justify-center" style={{ background: "var(--imc-bg)" }}>
       <div className="min-h-screen w-full max-w-[430px]" style={{ background: PAPER }}>
-        <header className="sticky top-0 z-20 border-b px-4 pb-4 pt-2 backdrop-blur-xl" style={{ borderColor: LINE, background: SURFACE }}>
+        <header
+          className="sticky top-0 z-20 border-b px-4 pb-4 backdrop-blur-xl"
+          style={{ borderColor: LINE, background: SURFACE, paddingTop: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
+        >
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate(-1)}

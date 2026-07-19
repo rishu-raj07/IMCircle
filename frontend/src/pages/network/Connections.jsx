@@ -45,9 +45,12 @@ function Connections() {
   ];
 
   return (
-    <div className="min-h-screen bg-[var(--imc-bg)]">
+    <div className="-mt-[calc(env(safe-area-inset-top,0px)+8px)] min-h-screen bg-[var(--imc-bg)]">
       <div className="mx-auto min-h-screen max-w-[430px] bg-[var(--imc-bg)] pb-28">
-        <div className="sticky top-0 z-20 border-b border-[var(--imc-border)] bg-[var(--imc-surface-2)]/95 px-5 pb-4 pt-2 backdrop-blur-xl">
+        <div
+          className="sticky top-0 z-20 border-b border-[var(--imc-border)] bg-[var(--imc-surface-2)]/95 px-5 pb-4 backdrop-blur-xl"
+          style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
+        >
           <div className="flex items-center justify-between">
             <button
               onClick={() => navigate(-1)}
