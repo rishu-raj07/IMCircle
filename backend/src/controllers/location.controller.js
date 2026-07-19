@@ -19,7 +19,7 @@ function normalizePlace(result = {}) {
       component(components, "administrative_area_level_2") ||
       "",
     state: component(components, "administrative_area_level_1"),
-    country: component(components, "country") || "India",
+    country: component(components, "country"),
     lat: result.geometry?.location?.lat ?? null,
     lng: result.geometry?.location?.lng ?? null,
   };
@@ -37,9 +37,11 @@ export const searchLocations = async (req, res) => {
     const input = String(req.query.q || "").trim().slice(0, 120);
     if (input.length < 2) return res.status(200).json({ success: true, suggestions: [] });
 
+    // No country restriction — a user anywhere in the world needs to be
+    // able to find and select their own city, not just India.
     const { data } = await axios.get("https://maps.googleapis.com/maps/api/place/autocomplete/json", {
       timeout: 6000,
-      params: { input, key: mapsKey(), components: "country:in", types: "(cities)" },
+      params: { input, key: mapsKey(), types: "(cities)" },
     });
 
     if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
