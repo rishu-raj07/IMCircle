@@ -1,6 +1,22 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+import dns from "dns";
+// This VPS has both IPv4 and IPv6 addresses, and Node prefers IPv6 by
+// default when a hostname resolves to both (e.g. maps.googleapis.com) —
+// so every outbound call from this server (Google Maps geocoding/places,
+// or anything else that hits a dual-stack host) leaves over IPv6 unless
+// told otherwise. That broke server-side Google Maps API key restrictions
+// specifically: the key's "Authorized IP addresses" only had the server's
+// IPv4 listed, so Google rejected every request with "This IP ... is not
+// authorized" even though the IPv4 address WAS correctly whitelisted —
+// curl -4 against the same key/endpoint worked immediately, plain curl
+// (IPv6-first) didn't. Forcing IPv4-first resolution for the whole process
+// fixes this at the source instead of also having to keep a second,
+// less-stable IPv6 address in sync on every Google Cloud key restriction
+// (some hosts rotate/reassign IPv6 more readily than IPv4).
+dns.setDefaultResultOrder("ipv4first");
+
 import http from "http";
 import connectDB from "./config/db.js";
 import { initSocket } from "./socket/socket.js";
