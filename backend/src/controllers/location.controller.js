@@ -1,6 +1,5 @@
 import axios from "axios";
 import https from "https";
-import dns from "dns";
 
 const mapsKey = () =>
   process.env.GMAPS_SERVER_KEY ||
@@ -16,14 +15,16 @@ const mapsKey = () =>
 // is restricted to this server's IPv4 address only (IPv6 addresses are
 // less stable to keep in sync as an allowlist entry across VPS
 // providers/reboots), so every call below explicitly forces IPv4 at the
-// connection level via a custom `lookup`, independent of whatever the
-// process-wide DNS default resolves to. Confirmed on the server itself:
-// `curl -4 ...` against this same endpoint/key succeeded immediately,
-// plain `curl` (IPv6-first) failed with "This IP ... is not authorized" —
-// same fix, applied where Node actually makes the call.
-const ipv4OnlyAgent = new https.Agent({
-  lookup: (hostname, options, callback) => dns.lookup(hostname, { family: 4 }, callback),
-});
+// connection level.
+//
+// A hand-rolled custom `lookup` function was tried first and broke with
+// "Invalid IP address: undefined" — Node's net/tls internals call `lookup`
+// with a call signature that didn't match what was assumed here, and
+// `dns.lookup`'s callback shape doesn't line up cleanly with it either.
+// `family: 4` is the plain, directly-supported option net.connect/tls.connect
+// already understand on their own (no custom callback involved), so it's
+// both simpler and more reliable than reimplementing lookup by hand.
+const ipv4OnlyAgent = new https.Agent({ family: 4 });
 
 function component(components = [], type) {
   return components.find((item) => item.types?.includes(type))?.long_name || "";
