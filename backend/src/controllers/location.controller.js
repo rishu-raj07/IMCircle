@@ -57,14 +57,16 @@ export const searchLocations = async (req, res) => {
     const input = String(req.query.q || "").trim().slice(0, 120);
     if (input.length < 2) return res.status(200).json({ success: true, suggestions: [] });
 
-    // No country restriction (find any user's city, not just India) and no
-    // `types: "(cities)"` restriction — that excluded anything below a
-    // whole city, like a neighborhood or landmark (e.g. "Badarpur
-    // border"), which real users do search for.
+    // `components: country:in` restricts results to India only (product
+    // decision — this app is India-focused and searching "Badarpur" was
+    // pulling in irrelevant global results). No `types: "(cities)"`
+    // restriction though — that excluded anything below a whole city, like
+    // a neighborhood or landmark (e.g. "Badarpur border"), which real users
+    // do search for.
     const { data } = await axios.get("https://maps.googleapis.com/maps/api/place/autocomplete/json", {
       timeout: 6000,
       httpsAgent: ipv4OnlyAgent,
-      params: { input, key: mapsKey() },
+      params: { input, components: "country:in", key: mapsKey() },
     });
 
     if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {

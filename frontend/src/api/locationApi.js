@@ -122,13 +122,12 @@ const searchWithBrowserMaps = async (query) => {
 
   if (AutocompleteSuggestion?.fetchAutocompleteSuggestions) {
     try {
-      // No includedRegionCodes restriction — users anywhere in the world
-      // need to be able to find their own city, not just India (this was
-      // the actual cause of "can't find my city" reports: anyone outside
-      // India got zero results no matter what they typed).
+      // `includedRegionCodes: ["in"]` restricts results to India only —
+      // product decision, this app is India-focused.
       const response = await AutocompleteSuggestion.fetchAutocompleteSuggestions({
         input: query,
         language: "en",
+        includedRegionCodes: ["in"],
       });
 
       return (response?.suggestions || [])
@@ -149,11 +148,14 @@ const searchWithBrowserMaps = async (query) => {
   // border"), which was the actual cause of "it won't find my area even
   // though it's a real place" reports. Full geocode results cover cities,
   // states, sub-localities, and neighborhoods all together.
+  // `componentRestrictions: { country: "in" }` restricts to India only —
+  // same product decision as the new-API branch above.
   return new Promise((resolve, reject) => {
     const service = new maps.places.AutocompleteService();
     service.getPlacePredictions(
       {
         input: query,
+        componentRestrictions: { country: "in" },
       },
       (predictions, status) => {
         if (
