@@ -1,6 +1,23 @@
 import api from "./axios";
+import { IS_NATIVE } from "../config/platform";
 
-const browserKey = String(import.meta.env.VITE_GMAPS_BROWSER_KEY || "").trim();
+// The browser-restricted Google Maps JS key (VITE_GMAPS_BROWSER_KEY) is
+// locked to the website's HTTP referrer for security. That's exactly what
+// makes it unusable inside the Capacitor WebView on Android/iOS: the app
+// loads from `capacitor://localhost` / `https://localhost`, which never
+// matches the website's referrer restriction, so `loadGoogleMaps()` either
+// silently times out or Google rejects it with RefererNotAllowedMapError —
+// window.google.maps never becomes available. That's why "use my location"
+// spins until its timeout and search-as-you-type never returns suggestions,
+// but only on the phone: on web, the referrer matches and it works fine.
+// There's no native Maps SDK wired up as an alternative yet (see
+// ios/App/App/AppDelegate.swift), so native builds always go through the
+// backend's /location/* endpoints instead, which call the Places/Geocoding
+// APIs server-side with an unrestricted server key (GMAPS_SERVER_KEY) and
+// have no referrer to fail.
+const browserKey = IS_NATIVE
+  ? ""
+  : String(import.meta.env.VITE_GMAPS_BROWSER_KEY || "").trim();
 
 let mapsPromise;
 

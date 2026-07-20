@@ -877,16 +877,29 @@ export const votePostPoll = async (req, res) => {
 
 // On-demand voter list for one poll option — same "avatars only when
 // tapped, not on every feed fetch" pattern as getPostLikers above.
+//
+// Owner-only: unlike likes (public), who voted for what on a poll is only
+// ever shown to the poll's own creator — matches Instagram/Twitter poll
+// privacy and is what was explicitly asked for. Anyone else still gets the
+// aggregate percentages/counts (computed client-side from the raw vote
+// arrays already on the post document), just not the voter identities.
 export const getPostPollVoters = async (req, res) => {
   try {
     const optionIndex = Number(req.query.optionIndex);
 
     const post = await Post.findById(req.params.postId)
-      .select("poll")
+      .select("poll author")
       .populate("poll.options.votes", authorFields);
 
     if (!post) {
       return res.status(404).json({ success: false, message: "Post not found." });
+    }
+
+    if (post.author.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "Only the poll creator can see who voted.",
+      });
     }
 
     const options = post.poll?.options;

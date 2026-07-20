@@ -1,6 +1,7 @@
 import { memo, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { BadgeCheck, Eye, GraduationCap, Mic } from "lucide-react";
+import { BadgeCheck, Eye, GraduationCap, Loader2, Mic, X } from "lucide-react";
 
 import PostActions from "./PostActions";
 import PostMenu from "./PostMenu";
@@ -485,31 +486,17 @@ function PostPoll({ post, currentUserId, isOwner }) {
     initialMyVote === -1 ? null : initialMyVote
   );
   const [voting, setVoting] = useState(false);
-  const [voterAvatars, setVoterAvatars] = useState({});
+  // Who voted for what is only ever shown to the poll's own creator (backend
+  // enforces this too — getPostPollVoters 403s for anyone else) — everyone
+  // else, including people who voted, only sees the aggregate % below.
+  // Fetched lazily when the owner actually opens the sheet, not on every
+  // feed render, so scrolling past a dozen of your own polls doesn't fire a
+  // burst of voter-list requests nobody asked to see yet.
+  const [showVoters, setShowVoters] = useState(false);
 
   const hasVoted = myVoteIndex !== null;
   const showResults = isOwner || hasVoted;
   const totalVotes = counts.reduce((sum, n) => sum + n, 0);
-
-  useEffect(() => {
-    if (!showResults || !poll?.options?.length) return;
-    let cancelled = false;
-
-    poll.options.forEach((_, index) => {
-      getPostPollVoters(postId, index)
-        .then((res) => {
-          if (!cancelled) {
-            setVoterAvatars((prev) => ({ ...prev, [index]: res?.voters || [] }));
-          }
-        })
-        .catch(() => {});
-    });
-
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showResults, postId]);
 
   if (!poll?.options?.length) return null;
 
@@ -547,7 +534,6 @@ function PostPoll({ post, currentUserId, isOwner }) {
         const count = counts[index] || 0;
         const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
         const isMine = myVoteIndex === index;
-        const avatars = (voterAvatars[index] || []).slice(0, 4);
 
         return (
           <button
@@ -587,48 +573,204 @@ function PostPoll({ post, currentUserId, isOwner }) {
                 </span>
               )}
             </div>
-            {showResults && avatars.length > 0 && (
-              <div className="relative flex items-center gap-1 px-3.5 pb-2">
-                <div className="flex -space-x-1.5">
-                  {avatars.map((voter) => (
-                    <img
-                      key={getId(voter)}
-                      src={
-                        getImageUrl(
-                          voter?.avatar ||
-                            voter?.profileImage ||
-                            voter?.profilePicture ||
-                            voter?.photo ||
-                            voter?.picture
-                        ) || getGenderAvatarIcon(voter)
-                      }
-                      alt=""
-                      className="h-5 w-5 rounded-full ring-2"
-                      style={{ "--tw-ring-color": "var(--imc-surface)" }}
-                    />
-                  ))}
-                </div>
-                <span
-                  className="text-[10.5px] font-bold"
-                  style={{ color: "var(--imc-text-muted)" }}
-                >
-                  {count} vote{count === 1 ? "" : "s"}
-                </span>
-              </div>
-            )}
           </button>
         );
       })}
 
       {showResults && (
-        <p
-          className="text-[11px] font-semibold"
-          style={{ color: "var(--imc-text-faint)" }}
-        >
-          {totalVotes} vote{totalVotes === 1 ? "" : "s"} total
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p
+            className="text-[11px] font-semibold"
+            style={{ color: "var(--imc-text-faint)" }}
+          >
+            {totalVotes} vote{totalVotes === 1 ? "" : "s"} total
+          </p>
+
+          {/* Owner-only — nobody else can see who voted for what, so this
+              affordance (and the modal it opens) simply doesn't render for
+              anyone else, including people who voted themselves. */}
+          {isOwner && totalVotes > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowVoters(true)}
+              className="text-[11px] font-black active:opacity-70"
+              style={{ color: "var(--imc-indigo-text)" }}
+            >
+              See who voted
+            </button>
+          )}
+        </div>
+      )}
+
+      {isOwner && (
+        <PollVotersSheet
+          open={showVoters}
+          onClose={() => setShowVoters(false)}
+          postId={postId}
+          options={poll.options}
+        />
       )}
     </div>
+  );
+}
+
+// Bottom sheet listing every voter, grouped by option — only ever mounted
+// for the poll's own creator (see PostPoll above). Fetches lazily on open
+// rather than as soon as the post is on screen, so scrolling past your own
+// polls in the feed doesn't fire a voter-list request per option before
+// you've asked to see one.
+function PollVotersSheet({ open, onClose, postId, options }) {
+  const navigate = useNavigate();
+  const [votersByOption, setVotersByOption] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (!open || !postId) return;
+    let cancelled = false;
+
+    const load = async () => {
+      setLoading(true);
+      setError(false);
+
+      try {
+        const results = await Promise.all(
+          (options || []).map((_, index) => getPostPollVoters(postId, index).catch(() => null))
+        );
+        if (cancelled) return;
+
+        const next = {};
+        results.forEach((res, index) => {
+          next[index] = res?.voters || [];
+        });
+        setVotersByOption(next);
+      } catch {
+        if (!cancelled) setError(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, postId]);
+
+  if (!open) return null;
+  if (typeof document === "undefined" || !document.body) return null;
+
+  const totalVoters = Object.values(votersByOption).reduce(
+    (sum, list) => sum + (list?.length || 0),
+    0
+  );
+
+  return createPortal(
+    <div className="fixed inset-0 z-[130] flex items-end justify-center bg-black/35" onClick={onClose}>
+      <div
+        className="flex max-h-[75vh] w-full max-w-[430px] flex-col rounded-t-[28px] bg-[var(--imc-surface)] pb-[max(12px,env(safe-area-inset-bottom))] shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div
+          className="flex items-center justify-between gap-3 px-4 pb-3 pt-4"
+          style={{ borderBottom: "1px solid var(--imc-border)" }}
+        >
+          <div className="min-w-0">
+            <h3 className="text-[15px] font-black" style={{ color: "var(--imc-text)" }}>
+              Who voted
+            </h3>
+            <p className="text-[10.5px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>
+              Only visible to you as the poll creator
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full"
+            style={{ background: "var(--imc-surface-2)", color: "var(--imc-text-muted)" }}
+            aria-label="Close"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto py-1">
+          {loading && (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 size={20} className="animate-spin" style={{ color: "var(--imc-text-muted)" }} />
+            </div>
+          )}
+
+          {!loading && error && (
+            <p className="px-4 py-8 text-center text-[12.5px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>
+              Couldn't load voters. Try again.
+            </p>
+          )}
+
+          {!loading && !error && totalVoters === 0 && (
+            <p className="px-4 py-8 text-center text-[12.5px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>
+              No votes yet.
+            </p>
+          )}
+
+          {!loading &&
+            !error &&
+            (options || []).map((option, index) => {
+              const voters = votersByOption[index] || [];
+              if (!voters.length) return null;
+
+              return (
+                <div key={index} className="px-4 py-2">
+                  <p
+                    className="mb-1 truncate text-[11.5px] font-black"
+                    style={{ color: "var(--imc-text-muted)" }}
+                  >
+                    {option.text} · {voters.length} vote{voters.length === 1 ? "" : "s"}
+                  </p>
+                  <div className="space-y-0.5">
+                    {voters.map((voter) => (
+                      <button
+                        key={getId(voter)}
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          if (voter?.username) navigate(`/profile/${voter.username}`);
+                          else navigate(`/profile/user/${getId(voter)}`);
+                        }}
+                        className="flex w-full items-center gap-2.5 rounded-xl py-1.5 text-left active:opacity-70"
+                      >
+                        <img
+                          src={
+                            getImageUrl(
+                              voter?.avatar ||
+                                voter?.profileImage ||
+                                voter?.profilePicture ||
+                                voter?.photo ||
+                                voter?.picture
+                            ) || getGenderAvatarIcon(voter)
+                          }
+                          alt=""
+                          className="h-8 w-8 shrink-0 rounded-full object-cover"
+                          style={{ background: "var(--imc-surface-2)" }}
+                        />
+                        <span
+                          className="min-w-0 flex-1 truncate text-[13px] font-bold"
+                          style={{ color: "var(--imc-text)" }}
+                        >
+                          {getName(voter)}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 

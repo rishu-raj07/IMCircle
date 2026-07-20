@@ -50,7 +50,7 @@ connection strings are backend-only and must never get a `VITE_` prefix.
 | `MSG91_AUTH_KEY` / `MSG91_TEMPLATE_ID` | **required** | see `msg91-otp-setup.md` |
 | `MSG91_OTP_EXPIRY_MINUTES` | optional | defaults to 5 |
 | `GOOGLE_WEB_CLIENT_ID` / `GOOGLE_ANDROID_CLIENT_ID` / `GOOGLE_IOS_CLIENT_ID` | **at least one required** | see `google-oauth-setup.md` |
-| `GOOGLE_MAPS_API_KEY` | optional, unused today | reserved for a future backend-side Maps API call; nothing currently reads it |
+| `GMAPS_SERVER_KEY` (or `GOOGLE_MAPS_SERVER_KEY` / `GOOGLE_MAPS_API_KEY`) | **required for location search/detection to work in the native Android/iOS app** | server-side (unrestricted-by-referrer) Google Maps key used by `/location/search`, `/location/details`, `/location/reverse` (`src/controllers/location.controller.js`). The frontend's browser-restricted `VITE_GMAPS_BROWSER_KEY` only works on web — the Capacitor WebView's origin never matches a website referrer restriction, so native builds always route through these backend endpoints instead. Without this key set, native location falls back to a clear "not configured" error rather than hanging. |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` / `FIREBASE_SERVICE_ACCOUNT_PATH` | optional — set one to enable push notifications | see `src/config/firebaseAdmin.js`; without either, in-app notifications still work, only the native phone push is skipped |
 
 **No `CLOUDFLARE_*` variables exist anywhere in this app.** Cloudflare, if
