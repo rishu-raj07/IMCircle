@@ -40,6 +40,8 @@ import { shareApp } from "../../utils/shareLink";
 import { getMyProfile, updateProfile } from "../../api/profileApi";
 import { getUser as getCachedUser, setUser as setStoredUser } from "../../utils/storage";
 import { getUserPostsById, getUserRepostsById } from "../../api/userApi";
+import { getMyArticles } from "../../api/articleApi";
+import ProfileArticleCard from "../../components/articles/ProfileArticleCard";
 import { getMyAnalyticsDashboard } from "../../api/analyticsApi";
 import { getMyJourneys } from "../../api/journeyApi";
 import { getMyBuilderScore } from "../../api/builderScoreApi";
@@ -52,7 +54,7 @@ const PUBLIC_APP_URL = (
   import.meta.env.VITE_PUBLIC_APP_URL ||
   (window.location.hostname === "localhost" ? "https://imcircle.com" : window.location.origin)
 ).replace(/\/$/, "");
-const TABS = ["All", "Posts", "Journey", "Reposts"];
+const TABS = ["All", "Posts", "Journey", "Reposts", "Articles"];
 const JOURNEY_TABS = ["Active", "Achieved", "Missed", "All"];
 
 function getImageUrl(image) {
@@ -370,6 +372,8 @@ function Profile() {
 
   const [activeTab, setActiveTab] = useState("All");
   const [journeyTab, setJourneyTab] = useState("Active");
+  const [myArticles, setMyArticles] = useState([]);
+  const [myArticlesLoaded, setMyArticlesLoaded] = useState(false);
 
   const [selectedExperience, setSelectedExperience] = useState(null);
   const [selectedEducation, setSelectedEducation] = useState(null);
@@ -538,6 +542,29 @@ function Profile() {
   useEffect(() => {
     setAvatarFailed(false);
   }, [user?.avatar, user?.profileImage, user?.profilePicture]);
+
+  // Lazy-loaded once, the first time the Articles tab is opened — mirrors
+  // the "Independent state per tab" pattern already used elsewhere (see
+  // News.jsx) rather than folding articles into the unified Posts/Journey/
+  // Reposts `myActivity` list, since articles have their own status
+  // lifecycle (draft/pending review/etc.) that doesn't fit that shape.
+  useEffect(() => {
+    if (activeTab !== "Articles" || myArticlesLoaded) return;
+    getMyArticles()
+      .then((res) => setMyArticles(res?.items || []))
+      .catch(() => {})
+      .finally(() => setMyArticlesLoaded(true));
+  }, [activeTab, myArticlesLoaded]);
+
+  const handleArticleArchived = (articleId) => {
+    setMyArticles((prev) =>
+      prev.map((a) => (a._id === articleId ? { ...a, status: "archived" } : a))
+    );
+  };
+
+  const handleArticleDeleted = (articleId) => {
+    setMyArticles((prev) => prev.filter((a) => a._id !== articleId));
+  };
 
   // "BN User" is the backend's placeholder default for accounts that
   // haven't set a real name yet — treat it as empty so it doesn't leak
@@ -862,7 +889,7 @@ function Profile() {
                 it) — reported as posts looking "stuck"/not scrolling
                 normally, so this now just scrolls away with the rest of
                 the page like every other section on this profile. */}
-            <div className="-mx-5 grid grid-cols-4 border-y border-[var(--imc-border)] bg-[color-mix(in_srgb,var(--imc-bg)_94%,transparent)] px-4 backdrop-blur-xl">
+            <div className="-mx-5 grid grid-cols-5 border-y border-[var(--imc-border)] bg-[color-mix(in_srgb,var(--imc-bg)_94%,transparent)] px-4 backdrop-blur-xl">
               {TABS.map((tab) => (
                 <button
                   type="button"
@@ -880,7 +907,36 @@ function Profile() {
             </div>
 
             <div className="pt-4">
-              {visibleItems.length > 0 ? (
+              {activeTab === "Articles" ? (
+                myArticlesLoaded && myArticles.length === 0 ? (
+                  <div className="rounded-[22px] p-6 text-center" style={{ background: "var(--imc-surface)", border: "1px solid var(--imc-border)" }}>
+                    <p className="text-[14px] font-black" style={{ color: "var(--imc-text)" }}>You have no articles yet</p>
+                    <p className="mt-1 text-[12px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>
+                      Founder stories, useful lessons, and ideas from the IMCircle community will appear here.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/articles/write")}
+                      className="mt-4 h-10 rounded-2xl px-5 text-[12px] font-black text-white"
+                      style={{ background: "var(--imc-indigo)" }}
+                    >
+                      Write an article
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {myArticles.map((item) => (
+                      <ProfileArticleCard
+                        key={item._id}
+                        item={item}
+                        isOwner
+                        onArchived={handleArticleArchived}
+                        onDeleted={handleArticleDeleted}
+                      />
+                    ))}
+                  </div>
+                )
+              ) : visibleItems.length > 0 ? (
                 visibleItems.map((item, index) => {
                   const isJourney = item.rawType === "journey";
                   const card = isJourney ? (
@@ -916,13 +972,15 @@ function Profile() {
                 <EmptyActivity activeTab={activeTab} />
               )}
 
-              <button
-                type="button"
-                onClick={() => navigate(`/profile/activity?tab=${activeTab}`)}
-                className="mt-4 w-full rounded-2xl border border-[var(--imc-border)] py-3 text-[12px] font-black text-[var(--imc-indigo-text)]"
-              >
-                View More
-              </button>
+              {activeTab !== "Articles" && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/profile/activity?tab=${activeTab}`)}
+                  className="mt-4 w-full rounded-2xl border border-[var(--imc-border)] py-3 text-[12px] font-black text-[var(--imc-indigo-text)]"
+                >
+                  View More
+                </button>
+              )}
             </div>
           </section>
 

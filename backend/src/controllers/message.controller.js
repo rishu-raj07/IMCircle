@@ -454,8 +454,20 @@ export const sendMessage = async (req, res) => {
     conversation.lastMessage = preview;
     conversation.lastMessageAt = new Date();
     conversation.unreadBy = receiverIds;
+    // A brand-new message should revive this conversation in EVERYONE's
+    // list — not just the sender's. This used to only clear req.user._id
+    // (the sender), so if the recipient had deleted the chat, their id
+    // stayed in deletedFor and getConversations kept excluding it (see that
+    // query's `deletedFor: {$ne: req.user._id}` filter) until the recipient
+    // sent a message themselves, clearing their own id. Older messages
+    // stay correctly hidden for them (deleteConversationForMe already
+    // marked those hiddenFor at delete time) — only the conversation
+    // itself, and this new message, become visible again.
+    const revivedFor = new Set(
+      [req.user._id, ...receiverIds].map((id) => getPlainId(id))
+    );
     conversation.deletedFor = (conversation.deletedFor || []).filter(
-      (id) => getPlainId(id) !== getPlainId(req.user._id)
+      (id) => !revivedFor.has(getPlainId(id))
     );
 
     await conversation.save();

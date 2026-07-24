@@ -30,6 +30,8 @@ import {
   blockUserById,
   reportUserById,
 } from "../../api/userApi";
+import { getUserArticles } from "../../api/articleApi";
+import ProfileArticleCard from "../../components/articles/ProfileArticleCard";
 import {
   sendCircleRequest,
   getSentCircleRequests,
@@ -64,7 +66,7 @@ function formatJoinedDate(value) {
   return date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
 
-const TABS = ["All", "Posts", "Journey", "Reposts"];
+const TABS = ["All", "Posts", "Journey", "Reposts", "Articles"];
 const FEED_PAGE_SIZE = 5;
 
 function getId(user) {
@@ -353,6 +355,8 @@ function UserProfile() {
 
   const [activeTab, setActiveTab] = useState("All");
   const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
+  const [profileArticles, setProfileArticles] = useState([]);
+  const [profileArticlesLoaded, setProfileArticlesLoaded] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [taglineExpanded, setTaglineExpanded] = useState(false);
 
@@ -378,6 +382,24 @@ function UserProfile() {
 
   const isOwnProfile =
     currentUserId && profileUserId && currentUserId === profileUserId;
+
+  // Reset + refetch whenever either the Articles tab is opened or the
+  // profile being viewed changes (navigating from one user's profile to
+  // another without unmounting) — mirrors Profile.jsx's own-profile
+  // equivalent, just backed by getUserArticles(userId) instead of
+  // getMyArticles() since this is (usually) someone else's articles.
+  useEffect(() => {
+    setProfileArticlesLoaded(false);
+    setProfileArticles([]);
+  }, [profileUserId]);
+
+  useEffect(() => {
+    if (activeTab !== "Articles" || profileArticlesLoaded || !profileUserId) return;
+    getUserArticles(profileUserId)
+      .then((res) => setProfileArticles(res?.items || []))
+      .catch(() => {})
+      .finally(() => setProfileArticlesLoaded(true));
+  }, [activeTab, profileArticlesLoaded, profileUserId]);
 
   useSEO({
     title: profileUser?.name ? `${profileUser.name} (@${profileUser.username || username})` : username ? `@${username}` : "Profile",
@@ -1157,7 +1179,7 @@ function UserProfile() {
           </section>
 
           <section className="mt-6">
-            <div className="grid grid-cols-4 rounded-2xl border border-[var(--imc-border)] bg-[var(--imc-surface)] p-1">
+            <div className="grid grid-cols-5 rounded-2xl border border-[var(--imc-border)] bg-[var(--imc-surface)] p-1">
               {TABS.map((tab) => (
                 <button
                   type="button"
@@ -1175,7 +1197,21 @@ function UserProfile() {
             </div>
 
             <div className="pt-4">
-              {visibleItems.length > 0 ? (
+              {activeTab === "Articles" ? (
+                profileArticlesLoaded && profileArticles.length === 0 ? (
+                  <div className="rounded-[22px] p-6 text-center" style={{ background: "var(--imc-surface)", border: "1px solid var(--imc-border)" }}>
+                    <p className="text-[13.5px] font-black" style={{ color: "var(--imc-text)" }}>
+                      This user has not published any articles yet.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {profileArticles.map((item) => (
+                      <ProfileArticleCard key={item._id} item={item} isOwner={false} />
+                    ))}
+                  </div>
+                )
+              ) : visibleItems.length > 0 ? (
                 visibleItems.map((item, index) => {
                   const isJourney = item.rawType === "journey";
 
@@ -1226,7 +1262,7 @@ function UserProfile() {
                 <EmptyActivity activeTab={activeTab} />
               )}
 
-              {filteredCount > visibleItems.length && (
+              {activeTab !== "Articles" && filteredCount > visibleItems.length && (
                 <button
                   type="button"
                   onClick={() => setVisibleCount((prev) => prev + FEED_PAGE_SIZE)}

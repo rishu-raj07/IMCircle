@@ -8,6 +8,8 @@ import {
   Flame,
   Trophy,
   RefreshCcw,
+  RefreshCw,
+  Loader2,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -55,8 +57,9 @@ function isFromToday(file) {
 function UpdateJourney() {
   const navigate = useNavigate();
   const { journeyId } = useParams();
-  const fileRef = useRef(null);
   const galleryRef = useRef(null);
+  const videoRef = useRef(null);
+  const cameraStreamRef = useRef(null);
 
   const [journey, setJourney] = useState(null);
   const [update, setUpdate] = useState("");
@@ -66,6 +69,10 @@ function UpdateJourney() {
   const [isVideoFile, setIsVideoFile] = useState(false);
   const [captureSource, setCaptureSource] = useState("camera");
   const [galleryError, setGalleryError] = useState("");
+  const [cameraError, setCameraError] = useState("");
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraStarting, setCameraStarting] = useState(false);
+  const [cameraFacingMode, setCameraFacingMode] = useState("environment");
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
 
@@ -98,20 +105,88 @@ function UpdateJourney() {
   const targetDays = journey?.targetDays || journey?.totalDays || 100;
   const progress = Math.min(Math.round((todayDay / targetDays) * 100), 100);
 
-  const handleImageChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const closeLiveCamera = () => {
+    cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+    cameraStreamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setCameraOpen(false);
+    setCameraStarting(false);
+  };
 
-    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
-      alert("Please capture an image or video file");
+  const startCameraStream = async (facingMode) => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError("Live camera capture is not supported on this device.");
       return;
     }
 
-    setGalleryError("");
-    setCaptureSource("camera");
-    setImageFile(file);
-    setIsVideoFile(file.type.startsWith("video/"));
-    setImagePreview(URL.createObjectURL(file));
+    try {
+      setCameraError("");
+      setCameraStarting(true);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: facingMode } },
+        audio: false,
+      });
+
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+      cameraStreamRef.current = stream;
+      setCameraFacingMode(facingMode);
+      setCameraOpen(true);
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => {});
+        setCameraStarting(false);
+      }
+    } catch (cameraErr) {
+      setCameraError("Camera permission is required to capture a live photo.");
+      setCameraStarting(false);
+    }
+  };
+
+  const openLiveCamera = () => startCameraStream(cameraFacingMode);
+
+  const switchLiveCamera = () => {
+    const nextMode = cameraFacingMode === "environment" ? "user" : "environment";
+    startCameraStream(nextMode);
+  };
+
+  useEffect(() => {
+    if (cameraOpen && videoRef.current && cameraStreamRef.current) {
+      videoRef.current.srcObject = cameraStreamRef.current;
+      videoRef.current.play().catch(() => {});
+      setCameraStarting(false);
+    }
+  }, [cameraOpen]);
+
+  useEffect(() => () => {
+    cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
+
+  const captureLivePhoto = () => {
+    const video = videoRef.current;
+    if (!video?.videoWidth || !video?.videoHeight) return;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        setCameraError("Could not capture the photo. Please try again.");
+        return;
+      }
+
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
+      const file = new File([blob], `journey-update-${Date.now()}.jpg`, { type: "image/jpeg" });
+      setGalleryError("");
+      setCameraError("");
+      setCaptureSource("camera");
+      setImageFile(file);
+      setIsVideoFile(false);
+      setImagePreview(URL.createObjectURL(blob));
+      closeLiveCamera();
+    }, "image/jpeg", 0.9);
   };
 
   // Gallery picker: images only (no video — a stale video can't be
@@ -145,7 +220,7 @@ function UpdateJourney() {
     setIsVideoFile(false);
     setCaptureSource("camera");
     setGalleryError("");
-    if (fileRef.current) fileRef.current.value = "";
+    setCameraError("");
     if (galleryRef.current) galleryRef.current.value = "";
   };
 
@@ -331,30 +406,22 @@ function UpdateJourney() {
             />
           </div>
 
-          {galleryError && (
+          {(galleryError || cameraError) && (
             <p className="mt-2 text-[11.5px] font-bold leading-5 text-[#D92D20]">
-              {galleryError}
+              {galleryError || cameraError}
             </p>
           )}
 
           <div className="mt-3 flex items-center gap-2">
             <button
               type="button"
-              onClick={() => fileRef.current?.click()}
-              className="flex flex-1 items-center justify-center gap-2 rounded-full bg-[var(--imc-surface-2)] px-4 py-3 text-[13px] font-black text-[var(--imc-text)] active:scale-95"
+              onClick={openLiveCamera}
+              disabled={cameraStarting}
+              className="flex flex-1 items-center justify-center gap-2 rounded-full bg-[var(--imc-surface-2)] px-4 py-3 text-[13px] font-black text-[var(--imc-text)] active:scale-95 disabled:opacity-70"
             >
-              <Camera size={17} />
-              Capture Live
+              {cameraStarting ? <Loader2 size={17} className="animate-spin" /> : <Camera size={17} />}
+              {cameraStarting ? "Opening camera..." : "Capture Live"}
             </button>
-
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*,video/*"
-              capture="environment"
-              hidden
-              onChange={handleImageChange}
-            />
 
             {/* Gallery fallback — same-day photos only (see isFromToday), so
                 this can't be used to backfill old photos as if they were
@@ -390,6 +457,53 @@ function UpdateJourney() {
           </button>
         </div>
       </main>
+
+      {cameraOpen && (
+        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/80">
+          <div className="w-full max-w-[430px] overflow-hidden rounded-t-[28px] bg-[#11131A] pb-[max(20px,env(safe-area-inset-bottom))]">
+            <div className="flex items-center justify-between px-4 py-3 text-white">
+              <div>
+                <h2 className="text-[14px] font-black">Live progress camera</h2>
+                <p className="text-[9.5px] font-semibold text-white/60">Take a photo now for today's update</p>
+              </div>
+              <button type="button" onClick={closeLiveCamera} aria-label="Close camera" className="grid h-10 w-10 place-items-center rounded-full bg-white/10 active:scale-95">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="relative aspect-[3/4] max-h-[68vh] w-full overflow-hidden bg-black">
+              <video
+                ref={videoRef}
+                autoPlay
+                muted
+                playsInline
+                className={`h-full w-full object-cover ${cameraFacingMode === "user" ? "scale-x-[-1]" : ""}`}
+              />
+              <button
+                type="button"
+                onClick={switchLiveCamera}
+                disabled={cameraStarting}
+                aria-label={`Switch to ${cameraFacingMode === "environment" ? "front" : "back"} camera`}
+                className="absolute right-3 top-3 flex h-11 items-center gap-2 rounded-full bg-black/55 px-3 text-[10px] font-black text-white backdrop-blur-md active:scale-95 disabled:opacity-60"
+              >
+                {cameraStarting ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                {cameraFacingMode === "environment" ? "Front" : "Back"}
+              </button>
+            </div>
+
+            <div className="flex items-center justify-center px-5 py-5">
+              <button
+                type="button"
+                onClick={captureLivePhoto}
+                aria-label="Capture live photo"
+                className="grid h-16 w-16 place-items-center rounded-full border-4 border-white bg-[#4338CA] text-white shadow-[0_0_0_4px_rgba(255,255,255,0.18)] active:scale-95"
+              >
+                <Camera size={25} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <BottomNav />
     </div>

@@ -12,6 +12,8 @@ import Users from "./pages/Users";
 import VerificationRequests from "./pages/VerificationRequests";
 import Spotlight from "./pages/Spotlight";
 import Badges from "./pages/Badges";
+import News from "./pages/News";
+import Articles from "./pages/Articles";
 
 export default function AdminRoutes() {
   return (
@@ -31,6 +33,8 @@ export default function AdminRoutes() {
           <Route path="content" element={<Content />} />
           <Route path="spotlight" element={<Spotlight />} />
           <Route path="badges" element={<Badges />} />
+          <Route path="news" element={<News />} />
+          <Route path="articles" element={<Articles />} />
           <Route path="reports" element={<Reports />} />
           <Route path="verification" element={<VerificationRequests />} />
           <Route path="analytics" element={<Analytics />} />

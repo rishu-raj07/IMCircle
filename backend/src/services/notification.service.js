@@ -22,6 +22,10 @@ const LINK_BUILDERS = {
   spotlight: () => "/spotlight",
   badge: (id, metadata) =>
     metadata?.username ? `/profile/${metadata.username}` : "/profile",
+  // No per-article detail route exists (News.jsx is a list-only page) — this
+  // just opens the For You tab; the notified story is somewhere in that
+  // list rather than deep-linked to directly.
+  news: () => "/news",
 };
 
 const DEFAULT_TITLES = {
@@ -53,6 +57,7 @@ const DEFAULT_TITLES = {
   referral: "Referral joined",
   system: "IMCircle",
   admin: "Announcement",
+  news_update: "News for you",
 };
 
 function buildLink({ entityType, entityId, link, metadata }) {

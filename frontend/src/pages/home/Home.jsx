@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowRight,
   ArrowUp,
   Check,
+  Compass,
   Loader2,
   PenSquare,
   Plus,
@@ -29,10 +29,9 @@ import { getFeed, trackFeedImpressions } from "../../api/feedApi";
 import { getMyProfile } from "../../api/profileApi";
 import { getUserSuggestions } from "../../api/userApi";
 import { getMyBuilderScore } from "../../api/builderScoreApi";
-import { getMyJourneys } from "../../api/journeyApi";
+import { getMyJourneys, getJourneyDiscoverFeed } from "../../api/journeyApi";
 import { getMyLearnings } from "../../api/learningApi";
 import { getGenderAvatarIcon } from "../../utils/avatar";
-import { getJourneyCoverIcon } from "../../utils/media";
 import {
   getSentCircleRequests,
   getReceivedCircleRequests,
@@ -88,13 +87,16 @@ const PROFILE_CARD_SNOOZE_MS = 24 * 60 * 60 * 1000;
 const MARIGOLD = "#EC9A1E";
 const INDIGO = "#4338CA";
 
-// Home only ever shows these two — Circles/Learning/Opportunities tabs some
-// designs sketch out aren't wired to a finished experience yet, and
-// Discover already has its own destination in the bottom nav, so it isn't
-// duplicated here as a third tab.
+// "Journeys" is a real tab here (independent state/fetch below — see
+// journeyMilestones etc.) rather than a feed-ranked tab like the other two,
+// since journey discovery isn't part of the for-you/following ranking
+// pipeline. Spotlight stays a nav-out link to its own page (unchanged),
+// just repositioned after Journeys so the row reads in the same order as
+// the bottom-nav's old Discover destination used to.
 const HOME_TABS = [
   { value: "for-you", label: "For You" },
   { value: "following", label: "Following" },
+  { value: "journeys", label: "Journeys" },
 ];
 
 function getStoredHomeTab() {
@@ -220,14 +222,6 @@ function getGreeting() {
   if (hour < 17) return "Good afternoon";
   if (hour < 21) return "Good evening";
   return "Good night";
-}
-
-function isSameLocalDay(dateA, dateB = new Date()) {
-  if (!dateA || !dateB) return false;
-  const first = new Date(dateA);
-  const second = new Date(dateB);
-  if (Number.isNaN(first.getTime()) || Number.isNaN(second.getTime())) return false;
-  return first.toDateString() === second.toDateString();
 }
 
 function getImageUrl(image) {
@@ -380,6 +374,21 @@ function Home() {
   });
   const [myLearning, setMyLearning] = useState(null);
 
+  // Journeys tab — deliberately separate from items/page/cursor/hasMore
+  // above (which belong to the for-you/following feed pipeline). Loaded
+  // lazily the first time this tab is opened, then cached in this state for
+  // the rest of the session so switching tabs back and forth doesn't
+  // refetch. journeyVisibleCount paginates client-side over the one batch
+  // GET /journeys/discover returns (that endpoint doesn't take cursor/limit
+  // params yet) — a real server-side cursor is a follow-up, not needed for
+  // this to work correctly today.
+  const [journeyMilestones, setJourneyMilestones] = useState([]);
+  const [journeyPrimaryInterest, setJourneyPrimaryInterest] = useState("");
+  const [journeyLoading, setJourneyLoading] = useState(false);
+  const [journeyError, setJourneyError] = useState("");
+  const [journeyLoaded, setJourneyLoaded] = useState(false);
+  const [journeyVisibleCount, setJourneyVisibleCount] = useState(10);
+
   const composeNavigatingRef = useRef(false);
   // Set once on mount from location.state.newPost (see CreatePost.jsx) and
   // consumed exactly once by the next "initial" fetchFeed — pinned to the
@@ -410,17 +419,24 @@ function Home() {
     localStorage.setItem(PROFILE_CARD_DISMISS_KEY, String(Date.now()));
     setProfileCardDismissed(true);
   };
-  const journeysNeedingUpdate = activeJourneys.filter(
-    (journey) =>
-      !Boolean(journey?.todayUpdateDone) &&
-      !isSameLocalDay(journey?.lastMilestoneAt)
-  );
 
   useEffect(() => {
     if (!location.state?.openStreakCard || (builderScore?.currentStreak || 0) < 1) return;
     setShowStreakShare(true);
     navigate(location.pathname, { replace: true, state: null });
   }, [builderScore?.currentStreak, location.pathname, location.state, navigate]);
+
+  // Lets other pages deep-link straight into a specific Home tab (e.g.
+  // Network's "People Building in Public → See all", which used to send
+  // people to the standalone /discover journeys page — that page no longer
+  // exists, journeys now live in this tab instead).
+  useEffect(() => {
+    const requestedTab = location.state?.openTab;
+    if (!requestedTab || !HOME_TABS.some((tab) => tab.value === requestedTab)) return;
+    sessionStorage.setItem(HOME_TAB_STORAGE_KEY, requestedTab);
+    setActiveTab(requestedTab);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.state, location.pathname, navigate]);
 
   useEffect(() => {
     trackEvent("feed_open", { metadata: { tab: activeTab } }).catch(() => {});
@@ -666,7 +682,14 @@ function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Journeys is not part of the for-you/following feed-ranking pipeline —
+  // skip the cache-restore/fetchFeed cycle entirely for it so switching to
+  // that tab never fires a `getFeed({ tab: "journeys" })` request the
+  // backend has no handler for, and never clobbers the for-you/following
+  // cache with journeys data (or vice versa).
   useEffect(() => {
+    if (activeTab === "journeys") return;
+
     const cached = getCachedHomeFeed(activeTab);
 
     requestSeqRef.current += 1;
@@ -680,6 +703,35 @@ function Home() {
     setIsLoading(!cached);
 
     fetchFeed({ mode: "initial", tab: activeTab });
+  }, [activeTab]);
+
+  const fetchJourneysDiscover = async () => {
+    setJourneyLoading(true);
+    setJourneyError("");
+
+    try {
+      const res = await getJourneyDiscoverFeed();
+      const milestones = Array.isArray(res?.milestones) ? res.milestones : [];
+      setJourneyMilestones(milestones);
+      setJourneyPrimaryInterest(res?.primaryInterest || "");
+      setJourneyLoaded(true);
+      trackEvent("feed_open", { metadata: { tab: "journeys" } }).catch(() => {});
+    } catch {
+      setJourneyError("journeys-unavailable");
+    } finally {
+      setJourneyLoading(false);
+    }
+  };
+
+  // Lazy-loaded once per session on first visit to the tab — cached in
+  // journeyMilestones afterward, so flipping between tabs doesn't refetch
+  // (same "don't reload cached content unnecessarily" rule the other tabs
+  // follow via localStorage caching).
+  useEffect(() => {
+    if (activeTab === "journeys" && !journeyLoaded && !journeyLoading) {
+      fetchJourneysDiscover();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   useEffect(() => {
@@ -1183,7 +1235,7 @@ function Home() {
 
         <div className="relative">
           {/* A very faint wash of the brand indigo behind just the header +
-              journey prompt block — the area above the stories/avatars row
+              Start-a-Journey prompt — the area above the stories/avatars row
               — so it reads as a subtly distinct top section, not a heavy
               redesign. */}
           <div className="rounded-b-[24px]" style={{ background: "rgba(67, 56, 202, 0.02)" }}>
@@ -1212,12 +1264,6 @@ function Home() {
                 </div>
               )}
 
-              {builderScore && journeysNeedingUpdate.length > 0 && (
-                <JourneyUpdatePrompt
-                  journeys={journeysNeedingUpdate}
-                  onUpdate={(journeyId) => navigate(`/journey/${journeyId}/update`)}
-                />
-              )}
             </div>
           </div>
 
@@ -1228,6 +1274,7 @@ function Home() {
               {[
                 { label: "For You", action: () => changeTab("for-you"), active: activeTab === "for-you" },
                 { label: "Following", action: () => changeTab("following"), active: activeTab === "following" },
+                { label: "Journeys", action: () => changeTab("journeys"), active: activeTab === "journeys" },
               ].map((tab) => (
                 <button key={tab.label} type="button" onClick={tab.action} className="relative min-w-[64px] pb-3 text-[10px] font-semibold" style={{ color: tab.active ? "var(--imc-indigo)" : "var(--imc-text-muted)" }}>
                   {tab.label}
@@ -1235,9 +1282,9 @@ function Home() {
                 </button>
               ))}
 
-              {/* Spotlight isn't a feed filter like the two tabs above — it's
-                  its own page (frontend/src/pages/spotlight/Spotlight.jsx),
-                  so this entry navigates there instead of calling changeTab. */}
+              {/* Spotlight isn't a feed filter like the tabs above — it's its
+                  own page (frontend/src/pages/spotlight/Spotlight.jsx), so
+                  this entry navigates there instead of calling changeTab. */}
               <button
                 type="button"
                 onClick={() => navigate("/spotlight")}
@@ -1252,6 +1299,66 @@ function Home() {
           </div>
 
           <div className="mt-2 space-y-3 px-3">
+            {activeTab === "journeys" ? (
+              <>
+                {journeyLoading && journeyMilestones.length === 0 && <HomePageSkeleton />}
+
+                {!journeyLoading && journeyError && journeyMilestones.length === 0 && (
+                  <div className="rounded-[22px] p-4 text-center" style={{ background: "rgba(217,45,32,0.08)", border: "1px solid rgba(217,45,32,0.25)" }}>
+                    <p className="text-[14px] font-black" style={{ color: "var(--imc-text)" }}>We couldn't load journeys right now</p>
+                    <p className="mt-1 text-[12px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>Check your connection and try again.</p>
+                    <button
+                      type="button"
+                      onClick={fetchJourneysDiscover}
+                      className="mt-3 rounded-full border px-4 py-2 text-[12px] font-black"
+                      style={{ borderColor: "var(--imc-border)", color: "var(--imc-indigo-text)", background: "var(--imc-surface)" }}
+                    >
+                      Try Again
+                    </button>
+                  </div>
+                )}
+
+                {!journeyLoading && !journeyError && journeyMilestones.length === 0 && (
+                  <div className="rounded-[22px] p-6 text-center" style={{ background: "var(--imc-surface)", border: "1px solid var(--imc-border)" }}>
+                    <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl" style={{ background: "var(--imc-surface-2)", color: "var(--imc-indigo-text)" }}>
+                      <Compass size={24} />
+                    </div>
+                    <p className="mt-4 text-[15px] font-black" style={{ color: "var(--imc-text)" }}>No journeys to discover yet</p>
+                    <p className="mt-1 text-[12px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>
+                      {journeyPrimaryInterest
+                        ? `Check back for more ${journeyPrimaryInterest} journeys soon.`
+                        : "Check back once more people start sharing their journeys."}
+                    </p>
+                  </div>
+                )}
+
+                {journeyMilestones.slice(0, journeyVisibleCount).map((milestone) => (
+                  <div key={milestone?._id} className="mb-2">
+                    <JourneyCard milestone={milestone} />
+                  </div>
+                ))}
+
+                {journeyMilestones.length > 0 && journeyVisibleCount < journeyMilestones.length && (
+                  <div className="flex justify-center pb-4">
+                    <button
+                      type="button"
+                      onClick={() => setJourneyVisibleCount((count) => count + 10)}
+                      className="rounded-full border px-4 py-2 text-[12px] font-black"
+                      style={{ borderColor: "var(--imc-border)", color: "var(--imc-indigo-text)", background: "var(--imc-surface)" }}
+                    >
+                      Load more journeys
+                    </button>
+                  </div>
+                )}
+
+                {journeyMilestones.length > 0 && journeyVisibleCount >= journeyMilestones.length && (
+                  <p className="pb-4 text-center text-[11px] font-bold" style={{ color: "var(--imc-text-muted)" }}>
+                    You are caught up
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
             {isLoading && items.length === 0 && <HomePageSkeleton />}
 
             {!isLoading && error && items.length === 0 && (
@@ -1350,6 +1457,8 @@ function Home() {
               <div className="flex justify-center pb-4">
                 <Loader2 className="h-4 w-4 animate-spin" style={{ color: "var(--imc-text-muted)" }} />
               </div>
+            )}
+              </>
             )}
           </div>
         </div>
@@ -1517,50 +1626,6 @@ function Home() {
         )}
       </div>
     </div>
-  );
-}
-
-function JourneyUpdatePrompt({ journeys, onUpdate }) {
-  return (
-    <section className="px-3 pb-2">
-      <div className="no-scrollbar flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1">
-        {journeys.map((journey) => {
-          const id = journey?._id || journey?.id;
-          const cover = getImageUrl(journey?.coverImage || journey?.previewImage);
-          const day = Math.max(1, Number(journey?.currentDay || journey?.day || 1));
-          const total = Math.max(1, Number(journey?.targetDays || journey?.totalDays || 100));
-
-          return (
-            <button
-              key={id}
-              type="button"
-              onClick={() => onUpdate(id)}
-              className="relative flex min-h-[56px] w-full shrink-0 snap-start items-center gap-2.5 overflow-hidden rounded-[16px] border px-3 py-2 text-left active:scale-[0.99]"
-              style={{ background: "var(--imc-surface)", borderColor: "var(--imc-border)" }}
-            >
-              <div className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-[11px]" style={{ background: "var(--imc-action-soft)", color: "var(--imc-indigo-text)" }}>
-                {cover ? (
-                  <ImageLoader src={cover} alt="" className="h-full w-full object-cover" wrapperClassName="h-full w-full" width={120} />
-                ) : (
-                  <img src={getJourneyCoverIcon()} alt="" className="h-full w-full rounded-[11px] object-cover" />
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[11.5px] font-black" style={{ color: "var(--imc-text)" }}>
-                  {journey?.title || "Your journey"}
-                </p>
-                <p className="mt-0.5 truncate text-[9px] font-bold" style={{ color: "var(--imc-text-muted)" }}>
-                  Day {day} of {total} · Add today&apos;s proof
-                </p>
-              </div>
-              <span className="inline-flex shrink-0 items-center gap-0.5 text-[9.5px] font-black" style={{ color: "var(--imc-indigo-text)" }}>
-                Share <ArrowRight size={11} />
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </section>
   );
 }
 

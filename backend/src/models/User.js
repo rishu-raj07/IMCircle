@@ -751,6 +751,23 @@ const userSchema = new mongoose.Schema(
       default: false,
     },
 
+    // Community Articles authoring controls (confirmed: no equivalent
+    // fields existed before this). articleAuthorStatus is informational/
+    // trust-tier (a "trusted" author still goes through fast-tracked
+    // review, never unmoderated auto-publish); articlePublishingPermission
+    // is the actual gate checked in article.controller.js's eligibility
+    // check before allowing draft creation.
+    articleAuthorStatus: {
+      type: String,
+      enum: ["normal", "trusted", "suspended"],
+      default: "normal",
+    },
+    articlePublishingPermission: {
+      type: String,
+      enum: ["allowed", "review_only", "blocked"],
+      default: "allowed",
+    },
+
     // Set on the single reserved account created via the Google Play
     // review OTP bypass (see auth.controller.js). Purely informational —
     // does not change permissions or app behavior — kept so this account

@@ -6,6 +6,7 @@ import GoogleAuthButton from "../../components/auth/GoogleAuthButton";
 import { googleLogin, sendMobileOtp } from "../../api/authApi";
 import { saveLoginData } from "../../store/authStore";
 import { setPendingRegister } from "../../utils/storage";
+import { consumePostLoginRedirect } from "../../utils/postLoginRedirect";
 import { perfMark } from "../../utils/perfLog.js";
 import { getReferralCode } from "../../utils/referral.js";
 
@@ -96,7 +97,7 @@ function Login() {
 
         // ProtectedRoute checks onboarding status on every private route, so
         // it will bounce first-time users into /profile-setup automatically.
-        navigate("/home", { replace: true });
+        navigate(consumePostLoginRedirect() || "/home", { replace: true });
         perfMark("navigate_to_home_called");
       } catch (err) {
         perfMark("backend_auth_google_failed", { message: err?.message });

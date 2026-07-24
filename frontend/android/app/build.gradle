@@ -23,8 +23,8 @@ android {
         applicationId "com.imcircle.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-         versionCode 23
-         versionName "1.1.19"
+         versionCode 26
+         versionName "1.1.2"
         manifestPlaceholders = [mapsApiKey: mapsApiKey]
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {

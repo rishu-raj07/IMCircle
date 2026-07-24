@@ -1,6 +1,6 @@
 import {
   Home,
-  Compass,
+  Newspaper,
   Plus,
   Users,
   User,
@@ -182,10 +182,10 @@ function BottomNav() {
         />
 
         <NavItem
-          active={isActive("/discover")}
-          icon={Compass}
-          label="Discover"
-          onClick={() => navigate("/discover")}
+          active={isActive("/news")}
+          icon={Newspaper}
+          label="News"
+          onClick={() => navigate("/news")}
         />
 
         <button

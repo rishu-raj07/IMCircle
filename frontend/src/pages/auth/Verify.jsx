@@ -8,6 +8,7 @@ import {
 import { verifyMobileOtp, sendMobileOtp } from "../../api/authApi";
 import { saveLoginData } from "../../store/authStore";
 import { getReferralCode } from "../../utils/referral.js";
+import { consumePostLoginRedirect } from "../../utils/postLoginRedirect";
 
 const OTP_LENGTH = 6;
 
@@ -118,7 +119,7 @@ function Verify() {
 
       // ProtectedRoute checks onboarding status on every private route, so
       // it will bounce first-time users into /profile-setup automatically.
-      navigate("/home", { replace: true });
+      navigate(consumePostLoginRedirect() || "/home", { replace: true });
     } catch (err) {
       setError(err.response?.data?.message || "OTP verification failed");
     } finally {

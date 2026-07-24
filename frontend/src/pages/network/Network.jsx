@@ -828,7 +828,7 @@ export default function Network() {
 
             {buildingInPublic.length > 0 && (
               <>
-                <SectionTitle icon={Flame} title="People Building in Public" action="See all" onAction={() => navigate("/discover")} />
+                <SectionTitle icon={Flame} title="People Building in Public" action="See all" onAction={() => navigate("/home", { state: { openTab: "journeys" } })} />
 
                 <section className="no-scrollbar -mx-3 flex gap-3 overflow-x-auto px-3 pb-2">
                   {buildingInPublic.map((milestone) => (

@@ -47,10 +47,14 @@ import badgeRoutes from "./routes/badge.routes.js";
 import spotlightRoutes from "./routes/spotlight.routes.js";
 import adminSpotlightRoutes from "./routes/adminSpotlight.routes.js";
 import adminBadgeRoutes from "./routes/adminBadge.routes.js";
+import adminNewsRoutes from "./routes/adminNews.routes.js";
 import referralRoutes from "./routes/referral.routes.js";
 import ogRoutes from "./routes/og.routes.js";
 import hashtagRoutes from "./routes/hashtag.routes.js";
 import linkPreviewRoutes from "./routes/linkPreview.routes.js";
+import newsRoutes from "./routes/news.routes.js";
+import articleRoutes from "./routes/article.routes.js";
+import adminArticleRoutes from "./routes/adminArticle.routes.js";
 const app = express();
 
 app.set("trust proxy", 1);
@@ -129,10 +133,14 @@ app.use("/api/badges", badgeRoutes);
 app.use("/api/spotlight", spotlightRoutes);
 app.use("/api/admin/spotlight", adminSpotlightRoutes);
 app.use("/api/admin/badges", adminBadgeRoutes);
+app.use("/api/admin/news", adminNewsRoutes);
+app.use("/api/admin/articles", adminArticleRoutes);
 app.use("/api/referrals", referralRoutes);
 app.use("/api/og", ogRoutes);
 app.use("/api/hashtags", hashtagRoutes);
 app.use("/api/link-preview", linkPreviewRoutes);
+app.use("/api/news", newsRoutes);
+app.use("/api/articles", articleRoutes);
 app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
     return res.status(400).json({

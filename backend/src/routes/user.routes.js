@@ -28,6 +28,7 @@ import {
   getUserPosts,
   getUserReposts,
 } from "../controllers/user.controller.js";
+import { getUserArticles } from "../controllers/article.controller.js";
 
 import { protect } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
@@ -70,6 +71,7 @@ router.get("/:userId/circle", protect, getCircleById);
 // approach of re-filtering the personalized /feed response.
 router.get("/:userId/posts", protect, getUserPosts);
 router.get("/:userId/reposts", protect, getUserReposts);
+router.get("/:userId/articles", protect, getUserArticles);
 
 router.patch("/:userId/follow", protect, followUser);
 router.patch("/:userId/unfollow", protect, unfollowUser);

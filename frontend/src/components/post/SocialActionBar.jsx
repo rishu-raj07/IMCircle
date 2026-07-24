@@ -38,6 +38,10 @@ function SocialActionBar({
   timestamp,
   onQuickComment,
   commentPlaceholder = "Add a comment...",
+  // Optional extra row rendered right under the icon strip (e.g. JourneyCard's
+  // view count) — before "Liked by ..." and the comment composer. Undefined
+  // by default so PostActions.jsx's usage is completely unaffected.
+  afterActions = null,
 }) {
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
@@ -123,6 +127,8 @@ function SocialActionBar({
           )}
         </button>
       </div>
+
+      {afterActions}
 
       {likesCount > 0 && (
         <button

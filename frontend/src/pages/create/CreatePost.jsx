@@ -13,14 +13,16 @@ import {
   Megaphone,
   BarChart3,
   Plus,
+  Newspaper,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { createPost } from "../../api/postApi";
 import { currentUser } from "../../store/authStore";
 import { trackEvent } from "../../utils/analyticsTracker";
 import MentionSuggestions from "../../components/common/MentionSuggestions";
 import HashtagSuggestions from "../../components/common/HashtagSuggestions";
 import PublishGateModal from "../../components/common/PublishGateModal";
+import ImageLoader from "../../components/common/ImageLoader";
 import { canPublishContent } from "../../utils/sessionUser";
 import { getGenderAvatarIcon } from "../../utils/avatar";
 import {
@@ -60,6 +62,7 @@ const POST_PURPOSES = [
 
 function CreatePost() {
   const navigate = useNavigate();
+  const location = useLocation();
   const fileInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -67,7 +70,15 @@ function CreatePost() {
 
   const user = currentUser() || {};
 
+  // News's "Add thought" action (see NewsCard.jsx) hands off the article as
+  // structured data rather than pre-typed text — rendered below as an actual
+  // attached card (image, headline, source), leaving the compose box itself
+  // empty for the person's own words, instead of a second, separate composer
+  // just for news (same one-composer-in-the-app rule BottomNav's
+  // CreateOption follows). Read once on mount; not kept in sync with
+  // location.state afterward so it doesn't fight with later edits.
   const [post, setPost] = useState("");
+  const [attachedNews, setAttachedNews] = useState(() => location.state?.attachedNews || null);
   const [mediaFiles, setMediaFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showPublishGate, setShowPublishGate] = useState(false);
@@ -299,11 +310,13 @@ function CreatePost() {
       return;
     }
 
-    // Text is optional — an image-only or voice-only post is allowed. The
-    // only real requirement is having SOMETHING (text or media), plus the
-    // max-length cap if text was written.
-    if (!cleanPost && mediaFiles.length === 0) {
-      alert("Write something or add a photo/voice note.");
+    // Text is optional — an image-only, voice-only, or attached-news-only
+    // post is allowed (the whole point of the attached card is that hitting
+    // Post with no added commentary is a valid, complete action). The only
+    // real requirement is having SOMETHING, plus the max-length cap if text
+    // was written.
+    if (!cleanPost && mediaFiles.length === 0 && !attachedNews) {
+      alert("Write something, add a photo/voice note, or attach news.");
       return;
     }
 
@@ -323,8 +336,18 @@ function CreatePost() {
     try {
       setLoading(true);
 
+      // The attached news card is shown separately in the compose UI (not
+      // typed text the person has to look at/edit around), but the actual
+      // published post still needs a working reference to the article —
+      // there's no dedicated "shared news" field on Post yet, so it's
+      // appended to the submitted content here, after whatever the person
+      // wrote, rather than ever touching the visible textarea itself.
+      const contentToSubmit = attachedNews
+        ? [cleanPost, `${attachedNews.title}\n${attachedNews.sourceUrl}`].filter(Boolean).join("\n\n")
+        : cleanPost;
+
       const formData = new FormData();
-      formData.append("content", cleanPost);
+      formData.append("content", contentToSubmit);
       formData.append("visibility", "public");
       formData.append("purpose", purpose);
 
@@ -385,7 +408,7 @@ function CreatePost() {
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={loading || (!post.trim() && mediaFiles.length === 0)}
+            disabled={loading || (!post.trim() && mediaFiles.length === 0 && !attachedNews)}
             className="flex h-10 min-w-[66px] items-center justify-center rounded-full bg-[#4338CA] px-4 text-[12px] font-black text-white active:scale-95 disabled:opacity-40"
           >
             {loading ? <Loader2 size={16} className="animate-spin" /> : "Post"}
@@ -474,11 +497,60 @@ function CreatePost() {
           </section>
 
           <section className="mt-4 rounded-[22px] bg-[var(--imc-surface)] p-4" style={{ border: "1px solid var(--imc-border)" }}>
+            {attachedNews && (
+              <div className="mb-3 overflow-hidden rounded-[16px]" style={{ border: "1px solid var(--imc-border)" }}>
+                <div className="relative">
+                  {attachedNews.imageUrl ? (
+                    <ImageLoader
+                      src={attachedNews.imageUrl}
+                      alt=""
+                      className="h-36 w-full object-cover"
+                      wrapperClassName="h-36 w-full"
+                      width={600}
+                    />
+                  ) : (
+                    <div className="flex h-24 w-full items-center justify-center" style={{ background: "var(--imc-indigo-soft)" }}>
+                      <Newspaper size={22} style={{ color: "var(--imc-indigo-text)" }} />
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setAttachedNews(null)}
+                    aria-label="Remove attached news"
+                    className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-black/60 text-white"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+                <div className="p-3">
+                  <div className="flex items-center gap-1.5 text-[9.5px] font-black uppercase tracking-wide text-[var(--imc-indigo-text)]">
+                    {attachedNews.category && attachedNews.category.toLowerCase() !== "general" && (
+                      <span className="truncate">{attachedNews.category}</span>
+                    )}
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-[13px] font-black leading-5 text-[var(--imc-text)]">
+                    {attachedNews.title}
+                  </p>
+                  {attachedNews.sourceName && (
+                    <p className="mt-1 text-[9px] font-bold uppercase tracking-wide text-[var(--imc-text-faint)]">
+                      Source: {attachedNews.sourceName}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
             <textarea
               value={post}
               onChange={(e) => setPost(e.target.value.slice(0, MAX_TEXT))}
-              placeholder="What would you like to share? Try @mentioning someone or adding a #hashtag"
-              className="min-h-[190px] w-full resize-none bg-transparent text-[15px] font-semibold leading-6 text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)]"
+              placeholder={
+                attachedNews
+                  ? "Add your thoughts on this..."
+                  : "What would you like to share? Try @mentioning someone or adding a #hashtag"
+              }
+              className={`w-full resize-none bg-transparent text-[15px] font-semibold leading-6 text-[var(--imc-text)] outline-none placeholder:text-[var(--imc-text-faint)] ${
+                attachedNews ? "min-h-[100px]" : "min-h-[190px]"
+              }`}
             />
 
             <MentionSuggestions value={post} onInsert={(next) => setPost(next.slice(0, MAX_TEXT))} />

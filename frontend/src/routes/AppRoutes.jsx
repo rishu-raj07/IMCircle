@@ -20,7 +20,9 @@ const ProfilePeoplePage = lazy(() => import("../pages/profile/ProfilePeoplePage"
 const Analytics = lazy(() => import("../pages/activity/Analytics"));
 const MyProjects = lazy(() => import("../pages/activity/MyProjects"));
 const Home = lazy(() => import("../pages/home/Home"));
-const DiscoverJourneys = lazy(() => import("../pages/discover/DiscoverJourneys"));
+const News = lazy(() => import("../pages/news/News"));
+const ArticleDetail = lazy(() => import("../pages/articles/ArticleDetail"));
+const WriteArticle = lazy(() => import("../pages/articles/WriteArticle"));
 const Spotlight = lazy(() => import("../pages/spotlight/Spotlight"));
 const HashtagFeed = lazy(() => import("../pages/hashtag/HashtagFeed"));
 const PostDetail = lazy(() => import("../pages/post/PostDetail"));
@@ -125,10 +127,35 @@ export default function AppRoutes() {
       />
 
       <Route
-        path="/discover"
+        path="/news"
         element={
           <Private>
-            <DiscoverJourneys />
+            <News />
+          </Private>
+        }
+      />
+
+      {/* Journey discovery moved into Home's "Journeys" tab and the old
+          /discover destination is now News — this keeps any previously
+          shared links, bookmarks, or notification deep links pointing at
+          /discover working instead of 404ing or silently falling back to
+          Home. */}
+      <Route path="/discover" element={<Navigate to="/news" replace />} />
+
+      <Route
+        path="/articles/write"
+        element={
+          <Private>
+            <WriteArticle />
+          </Private>
+        }
+      />
+
+      <Route
+        path="/articles/:slug"
+        element={
+          <Private>
+            <ArticleDetail />
           </Private>
         }
       />

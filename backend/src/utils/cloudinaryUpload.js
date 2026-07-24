@@ -24,6 +24,8 @@ export const CLOUDINARY_FOLDERS = {
   logo: "imcircle/logos",
   video: "imcircle/videos",
   file: "imcircle/files",
+  news: "imcircle/news",
+  article: "imcircle/articles",
 };
 
 // Resolves a caller-supplied `purpose` string to one of the folders

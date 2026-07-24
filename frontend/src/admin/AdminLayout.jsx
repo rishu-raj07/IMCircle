@@ -10,6 +10,8 @@ import {
   GalleryVerticalEnd,
   Sparkles,
   Award,
+  Newspaper,
+  FileText,
 } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAdminAuth } from "./context/AdminAuthContext";
@@ -20,6 +22,8 @@ const links = [
   { to: "/admin/content", label: "Content", icon: GalleryVerticalEnd },
   { to: "/admin/spotlight", label: "Spotlight", icon: Sparkles },
   { to: "/admin/badges", label: "Badges", icon: Award },
+  { to: "/admin/news", label: "News", icon: Newspaper },
+  { to: "/admin/articles", label: "Articles", icon: FileText },
   { to: "/admin/reports", label: "Reports", icon: FileWarning },
   { to: "/admin/verification", label: "Verification", icon: BadgeCheck },
   { to: "/admin/analytics", label: "Analytics", icon: BarChart3 },

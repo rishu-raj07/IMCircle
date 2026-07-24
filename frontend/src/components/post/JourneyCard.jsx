@@ -7,8 +7,6 @@ import {
   UserPlus,
   Check,
   Flame,
-  CalendarDays,
-  Target,
   AlertTriangle,
   X,
 } from "lucide-react";
@@ -469,10 +467,11 @@ function JourneyCard({ milestone = {} }) {
         <SocialProofBanner proof={milestone.circleProof} background={JOURNEY_TINT} />
 
         <div
-          className="overflow-hidden"
+          className="cursor-pointer overflow-hidden"
           style={{
             background: JOURNEY_TINT,
           }}
+          onClick={handleViewJourney}
         >
           <div
             className="relative z-20 px-3.5 pt-3 pb-2.5"
@@ -480,8 +479,9 @@ function JourneyCard({ milestone = {} }) {
           >
             {/* Compressed creator header: avatar, name (+ badges) on the
                 left, timestamp + three-dot menu pinned top-right. No
-                @handle line — just the name. */}
-            <div className="flex items-start gap-2.5">
+                @handle line — just the name. Stops propagation so tapping
+                the avatar/name/menu opens that, not the journey page. */}
+            <div className="flex items-start gap-2.5" onClick={(e) => e.stopPropagation()}>
               <button type="button" onClick={openCreatorProfile} className="shrink-0 active:scale-95">
                 <div className="h-10 w-10 overflow-hidden rounded-full" style={{ background: "var(--imc-surface-2)" }}>
                   {avatar && !avatarBroken ? (
@@ -584,7 +584,10 @@ function JourneyCard({ milestone = {} }) {
                   {aboutText.length > 50 && (
                     <button
                       type="button"
-                      onClick={() => setDescExpanded((prev) => !prev)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDescExpanded((prev) => !prev);
+                      }}
                       className="ml-1 font-semibold"
                       style={{ color: "var(--imc-indigo-text)" }}
                     >
@@ -600,7 +603,10 @@ function JourneyCard({ milestone = {} }) {
                 opens the missed-day detail as a bottom sheet instead of a
                 permanent, space-hogging card. Follow Journey lives here too
                 as a chip instead of crowding the title line. */}
-            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+            <div
+              className="mt-2.5 flex flex-wrap items-center gap-1.5"
+              onClick={(e) => e.stopPropagation()}
+            >
               {/* Tapping either chip opens the same journey-detail popup as
                   tapping the hero image — the paused chip is the one
                   exception, since that one specifically explains why the
@@ -617,16 +623,6 @@ function JourneyCard({ milestone = {} }) {
               >
                 <statusChip.icon size={11} />
                 {statusChip.label}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowReel(true)}
-                className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[10.5px] font-semibold active:scale-95"
-                style={{ background: "var(--imc-action-soft)", color: "var(--imc-indigo-text)" }}
-              >
-                <Target size={11} />
-                {progress}% Complete
               </button>
 
               {!isOwnJourney && !isJourneyInactive && (
@@ -654,22 +650,24 @@ function JourneyCard({ milestone = {} }) {
               lives in the thin bar directly underneath, connected instead
               of disconnected. */}
           {firstImage ? (
-            <ResponsivePostMedia
-              src={firstImage}
-              alt="Journey progress"
-              onClick={() => setShowReel(true)}
-              rounded="rounded-none"
-            >
-              {milestone.achievement && (
-                <div
-                  className="absolute bottom-2.5 left-2.5 inline-flex max-w-[calc(100%-20px)] items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-bold"
-                  style={{ background: "rgba(18,20,28,0.55)", color: MARIGOLD, backdropFilter: "blur(6px)" }}
-                >
-                  <Trophy size={12} />
-                  <span className="truncate">{milestone.achievement}</span>
-                </div>
-              )}
-            </ResponsivePostMedia>
+            <div onClick={(e) => e.stopPropagation()}>
+              <ResponsivePostMedia
+                src={firstImage}
+                alt="Journey progress"
+                onClick={() => setShowReel(true)}
+                rounded="rounded-none"
+              >
+                {milestone.achievement && (
+                  <div
+                    className="absolute bottom-2.5 left-2.5 inline-flex max-w-[calc(100%-20px)] items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-bold"
+                    style={{ background: "rgba(18,20,28,0.55)", color: MARIGOLD, backdropFilter: "blur(6px)" }}
+                  >
+                    <Trophy size={12} />
+                    <span className="truncate">{milestone.achievement}</span>
+                  </div>
+                )}
+              </ResponsivePostMedia>
+            </div>
           ) : (
             <div
               className="imc-lattice flex h-14 items-center justify-center"
@@ -687,20 +685,7 @@ function JourneyCard({ milestone = {} }) {
             </div>
           )}
 
-          <div className="px-3.5 pt-3">
-            {/* Thin progress bar — replaces the old floating conic-gradient
-                circle. Sits right under the image so progress reads as part
-                of the journey, not a badge stuck on top of it. */}
-            <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "var(--imc-surface-2)" }}>
-              <div
-                className="h-full rounded-full transition-[width] duration-500 ease-out"
-                style={{ width: `${progress}%`, background: INDIGO }}
-              />
-            </div>
-            <p className="mt-1.5 text-[11px] font-semibold" style={{ color: "var(--imc-text-muted)" }}>
-              {progress}% Completed
-            </p>
-
+          <div className="px-3.5">
             {milestone.achievement && !firstImage && (
               <div
                 className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-bold"
@@ -711,68 +696,52 @@ function JourneyCard({ milestone = {} }) {
               </div>
             )}
 
-            {/* Journey statistics — icons + equal spacing, no boxed
-                background, just a clean plain row so it doesn't read as
-                "another card inside the card". */}
-            <div className="mt-3 flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <CalendarDays size={13} style={{ color: "var(--imc-indigo-text)" }} />
-                <p className="text-[11px] font-semibold" style={{ color: "var(--imc-text)" }}>
-                  {targetDays} Days
-                </p>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <Flame size={13} style={{ color: MARIGOLD_DARK }} />
-                <p className="text-[11px] font-semibold" style={{ color: "var(--imc-text)" }}>
-                  Day {finalDay}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <Target size={13} style={{ color: "var(--imc-indigo-text)" }} />
-                <p className="text-[11px] font-semibold" style={{ color: "var(--imc-text)" }}>
-                  {progress}%
-                </p>
-              </div>
-
-              <button
-                onClick={() => setShowViews(true)}
-                className="flex items-center gap-1 text-[11px] font-semibold active:scale-95"
-                style={{ color: "var(--imc-text-muted)" }}
-              >
-                <Eye size={13} />
-                <span>{formatCount(impressions)}</span>
-              </button>
+            <div onClick={(e) => e.stopPropagation()}>
+              <SocialActionBar
+                liked={liked}
+                likesCount={likes}
+                onLike={handleLike}
+                commentsCount={replies}
+                reposted={reposted}
+                repostsCount={reposts}
+                onRepost={() => {
+                  if (reposted) handleRepost("");
+                  else setShowRepost(true);
+                }}
+                saved={saved}
+                savesCount={saves}
+                onSave={handleSave}
+                onShare={handleShare}
+                onOpenComments={() => setShowReplies(true)}
+                onOpenLikers={() => setShowLikers(true)}
+                likeProof={milestone.likeProof}
+                timestamp={formatRelativeTime(milestone.createdAt || milestone.updatedAt)}
+                onQuickComment={(text) => {
+                  trackEvent("comment", { entityType: "journey_milestone", entityId: milestoneId }).catch(() => {});
+                  return commentMilestone(milestoneId, text).then((res) => {
+                    setReplies((prev) => prev + 1);
+                    return res;
+                  });
+                }}
+                afterActions={
+                  // Views — sits right under the icon row (below the save
+                  // button), before "Liked by ..." and the comment box.
+                  <div className="mt-1.5 flex items-center justify-end">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowViews(true);
+                      }}
+                      className="flex items-center gap-1 text-[11px] font-semibold active:scale-95"
+                      style={{ color: "var(--imc-text-muted)" }}
+                    >
+                      <Eye size={13} />
+                      <span>{formatCount(impressions)}</span>
+                    </button>
+                  </div>
+                }
+              />
             </div>
-
-            <SocialActionBar
-              liked={liked}
-              likesCount={likes}
-              onLike={handleLike}
-              commentsCount={replies}
-              reposted={reposted}
-              repostsCount={reposts}
-              onRepost={() => {
-                if (reposted) handleRepost("");
-                else setShowRepost(true);
-              }}
-              saved={saved}
-              savesCount={saves}
-              onSave={handleSave}
-              onShare={handleShare}
-              onOpenComments={() => setShowReplies(true)}
-              onOpenLikers={() => setShowLikers(true)}
-              likeProof={milestone.likeProof}
-              timestamp={formatRelativeTime(milestone.createdAt || milestone.updatedAt)}
-              onQuickComment={(text) => {
-                trackEvent("comment", { entityType: "journey_milestone", entityId: milestoneId }).catch(() => {});
-                return commentMilestone(milestoneId, text).then((res) => {
-                  setReplies((prev) => prev + 1);
-                  return res;
-                });
-              }}
-            />
 
             {/* Clean inline CTA — plain text + arrow, no button chrome — so
                 it reads as part of the same continuous card. */}
