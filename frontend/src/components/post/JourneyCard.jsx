@@ -239,6 +239,25 @@ function JourneyCard({ milestone = {} }) {
 
   const firstImage = getImageUrl(milestone.images?.[0]) || getImageUrl(journey.coverImage);
 
+  // ResponsivePostMedia defaults to type="image" and renders an <img> —
+  // pointing that at a video file just fails to load (which is exactly
+  // what showed up as "Media unavailable" on video milestones: the upload
+  // itself worked fine, and JourneyMilestoneDetail's "reel" popup already
+  // plays it correctly, but this card never told ResponsivePostMedia it
+  // was a video). Mirrors JourneyMilestoneDetail.jsx's firstMediaType
+  // detection exactly — same milestone.images[0].type field, same file
+  // -extension fallback for any older records saved before that type field
+  // existed.
+  const firstMediaRaw = milestone.images?.[0];
+  const firstMediaType =
+    typeof firstMediaRaw === "object" && firstMediaRaw?.type === "video"
+      ? "video"
+      : /\.(mp4|webm|mov|m4v)(\?|$)/i.test(
+          typeof firstMediaRaw === "string" ? firstMediaRaw : firstMediaRaw?.url || ""
+        )
+      ? "video"
+      : "image";
+
   const impressions =
     milestone.impressionsCount ||
     milestone.viewsCount ||
@@ -653,6 +672,7 @@ function JourneyCard({ milestone = {} }) {
             <div onClick={(e) => e.stopPropagation()}>
               <ResponsivePostMedia
                 src={firstImage}
+                type={firstMediaType}
                 alt="Journey progress"
                 onClick={() => setShowReel(true)}
                 rounded="rounded-none"
