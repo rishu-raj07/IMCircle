@@ -1,4 +1,5 @@
 import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -143,6 +144,21 @@ export default defineConfig({
       }
     })
   ].filter(Boolean),
+  resolve: {
+    alias: {
+      // See pwaRegister.js for the full story. Web builds get the file that
+      // statically imports vite-plugin-pwa's "virtual:pwa-register"; native
+      // (Capacitor) builds — which never include the VitePWA plugin — get a
+      // harmless stub instead, so that virtual module is never referenced
+      // in a build where it doesn't exist.
+      "pwa-register-bridge": fileURLToPath(
+        new URL(
+          isCapacitorBuild ? "./src/pwaRegister.native.js" : "./src/pwaRegister.js",
+          import.meta.url
+        )
+      ),
+    },
+  },
   build: {
     sourcemap: "hidden",
     rollupOptions: {
