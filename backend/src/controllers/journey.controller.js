@@ -1173,6 +1173,18 @@ export const getJourneyDiscoverFeed = async (req, res) => {
     const followedCreatorIds = new Set(
       (req.user.following || []).map((id) => id.toString())
     );
+    // This feed never set circle-membership state at all, so JourneyCard's
+    // CircleAction button always rendered as "+ Circle" for every creator
+    // here regardless of actual relationship — same circle/circleRequested
+    // pattern feed.controller.js's getUniversalFeed already uses.
+    const circleSet = new Set((req.user.circle || []).map((id) => id.toString()));
+    const pendingCircleRequests = await CircleRequest.find({
+      sender: req.user._id,
+      status: "pending",
+    }).select("receiver");
+    const pendingCircleSet = new Set(
+      pendingCircleRequests.map((item) => item.receiver.toString())
+    );
 
     const milestones = await JourneyMilestone.find({ isDeleted: false })
       .populate("creator", userFields)
@@ -1253,7 +1265,11 @@ export const getJourneyDiscoverFeed = async (req, res) => {
       const creatorId = obj.creator?._id?.toString();
       const myRepost = repostMap.get(milestoneId) || null;
       const isFollowed = followedJourneyIds.has(journeyId);
+      // Kept for now in case a future "For interest" sort mode wants it —
+      // no longer used to rank the default feed (see sort below).
       const interestMatch = scoreJourneyForInterest(obj.journey, keywords);
+      const isInCircle = creatorId ? circleSet.has(creatorId) : false;
+      const isCircleRequested = creatorId ? pendingCircleSet.has(creatorId) : false;
 
       return {
         milestone: {
@@ -1269,16 +1285,26 @@ export const getJourneyDiscoverFeed = async (req, res) => {
           commentsCount: commentCountMap.get(milestoneId) || 0,
           repliesCount: commentCountMap.get(milestoneId) || 0,
           journey: { ...obj.journey, followedByMe: isFollowed },
+          // JourneyCard.jsx's CircleAction button reads these off `creator`
+          // (creator?.inCircle / creator?.circleRequested) — this feed never
+          // set them before, so the button always rendered as "+ Circle"
+          // even for creators already in the viewer's circle.
+          creator: obj.creator
+            ? { ...obj.creator, inCircle: isInCircle, circleRequested: isCircleRequested }
+            : obj.creator,
         },
         score: interestMatch * 3 + (isFollowed ? 1 : 0),
         createdAt: obj.createdAt,
       };
     });
 
-    scored.sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      return new Date(b.createdAt) - new Date(a.createdAt);
-    });
+    // Plain reverse-chronological — newest milestone first, oldest last,
+    // mixed across creators (not grouped). Previously sorted by the
+    // interest-match `score` first, which could bury a just-posted update
+    // beneath an older one that happened to match the viewer's interest
+    // keywords more closely; recency is what people actually expect from a
+    // feed labeled "Journeys".
+    scored.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     return res.status(200).json({
       success: true,
