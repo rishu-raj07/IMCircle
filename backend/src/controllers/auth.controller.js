@@ -97,9 +97,15 @@ const getSafeUser = (user) => {
   return obj;
 };
 
+// The production .env uses JWT_ACCESS_EXPIRES_IN / JWT_REFRESH_EXPIRES_IN
+// (with "_IN"), but this only ever read the name without it — so those env
+// values were silently ignored and this always fell back to its own 15m/60d
+// defaults. Accepting both names so setting either actually takes effect
+// instead of looking like it does nothing.
 const createAccessToken = (userId) => {
   return jwt.sign({ id: userId }, getAccessSecret(), {
-    expiresIn: process.env.JWT_ACCESS_EXPIRE || "15m",
+    expiresIn:
+      process.env.JWT_ACCESS_EXPIRE || process.env.JWT_ACCESS_EXPIRES_IN || "15m",
   });
 };
 
@@ -112,7 +118,8 @@ const createRefreshToken = (userId, sessionId) => {
     },
     getRefreshSecret(),
     {
-      expiresIn: process.env.JWT_REFRESH_EXPIRE || "60d",
+      expiresIn:
+        process.env.JWT_REFRESH_EXPIRE || process.env.JWT_REFRESH_EXPIRES_IN || "60d",
     }
   );
 };
@@ -545,6 +552,16 @@ export const refreshToken = async (req, res) => {
     const oldRefreshToken = req.cookies?.refreshToken;
 
     if (!oldRefreshToken) {
+      // Logged because this is the #1 suspect for the reported "logged out
+      // after ~2 days" issue — this fires whenever the browser/app simply
+      // never sent the refreshToken cookie (expired client-side, blocked by
+      // a browser cookie policy, wrong domain/path, etc.), which looks
+      // identical to a real logout from the user's side but never reaches
+      // any of the session-revocation logic below.
+      console.warn("[auth.refreshToken] no refreshToken cookie present", {
+        path: req.originalUrl,
+        userAgent: req.headers?.["user-agent"] || "",
+      });
       return res.status(401).json({
         success: false,
         message: "Refresh token missing",
@@ -556,6 +573,13 @@ export const refreshToken = async (req, res) => {
     const session = await Session.findById(decoded.sessionId);
 
     if (!session || session.isRevoked || session.expiresAt < new Date()) {
+      console.warn("[auth.refreshToken] invalid session", {
+        sessionId: decoded.sessionId,
+        found: Boolean(session),
+        isRevoked: session?.isRevoked ?? null,
+        expired: session ? session.expiresAt < new Date() : null,
+        expiresAt: session?.expiresAt ?? null,
+      });
       return res.status(401).json({
         success: false,
         message: "Invalid session",
@@ -581,6 +605,14 @@ export const refreshToken = async (req, res) => {
         Date.now() - new Date(session.rotatedAt).getTime() < 15_000;
 
       if (!withinGracePeriod) {
+        console.warn("[auth.refreshToken] reuse detected, revoking session", {
+          sessionId: session._id.toString(),
+          rotatedAt: session.rotatedAt,
+          msSinceRotation: session.rotatedAt
+            ? Date.now() - new Date(session.rotatedAt).getTime()
+            : null,
+          hadPreviousHashMatch: session.previousRefreshTokenHash === oldHash,
+        });
         session.isRevoked = true;
         session.revokedAt = Date.now();
         await session.save({ validateBeforeSave: false });
