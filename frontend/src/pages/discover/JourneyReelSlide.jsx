@@ -13,6 +13,7 @@ import {
   ArrowRight,
   Volume2,
   VolumeX,
+  AlertTriangle,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -164,6 +165,12 @@ function JourneyReelSlide({ milestone = {} }) {
     milestone.text ||
     milestone.description ||
     "Shared a new journey update.";
+
+  // Missed journeys are now included in this discover feed (see backend's
+  // getJourneyDiscoverFeed match clause) — this tag is what tells them apart
+  // from an active one, same "Journey Missed" wording JourneyCard.jsx and
+  // JourneyMilestoneDetail.jsx already use elsewhere in the app.
+  const isMissed = journey.status === "uncompleted";
 
   const targetDays =
     journey.targetDays || journey.totalDays || milestone.targetDays || 100;
@@ -321,7 +328,7 @@ function JourneyReelSlide({ milestone = {} }) {
   };
 
   const handleFollow = async () => {
-    if (!journeyId || isOwnJourney) return;
+    if (!journeyId || isOwnJourney || isMissed) return;
 
     const nextFollowing = !following;
     setFollowing(nextFollowing);
@@ -629,6 +636,14 @@ function JourneyReelSlide({ milestone = {} }) {
           <span className="min-w-0 truncate text-[12px] font-semibold text-white/90">
             {finalTitle}
           </span>
+          {isMissed && (
+            <span
+              className="ml-1 flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold text-white"
+              style={{ background: "rgba(220,38,38,0.4)" }}
+            >
+              <AlertTriangle size={10} /> Missed
+            </span>
+          )}
         </div>
 
         {/* Action row — Follow Journey and the new Add Thought button live
@@ -636,7 +651,7 @@ function JourneyReelSlide({ milestone = {} }) {
             anything. Both are shrink-0 + whitespace-nowrap so neither can
             ever collapse regardless of label length. */}
         <div className="mt-2 flex min-w-0 items-center gap-2 pl-11">
-          {!isOwnJourney && (
+          {!isOwnJourney && !isMissed && (
             <button
               onClick={handleFollow}
               className="h-8 shrink-0 whitespace-nowrap rounded-full border border-white/35 px-3 text-[10px] font-bold text-white active:scale-95"

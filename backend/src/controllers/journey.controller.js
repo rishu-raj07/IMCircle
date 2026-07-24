@@ -1181,11 +1181,17 @@ export const getJourneyDiscoverFeed = async (req, res) => {
         match: {
           isDeleted: false,
           isPublic: true,
-          isActive: true,
-          status: "active",
+          // Missed ("uncompleted") journeys belong in this feed too — they
+          // just show the "Journey Missed" tag on the frontend (see
+          // JourneyCard.jsx's isMissed check). Only "completed" journeys
+          // and non-public/deleted ones are excluded, matching the same
+          // active+uncompleted convention already used elsewhere in this
+          // file (see the visibility checks around line 1327) and in
+          // feed.controller.js's getUniversalFeed.
+          status: { $in: ["active", "uncompleted"] },
         },
         select:
-          "title description tags coverImage updatesCount followersCount targetDays totalDays creator status isActive",
+          "title description tags coverImage updatesCount followersCount targetDays totalDays creator status isActive uncompletedReason uncompletedAt finalNote finalNoteAt",
       })
       .sort({ createdAt: -1 })
       .limit(300);
